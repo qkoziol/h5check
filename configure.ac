@@ -17,6 +17,72 @@ AC_PROG_RANLIB
 
 # Checks for libraries.
 
+dnl ----------------------------------------------------------------------
+dnl Is the GNU zlib present? It has a header file `zlib.h' and a library
+dnl `-lz' and their locations might be specified with the `--with-zlib'
+dnl command-line switch. The value is an include path and/or a library path.
+dnl If the library path is specified then it must be preceded by a comma.
+dnl
+AC_ARG_WITH([zlib],
+            [AC_HELP_STRING([--with-zlib=DIR],
+                            [Use zlib library [default=yes]])],,
+            withval=yes)
+
+case $withval in
+  yes)
+    HAVE_ZLIB="yes"
+    AC_CHECK_HEADERS([zlib.h], [HAVE_ZLIB_H="yes"])
+    AC_CHECK_LIB([z], [compress2],, [unset HAVE_ZLIB])
+    ;;
+  no)
+    HAVE_ZLIB="no"
+    AC_MSG_CHECKING([for GNU zlib])
+    AC_MSG_RESULT([suppressed])
+    ;;
+  *)
+    HAVE_ZLIB="yes"
+    case "$withval" in
+      *,*)
+        zlib_inc="`echo $withval |cut -f1 -d,`"
+        zlib_lib="`echo $withval |cut -f2 -d, -s`"
+        ;;
+      *)
+        if test -n "$withval"; then
+          zlib_inc="$withval/include"
+          zlib_lib="$withval/lib"
+        fi
+        ;;
+    esac
+
+    dnl Trying to include -I/usr/include and -L/usr/lib is redundant and
+    dnl can mess some compilers up.
+    if test "X$zlib_inc" = "X/usr/include"; then
+      zlib_inc=""
+    fi
+    if test "X$zlib_lib" = "X/usr/lib"; then
+      zlib_lib=""
+    fi
+
+    saved_CPPFLAGS="$CPPFLAGS"
+    saved_LDFLAGS="$LDFLAGS"
+
+    if test -n "$zlib_inc"; then
+      CPPFLAGS="$CPPFLAGS -I$zlib_inc"
+    fi
+
+    AC_CHECK_HEADERS([zlib.h],
+                     [HAVE_ZLIB_H="yes"],
+                     [CPPFLAGS="$saved_CPPFLAGS"])
+
+    if test -n "$zlib_lib"; then
+      LDFLAGS="$LDFLAGS -L$zlib_lib"
+    fi
+
+    AC_CHECK_LIB([z], [compress2],,
+                 [LDFLAGS="$saved_LDFLAGS"; unset HAVE_ZLIB])
+    ;;
+esac
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h])
