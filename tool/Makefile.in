@@ -127,6 +127,7 @@ SET_MAKE = @SET_MAKE@
 # configure's automatic SHELL detection may not work on the build machine.
 SHELL = /bin/sh
 STRIP = @STRIP@
+USE_FILTER_SZIP = @USE_FILTER_SZIP@
 VERSION = @VERSION@
 ac_ct_CC = @ac_ct_CC@
 am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
