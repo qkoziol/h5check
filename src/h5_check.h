@@ -11,9 +11,11 @@
 #define DEBUG_VERBOSE   2
 
 /* release version of h5checker */
-#define		H5Check_VERSION			"0.1-b2"
-#define 	CK_ADDR_MAX            (CK_ADDR_UNDEF-1)
+#define		H5Check_VERSION		"0.1-b2"
+#define 	CK_ADDR_MAX            	(CK_ADDR_UNDEF-1)
 #define 	addr_defined(X)     	(X!=CK_ADDR_UNDEF)
+#define 	addr_eq(X,Y)        	((X)!=CK_ADDR_UNDEF && (X)==(Y))
+
 
 
 /* see H5public.h for definition of ck_size_t, H5pubconf.h */
@@ -134,6 +136,16 @@ typedef struct table_t {
    (i) |= ((uint32_t)(*(p) & 0xff) <<  8); (p)++;                             \
    (i) |= ((uint32_t)(*(p) & 0xff) << 16); (p)++;                             \
    (i) |= ((uint32_t)(*(p) & 0xff) << 24); (p)++;                             \
+}
+
+#define UINT32DECODE_VAR(p, n, l) {                                           \
+   size_t _i;                                                                 \
+                                                                              \
+   n = 0;                                                                     \
+   (p) += l;                                                                  \
+   for (_i = 0; _i < l; _i++)                                                 \
+      n = (n << 8) | *(--p);                                                  \
+   (p) += l;                                                                  \
 }
 
 #define INT64DECODE(p, n) {                                                   \
@@ -293,7 +305,7 @@ typedef struct 	global_shared_t {
 /* Object Header Message IDs */
 #define OBJ_NIL_ID       0x0000          /* NIL 				  */
 #define OBJ_SDS_ID  	 0x0001          /* Simple Dataspace  			  */
-#define OBJ_LINFO_ID     0x0002          /* Link info Message. */
+#define OBJ_LINFO_ID     0x0002          /* Link info Message. 			  */
 #define OBJ_DT_ID    	 0x0003          /* Datatype   				  */
 #define OBJ_FILL_OLD_ID  0x0004          /* Data Storage - Fill Value (Old)  	  */
 #define OBJ_FILL_ID 	 0x0005          /* Data Storage - Fill Value 		  */
@@ -302,26 +314,21 @@ typedef struct 	global_shared_t {
 
 #define OBJ_EDF_ID       0x0007          /* Data Storage - External Data Files 	  */
 #define OBJ_LAYOUT_ID    0x0008          /* Data Storage - Layout 		  */
-#define OBJ_BOGUS_ID     0x0009          /* "Bogus" Message.  */
-#define OBJ_GINFO_ID     0x000a          /* Group info Message.  */
+#define OBJ_BOGUS_ID     0x0009          /* Bogus Message.  			  */
+#define OBJ_GINFO_ID     0x000a          /* Group info Message.  		  */
 #define OBJ_FILTER_ID    0x000b          /* Data Storage - Filter pipeline  	  */
 #define OBJ_ATTR_ID      0x000c          /* Attribute 				  */
 #define OBJ_COMM_ID  	 0x000d          /* Object Comment 			  */
 #define OBJ_MDT_OLD_ID   0x000e          /* Object Modification Date & time (Old) */
 #define OBJ_SHMESG_ID    0x000f          /* Shared message "SOHM" table. */
-
-#if 0
-#define OBJ_SHARED_ID    0x000f          /* Shared Object Message 		  */
-#endif 
-
 #define OBJ_CONT_ID      0x0010          /* Object Header Continuation 		  */
 #define OBJ_GROUP_ID     0x0011          /* Symbol Table Message		  */
 #define OBJ_MDT_ID 	 0x0012          /* Object Modification Date & Time 	  */
-#define OBJ_BTREEK_ID    0x0013           /* v1 B-tree 'K' values message.  */
-#define OBJ_DRVINFO_ID   0x0014           /* Driver info message.  */
-#define OBJ_AINFO_ID     0x0015           /* Attribute info message.  */
-#define OBJ_REFCOUNT_ID  0x0016           /* Reference count message.  */
-#define OBJ_UNKNOWN_ID   0x0017           /* Placeholder message ID for unknown message.  */
+#define OBJ_BTREEK_ID    0x0013          /* v1 B-tree 'K' values message.         */
+#define OBJ_DRVINFO_ID   0x0014          /* Driver info message.                  */
+#define OBJ_AINFO_ID     0x0015          /* Attribute info message.  		  */
+#define OBJ_REFCOUNT_ID  0x0016          /* Reference count message.  		  */
+#define OBJ_UNKNOWN_ID   0x0017          /* Placeholder message ID for unknown message.  */
 
 
 
@@ -374,10 +381,13 @@ typedef struct OBJ_linfo_t {
 } OBJ_linfo_t;
 
 
-/* Datatype : TO BE PROCESSED */
+/* Datatype Message */
 
-#define DT_VERSION_COMPAT        1
-#define DT_VERSION_UPDATED       2
+#define DT_VERSION_1     	1
+#define DT_VERSION_2     	2
+#define DT_VERSION_3     	3
+#define DT_VERSION_LATEST 	DT_VERSION_3
+
 #define DT_OPAQUE_TAG_MAX      256   
 
 typedef enum DT_order_t {
@@ -798,6 +808,17 @@ typedef struct OBJ_layout_t {
 } OBJ_layout_t;
 
 /* end Data Storage: layout  */
+
+/* 
+ * Bogus Message
+ */
+#define OBJ_BOGUS_VALUE         0xdeadbeef
+
+typedef struct OBj_bogus_t {
+    unsigned 	u;	/* Hold the bogus info */
+} OBJ_bogus_t;
+
+/* end Bogus Message */
 
 /* 
  * Data Storage: Filter Pipeline
@@ -1701,9 +1722,9 @@ typedef struct HF_hdr_t {
     uint32_t      max_man_size;   /* Max. size of object to manage in doubling table */
     ck_hsize_t    huge_next_id;   /* Next ID to use for indirectly tracked 'huge' object */
     ck_addr_t     huge_bt2_addr;  /* Address of v2 B-tree for tracking "huge" object info */
-        /* I/O filter support (stored in header, if any are used) */    
-/* NEED TO TASKE CARE OF THIS*/
-    OBJ_filter_t   pline;          /* I/O filter pipeline for heap objects */
+
+    /* I/O filter support (stored in header, if any are used) */    
+    OBJ_filter_t   *pline;          /* I/O filter pipeline for heap objects */
     ck_size_t      pline_root_direct_size;    /* Size of filtered root direct block */    
     unsigned  	   pline_root_direct_filter_mask; /* I/O filter mask for filtered root direct block */
 
@@ -1765,6 +1786,14 @@ typedef struct HF_indirect_ent_t {
     ck_addr_t     addr;           /* Direct block's address                     */
 } HF_indirect_ent_t;
 
+/* Extern indirect block doubling table entry for compressed direct blocks */
+/* (only exists for indirect blocks in heaps that have I/O filters) */
+typedef struct HF_indirect_filt_ent_t {
+    ck_size_t   size;            /* Size of child direct block, after passing though I/O filters */
+    unsigned    filter_mask;    /* Excluded filters for child direct block */
+} HF_indirect_filt_ent_t;
+
+
 /* Fractal heap indirect block */
 typedef struct HF_indirect_t {
     HF_hdr_t  	*hdr;           /* Shared heap header info                    */
@@ -1776,9 +1805,7 @@ typedef struct HF_indirect_t {
     unsigned    max_child;      /* Max. offset used in child entries          */
     ck_hsize_t  block_off;      /* Offset of the block within the heap's address space */
     HF_indirect_ent_t *ents;  /* Pointer to block entry table               */
-#if 0
     HF_indirect_filt_ent_t *filt_ents;    /* Pointer to filtered information for direct blocks */
-#endif
 } HF_indirect_t;
 
 /* Size of overhead for a direct block */
@@ -1800,6 +1827,14 @@ typedef struct HF_direct_t {
     uint8_t     *blk;           /* Pointer to buffer containing block data    */
     ck_hsize_t     block_off;   /* Offset of the block within the heap's address space */
 } HF_direct_t;
+
+typedef struct HF_parent_t {
+#ifdef LATER
+    H5HF_hdr_t *hdr;                /* Pointer to heap header info */
+#endif
+    HF_indirect_t *iblock;    /* Pointer to parent indirect block */
+    unsigned entry;           /* Location of block in parent's entry table */
+} HF_parent_t;
 
 /* Compute the # of bytes required to store an offset into a given buffer size */
 #define HF_SIZEOF_OFFSET_BITS(b)  (((b) + 7) / 8)

@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include "h5_check.h"
 #include "h5_error.h"
+#include "h5_pline.h"
 
 /*
  * This file mainly consists of routines for version 2 specific format
@@ -155,7 +156,7 @@ static const char LogTable256[] =
     7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7
 };
 
-static unsigned
+unsigned
 V_log2_gen(uint64_t n)
 {
     unsigned r;                         /* r will be log2(n) */
@@ -975,9 +976,9 @@ HF_dtable_lookup(const HF_dtable_t *dtable, ck_hsize_t off, unsigned *row, unsig
  * Fractal Heap: convert size to row
  */
 static unsigned
-HF_dtable_size_to_rows(const HF_dtable_t *dtable, size_t block_size)
+HF_dtable_size_to_rows(const HF_dtable_t *dtable, ck_hsize_t size)
 {
-    unsigned row;
+    unsigned rows;
 
     /*
      * Check arguments.
@@ -985,13 +986,9 @@ HF_dtable_size_to_rows(const HF_dtable_t *dtable, size_t block_size)
     assert(dtable);
 
     printf("Entering HF_dtable_size_to_rows()\n");
-    
-    if(block_size == dtable->cparam.start_block_size)
-        row = 0;
-    else
-        row = (V_log2_of2((uint32_t)block_size) - V_log2_of2((uint32_t)dtable->cparam.start_block_size)) + 1;
+    rows = (V_log2_gen(size) - dtable->first_row_bits) + 1;
 
-    return(row);
+    return(rows);
 } 
 
 static ck_err_t
@@ -1071,7 +1068,6 @@ printf("iblock->block_off=%llu\n", iblock->block_off);
 	CK_GOTO_DONE(FAIL)
     }
 
-#if 0
     if(hdr->filter_len > 0) {
         unsigned dir_rows;      /* Number of direct rows in this indirect block */
 
@@ -1079,28 +1075,27 @@ printf("iblock->block_off=%llu\n", iblock->block_off);
         dir_rows = MIN(iblock->nrows, hdr->man_dtable.max_direct_rows);
 
         /* Allocate indirect block filtered entry array */
-        if(NULL == (iblock->filt_ents = malloc(HF_indirect_filt_ent_t, (size_t)(dir_rows * hdr->man_dtable.cparam.width))))
+        if(NULL == (iblock->filt_ents = calloc((ck_size_t)(dir_rows * hdr->man_dtable.cparam.width), sizeof(HF_indirect_filt_ent_t))))
+
             printf("memory allocation failed for block entries");
     } /* end if */
     else
         iblock->filt_ents = NULL;
-#endif
 
 printf("iblock->nrows=%u\n", iblock->nrows);
 
     for(u = 0; u < (iblock->nrows * hdr->man_dtable.cparam.width); u++) {
         /* Decode child block address */
         addr_decode(file->shared, &p, &(iblock->ents[u].addr));
-#if 0
         /* Check for heap with I/O filters */
         if(hdr->filter_len > 0) {
             /* Sanity check */
-            HDassert(iblock->filt_ents);
+            assert(iblock->filt_ents);
 
             /* Decode extra information for direct blocks */
             if(u < (hdr->man_dtable.max_direct_rows * hdr->man_dtable.cparam.width)) {
                 /* Size of filtered direct block */
-                DECODE_LENGTH(f, p, iblock->filt_ents[u].size);
+                DECODE_LENGTH(file->shared, p, iblock->filt_ents[u].size);
 
                 /* Sanity check */
                 /* (either both the address & size are defined or both are
@@ -1113,7 +1108,6 @@ printf("iblock->nrows=%u\n", iblock->nrows);
                 UINT32DECODE(p, iblock->filt_ents[u].filter_mask);
             } /* end if */
         } /* end if */
-#endif
 
         /* Count child blocks */
         if(addr_defined(iblock->ents[u].addr)) {
@@ -1140,8 +1134,11 @@ done:
     if ((ret_value == SUCCEED) && ret_iblock)
 	*ret_iblock = iblock;
 
-    if ((ret_value != SUCCEED) && iblock)
-	printf("Need to free iblock and related structures\n");
+    if ((ret_value != SUCCEED) && iblock) {
+	if (iblock->ents) free(iblock->ents);
+        if (iblock->filt_ents) free(iblock->filt_ents);
+	free(iblock);
+    }
 
     return(ret_value);
 }
@@ -1226,7 +1223,7 @@ done:
 
 /* Validating fractal heap: direct block */
 static ck_err_t
-check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t dblock_size, HF_direct_t **ret_dblock)
+check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t dblock_size, HF_parent_t *par_info, HF_direct_t **ret_dblock)
 {
     HF_direct_t       	*dblock=NULL; 		/* Direct block info */
     const uint8_t     	*p;             	/* Pointer into raw data buffer */
@@ -1258,65 +1255,73 @@ check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t db
 	CK_GOTO_DONE(FAIL)
     }
 
-/* NEED to take care of filter handling */
-#if 0
     /* Check for I/O filters on this heap */
     if(hdr->filter_len > 0) {
-        H5Z_cb_t filter_cb = {NULL, NULL};  /* Filter callback structure */
-        size_t nbytes;          /* Number of bytes used in buffer, after applying reverse filters */
-        void *read_buf;         /* Pointer to buffer to read in */
-        size_t read_size;       /* Size of filtered direct block to read */
-        unsigned filter_mask;   /* Excluded filters for direct block */
+        Z_cb_t 		filter_cb = {NULL, NULL};  /* Filter callback structure */
+        ck_size_t 	nbytes;       /* Number of bytes used in buffer, after applying reverse filters */
+        void 		*read_buf;    /* Pointer to buffer to read in */
+        ck_size_t 	read_size;    /* Size of filtered direct block to read */
+        unsigned 	filter_mask;  /* Excluded filters for direct block */
 
         /* Check for root direct block */
         if(par_info->iblock == NULL) {
-            HDassert(H5F_addr_eq(hdr->man_dtable.table_addr, addr));
+            assert(addr_eq(hdr->man_dtable.table_addr, dblock_addr));
 
             /* Set up parameters to read filtered direct block */
             read_size = hdr->pline_root_direct_size;
             filter_mask = hdr->pline_root_direct_filter_mask;
-        } /* end if */
-        else {
-            HDassert(H5F_addr_eq(par_info->iblock->ents[par_info->entry].addr, addr));
+        } else {
+            assert(addr_eq(par_info->iblock->ents[par_info->entry].addr, dblock_addr));
 
             /* Set up parameters to read filtered direct block */
             read_size = par_info->iblock->filt_ents[par_info->entry].size;
             filter_mask = par_info->iblock->filt_ents[par_info->entry].filter_mask;
         } /* end else */
-     /* Allocate buffer to perform I/O filtering on */
-        if(NULL == (read_buf = malloc(read_size)))
-            printf("memory allocation failed for pipeline buffer");
+
+        if(NULL == (read_buf = malloc(read_size))) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+		"Fractal Heap Direct Block:Internal allocation error for pipeline", dblock_addr, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+
         /* Read filtered direct block from disk */
-        if(H5F_block_read(f, H5FD_MEM_FHEAP_DBLOCK, addr, read_size, dxpl_id, read_buf) < 0)
-            HGOTO_ERROR(H5E_HEAP, H5E_READERROR, NULL, "can't read fractal heap direct block")
+	if (FD_read(file, dblock_addr, read_size, read_buf) == FAIL) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, 
+		"Fractal Heap Direct Block:Unable to read filtered direct block", dblock_addr, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
 
         /* Push direct block data through I/O filter pipeline */
         nbytes = read_size;
-        if(H5Z_pipeline(&(hdr->pline), H5Z_FLAG_REVERSE, &filter_mask, H5Z_ENABLE_EDC,
-                 filter_cb, &nbytes, &read_size, &read_buf) < 0)
-            HGOTO_ERROR(H5E_HEAP, H5E_CANTFILTER, NULL, "output pipeline failed")
-
-        /* Sanity check */        HDassert(nbytes == dblock->size);
-
-        /* Copy un-filtered data into block's buffer */
-        HDmemcpy(dblock->blk, read_buf, dblock->size);
-
-        /* Release the read buffer */
-        H5MM_xfree(read_buf);
-    } /* end if */
-    else {
-        /* Read direct block from disk */
-        if(H5F_block_read(f, H5FD_MEM_FHEAP_DBLOCK, addr, dblock->size, dxpl_id, dblock->blk) < 0)
-            HGOTO_ERROR(H5E_HEAP, H5E_READERROR, NULL, "can't read fractal heap direct block")    } /* end else */
-#endif
-
-    if (FD_read(file, dblock_addr, dblock->size, dblock->blk) == FAIL) {
-	error_push(ERR_FILE, ERR_NONE_SEC, 
-	    "Fractal Heap Direct Block:Unable to read direct block", dblock_addr, NULL);
-	CK_GOTO_DONE(FAIL)
+printf("nbytes before filter_pline()=%u\n", nbytes);
+        if(filter_pline(hdr->pline, Z_FLAG_REVERSE, &filter_mask, Z_ENABLE_EDC,
+                 filter_cb, &nbytes, &read_size, &read_buf) < 0) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, 
+		"Fractal Heap Direct Block:Errors found in filter pipeline", dblock_addr, NULL);
+	    CK_GOTO_DONE(FAIL)
     }
 
-   
+printf("nbytes=%u, dblock->size=%u\n", nbytes, dblock->size);
+	if (nbytes != dblock->size) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, 
+		"Fractal Heap Direct Block:Unable to read direct block", dblock_addr, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+
+        /* Copy un-filtered data into block's buffer */
+        memcpy(dblock->blk, read_buf, dblock->size);
+
+        /* Release the read buffer */
+        free(read_buf);
+    } else {
+        /* Read direct block from disk */
+	if (FD_read(file, dblock_addr, dblock->size, dblock->blk) == FAIL) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, 
+		"Fractal Heap Direct Block:Unable to read direct block", dblock_addr, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+    }
+
     /* Start decoding direct block */
     p = dblock->blk;
 
@@ -1382,6 +1387,7 @@ check_iblock(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned nrow
     HF_indirect_t       *iblock = NULL; 	/* Indirect block info */
     unsigned		entry, row, col;
     int			ret_value=SUCCEED;     /* Return value */
+    HF_parent_t		par_info;
     
 
     /* Check arguments */
@@ -1412,15 +1418,19 @@ check_iblock(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned nrow
                 /* Are we in a direct or indirect block row */
                 if(row < hdr->man_dtable.max_direct_rows) {
                     ck_hsize_t dblock_size;        /* Size of direct block on disk */
+
 #if 0
                     /* Check for I/O filters on this heap */
                     if(hdr->filter_len > 0)
                         dblock_size = iblock->filt_ents[entry].size;
                     else
-#endif
                         dblock_size = row_block_size;
+#endif
 
-		    if (check_dblock(file, iblock->ents[entry].addr, hdr, dblock_size, NULL) < SUCCEED) {
+                        dblock_size = row_block_size;
+			par_info.iblock = iblock;
+			par_info.entry = entry;
+		    if (check_dblock(file, iblock->ents[entry].addr, hdr, dblock_size, &par_info, NULL) < SUCCEED) {
 			error_push(ERR_LEV_1, ERR_LEV_1F, 
 			    "Fractal Heap Indirect Block:Errors found when checking direct block", -1, NULL);
 			CK_GOTO_DONE(FAIL)
@@ -1561,6 +1571,55 @@ HF_tiny_init(HF_hdr_t *fhdr)
     return(SUCCEED);
 }
 
+ck_err_t
+HF_huge_init(driver_t *file, HF_hdr_t *hdr)
+{
+    assert(file);
+    assert(hdr);
+    /*  
+     * Check if we can completely hold the 'huge' object's offset & length in
+     * the file in the heap ID (which will speed up accessing it) and we don't
+     * have any I/O pipeline filters.
+     */
+    if(hdr->filter_len > 0) {
+        if ((hdr->id_len - 1) >= 
+	    (SIZEOF_ADDR(file->shared) + SIZEOF_SIZE(file->shared) + 4 + SIZEOF_SIZE(file->shared))) {
+            /* Indicate that v2 B-tree doesn't have to be used to locate object */
+            hdr->huge_ids_direct = TRUE;
+
+            /* Set the size of 'huge' object IDs */
+            hdr->huge_id_size = SIZEOF_ADDR(file->shared) + SIZEOF_SIZE(file->shared) + 
+				    SIZEOF_SIZE(file->shared);
+        } /* end if */
+        else
+            /* Indicate that v2 B-tree must be used to access object */
+            hdr->huge_ids_direct = FALSE;
+    } /* end if */
+    else {
+        if((SIZEOF_ADDR(file->shared) + SIZEOF_SIZE(file->shared)) <= (hdr->id_len - 1)) {
+            /* Indicate that v2 B-tree doesn't have to be used to locate object */
+            hdr->huge_ids_direct = TRUE;
+
+            /* Set the size of 'huge' object IDs */
+            hdr->huge_id_size = SIZEOF_ADDR(file->shared) + SIZEOF_SIZE(file->shared);
+        } /* end if */
+        else
+            /* Indicate that v2 B-tree must be used to locate object */
+            hdr->huge_ids_direct = FALSE;
+    } /* end else */
+
+    if(!hdr->huge_ids_direct) {
+        if((hdr->id_len - 1) < sizeof(ck_hsize_t)) {
+            hdr->huge_id_size = hdr->id_len - 1;
+        } else {
+            hdr->huge_id_size = sizeof(ck_hsize_t);
+        } 
+    } 
+
+    return(SUCCEED);
+} 
+
+
 /* 
  * Validate Fractal Heap Header
  */
@@ -1573,7 +1632,7 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
     const uint8_t       *p;             /* Pointer into raw data buffer */
     uint8_t             heap_flags;     /* Status flags for heap */
     uint32_t            stored_chksum;  /* Stored metadata checksum value */
-    int 		ret_value = SUCCEED;
+    int 		ret_value=SUCCEED;
 
     OBJ_filter_t     	*pline = NULL;
     ck_addr_t		logi_base;
@@ -1609,8 +1668,10 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
     /* Magic number */
     if(memcmp(p, HF_HDR_MAGIC, (size_t)HF_SIZEOF_MAGIC)) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Header:Wrong header signature", -1, NULL);
-	CK_SET_ERR(FAIL)
-    }
+	CK_GOTO_DONE(FAIL)
+    } else if (debug_verbose())
+        printf("FOUND fractal header signature.\n");
+
     p += HF_SIZEOF_MAGIC;
     
     /* Version */
@@ -1661,7 +1722,7 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
 
     /* Managed objects' doubling-table info */
     if(check_dtable(file, &p, &(hdr->man_dtable)) < SUCCEED) {
-	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Headers:Errors found when validating doubling table", -1, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Headers:Errors found when validating doubling table info", -1, NULL);
 	CK_SET_ERR(FAIL)
     }
 
@@ -1680,25 +1741,32 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
      /* Check for I/O filter information to decode */
     if(hdr->filter_len > 0) {
         size_t 		filter_info_size;    	/* Size of filter information */
-        OBJ_filter_t 	*pline;         	/* Pipeline information from the header on disk */
+	size_t 		filter_info_off;        /* Offset in header of filter information */
 
-        /* Compute the size of the extra filter information */
+	filter_info_off = p - hdr_buf;
+
         filter_info_size = file->shared->size_lengths     /* Size of size for filtered root direct block */
             + 4                                 /* Size of filter mask for filtered root direct block */
             + hdr->filter_len;                  /* Size of encoded I/O filter info */
 
-	if (FD_read(file, fhdr_addr+size, filter_info_size, p) == FAIL) {
+	hdr->heap_size = size + filter_info_size;
+
+	if (FD_read(file, fhdr_addr+filter_info_off, filter_info_size+HF_SIZEOF_CHKSUM, hdr_buf+filter_info_off) == FAIL) {
 	    error_push(ERR_FILE, ERR_NONE_SEC, 
 		"Fractal Heap Header:Unable to read filter info", fhdr_addr+size, NULL);
 	    CK_GOTO_DONE(FAIL)
 	}
 
+	p = hdr_buf + filter_info_off;
         /* Decode the size of a filtered root direct block */
         DECODE_LENGTH(file->shared, p, hdr->pline_root_direct_size);
+
+#if 0 /* BUG here : couldn't check for 0 because managed heap might be empty */
 	if (hdr->pline_root_direct_size <= 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Header:filtered root direct block size should be > 0", -1, NULL);
 	    CK_SET_ERR(FAIL)
 	}
+#endif
 	
         /* Decode the filter mask for a filtered root direct block */
         UINT32DECODE(p, hdr->pline_root_direct_filter_mask);
@@ -1708,9 +1776,10 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
 	if (pline == NULL) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Header:Errors found when decoding I/O filter info", 
 		-1, NULL);
-	    CK_SET_ERR(FAIL)
+	    CK_GOTO_DONE(FAIL)
 	}
 	
+	hdr->pline = pline;
 	p += hdr->filter_len;
     } /* end if */
     else
@@ -1723,6 +1792,7 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
     if (HF_dtable_init(&hdr->man_dtable) < 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Header:Errors found when initializing doublig table\n", 
 		-1, NULL);
+	CK_SET_ERR(FAIL)
     }
 
     hdr->heap_off_size = HF_SIZEOF_OFFSET_BITS(hdr->man_dtable.cparam.max_index);
@@ -1733,23 +1803,33 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
     if (HF_tiny_init(hdr) < SUCCEED)
 	printf("Cannot initialize info for tracking tiny objects\n");
 
+    if (HF_huge_init(file, hdr) < SUCCEED)
+	printf("Cannot initialize info for tracking huge objects\n");
+
     printf("hdr->heap_size=%u;hdr->heap_off_size=%u\n", hdr->heap_size, hdr->heap_off_size);
     printf("hdr->man_alloc_size=%llu; hdr->huge_size=%llu\n", 
 	hdr->man_alloc_size, hdr->huge_size);
+
+    printf("hdr->man_nobjs=%lu, hdr->huge_nobjs=%lu, hdr->tiny_nobjs=%lu\n",
+	    hdr->man_nobjs, hdr->huge_nobjs, hdr->tiny_nobjs);
 
     printf("double:cparam.start_root_rows=%u; cparam.max_index=%u, cparam.width=%u\n", 
 	hdr->man_dtable.cparam.start_root_rows, 
 	hdr->man_dtable.cparam.max_index, hdr->man_dtable.cparam.width);
 
-    printf("double:curr_root_rows=%u; table_addr=%llu;\n", 
-	hdr->man_dtable.curr_root_rows, hdr->man_dtable.table_addr);
+    printf("double:curr_root_rows=%u;", hdr->man_dtable.curr_root_rows);
+    if (addr_defined(hdr->man_dtable.table_addr))
+	printf("table_addr=%llu\n", hdr->man_dtable.table_addr);
+    else
+	printf("table_addr is undefined\n");
 
-    *ret_hdr = hdr;
+/* BUG: if not set, ret_hdr is freed when not succeed */
+    if (ret_value == SUCCEED)
+	*ret_hdr = hdr;
 
 done:
     if ((ret_value != SUCCEED) && (hdr))
 	free(hdr);
-
     return(ret_value);
 }
 
@@ -1760,6 +1840,7 @@ ck_err_t
 check_fheap(driver_t *file, ck_addr_t fheap_addr)
 {
     HF_hdr_t	*fhdr=NULL;
+    HF_parent_t	par_info;
     int		ret_value = SUCCEED;
 
     if (debug_verbose())
@@ -1770,19 +1851,67 @@ check_fheap(driver_t *file, ck_addr_t fheap_addr)
 	CK_GOTO_DONE(FAIL)
     }
 
-    if (fhdr->man_dtable.curr_root_rows == 0) { /* table_addr points to root direct block */
-	if (check_dblock(file, fhdr->man_dtable.table_addr, fhdr, fhdr->man_dtable.cparam.start_block_size, NULL) < SUCCEED) {
+    if (addr_defined(fhdr->man_dtable.table_addr)) {
+	if (fhdr->man_dtable.curr_root_rows == 0){ /* table_addr points to root direct block */
+	    par_info.iblock = NULL;
+	    par_info.entry = 0;
+	    if (check_dblock(file, fhdr->man_dtable.table_addr, fhdr, fhdr->man_dtable.cparam.start_block_size, &par_info, NULL) < SUCCEED) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
 		"Errors found when validating Fractal Heap Direct Block", -1, NULL);
 	    CK_GOTO_DONE(FAIL)
+	    }
+	} else { /* table_addr points to root indirect block */
+	    if (check_iblock(file, fhdr->man_dtable.table_addr, fhdr, fhdr->man_dtable.curr_root_rows) < SUCCEED) {
+		error_push(ERR_LEV_1, ERR_LEV_1F, 
+		    "Errors found when validating Fractal Heap Indirect Block", -1, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
 	}
-    } else { /* table_addr points to root indirect block */
-	if (check_iblock(file, fhdr->man_dtable.table_addr, fhdr, fhdr->man_dtable.curr_root_rows) < SUCCEED) {
-	    error_push(ERR_LEV_1, ERR_LEV_1F, 
-		"Errors found when validating Fractal Heap Indirect Block", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+    } else {
+	if (debug_verbose()) /* BUG : managed might be empty */
+	    printf("Empty managed heap ...\n");
+    }
+
+    /* BUG: I did not validate the huge btree */
+    if (addr_defined(fhdr->huge_bt2_addr)) {
+	if (debug_verbose())
+	    printf("Going to validate version 2 btree for fractal heap's huge objects at logical address %llu...\n", 
+		fhdr->huge_bt2_addr);
+	if(fhdr->huge_ids_direct) { /* directly accessed */
+	    if(fhdr->filter_len > 0) {
+	    	printf("Going to validate version 2 btree for directly accessed, filtered huge objects\n");
+		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_DIR) != SUCCEED) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2c,
+                      "Errors found when checking version 2 B-tree for directly accessed, filtered huge objects", -1, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
+	    } else {
+	    	printf("Going to validate version 2 btree for directly accessed huge objects\n");
+		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_DIR) != SUCCEED) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2c,
+                      "Errors found when checking version 2 B-tree for directly accessed huge objects", -1, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
+	    }
+	} else { /* indirectly accessed */
+	    if(fhdr->filter_len > 0) {
+	    	printf("Going to validate version 2 btree for indirectly accessed, filtered huge objects\n");
+		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_INDIR) != SUCCEED) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2c,
+                      "Errors found when checking version 2 B-tree for indirectly accessed, filtered huge objects", -1, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
+	    } else {
+	    	printf("Going to validate version 2 btree for indirectly accessed huge objects\n");
+		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_INDIR) != SUCCEED) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2c,
+                      "Errors found when checking version 2 B-tree for indirectly accessed huge objects", -1, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
+	    }
 	}
     }
+
 done:
     if (fhdr != NULL) free(fhdr);
     return(ret_value);
@@ -1983,6 +2112,7 @@ static ck_err_t
 HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
 {
     HF_direct_t *dblock = NULL;       	/* Pointer to direct block to query */
+    HF_parent_t	par_info;
     ck_addr_t 	dblock_addr;            /* Direct block address */
     ck_size_t 	dblock_size;            /* Direct block size */
     ck_size_t 	blk_off;                /* Offset of object in block */
@@ -2020,7 +2150,9 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
         dblock_addr = fhdr->man_dtable.table_addr;
         dblock_size = fhdr->man_dtable.cparam.start_block_size;
 
-	if (check_dblock(file, dblock_addr, fhdr, dblock_size, &dblock) < SUCCEED) {
+       	par_info.iblock = NULL;
+	par_info.entry = 0;
+	if (check_dblock(file, dblock_addr, fhdr, dblock_size, &par_info, &dblock) < SUCCEED) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
 		"HF_man_read:Errors found when checking direct block", -1, NULL);
 	    CK_GOTO_DONE(FAIL)
@@ -2044,7 +2176,10 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
 	    error_push(ERR_LEV_1, ERR_LEV_1F, "HF_man_read:Invalid direct block address", -1, NULL);
 	    CK_GOTO_DONE(FAIL)
         }
-	if (check_dblock(file, dblock_addr, fhdr, dblock_size, &dblock) < SUCCEED) {
+
+	par_info.iblock = iblock;
+	par_info.entry = entry;
+	if (check_dblock(file, dblock_addr, fhdr, dblock_size, &par_info, &dblock) < SUCCEED) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
 		"HF_man_read:Errors found when checking direct block", -1, NULL);
 	    CK_GOTO_DONE(FAIL)
@@ -2293,6 +2428,26 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 
         /* Address of the actual index */
         addr_decode(file->shared, &p, &(table->indexes[x].index_addr));
+	if (addr_defined(table->indexes[x].index_addr) && (table->indexes[x].index_type == SM_BTREE)) {
+	    printf("Doing check_btree2() from check_SOHM()\n");
+	    if (check_btree2(file, table->indexes[x].index_addr, SM_INDEX)) {
+		error_push(ERR_LEV_2, ERR_LEV_2A2p, 
+		    "SOHM:Errors found when checking version 2 B-tree", -1, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+	}
+
+        /* Address of the index's heap */
+        addr_decode(file->shared, &p, &(table->indexes[x].heap_addr));
+	if (addr_defined(table->indexes[x].heap_addr)) {
+	    printf("Doing check_fheap() from check_SOHM()\n");
+	    if (check_fheap(file, table->indexes[x].heap_addr)) {
+		error_push(ERR_LEV_2, ERR_LEV_2A, 
+		    "SOHM:Errors found when checking fractal heap", -1, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+	}
+#if 0 /* BUG */
 	if (!(addr_defined(table->indexes[x].index_addr))) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2p, "SOHM:Undefined list or btree address", -1, NULL);
 	    CK_SET_ERR(FAIL)
@@ -2304,7 +2459,6 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 		CK_SET_ERR(FAIL)
 	    }
 	}
-
         /* Address of the index's heap */
         addr_decode(file->shared, &p, &(table->indexes[x].heap_addr));
 	if (!(addr_defined(table->indexes[x].heap_addr))) {
@@ -2318,6 +2472,7 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 		CK_SET_ERR(FAIL)
 	    }
 	}
+#endif
     
     } /* end for */
 

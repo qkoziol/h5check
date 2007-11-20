@@ -160,6 +160,14 @@ static const obj_class_t OBJ_LAYOUT[1] = {{
     OBJ_layout_decode,	        /* decode message                */
 }};
 
+static void *OBJ_bogus_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+
+/* Bogus Message 0x0009 */
+static const obj_class_t OBJ_BOGUS[1] = {{
+    OBJ_BOGUS_ID,              /* message id number             */
+    OBJ_bogus_decode,	       /* decode message                */
+}};
+
 static void *OBJ_filter_decode (driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
 
 /* Data Storage - Filter pipeline: 0x000B */
@@ -278,7 +286,7 @@ const obj_class_t *const message_type_g[] = {
     OBJ_LINK,           /* 0x0006 LINK 					*/
     OBJ_EDF,           	/* 0x0007 Data Storage - External Data Files    */
     OBJ_LAYOUT,        	/* 0x0008 Data Storage - Layout                 */
-    NULL,               /* MSG_BOGUS:0x0009 Reserved - Not Assigned Yet	*/
+    OBJ_BOGUS,          /* 0x0009 Bogus				        */
     OBJ_GINFO,          /* 0x000A Group information Message   		*/
     OBJ_FILTER,       	/* 0x000B Data storage - Filter Pipeline        */
     OBJ_ATTR,          	/* 0x000C Attribute 				*/
@@ -1164,7 +1172,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
     logical = get_logical_addr(*pp, start_buf, logi_base);
     UINT32DECODE(*pp, flags);
     version = (flags>>4) & 0x0f;
-    if (version != DT_VERSION_COMPAT && version != DT_VERSION_UPDATED) {
+    if (version < DT_VERSION_1 || version > DT_VERSION_3) {
 	badinfo = version;
 	error_push(ERR_LEV_2, ERR_LEV_2A2d, "Datatype Message:Bad version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
@@ -1178,7 +1186,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 
     flags >>= 8;
     UINT32DECODE(*pp, dt->shared->size);
-/* Do i need to check for size < 0??? */
+/* NEED:Do i need to check for size < 0??? */
 
     switch (dt->shared->type) {
 	case DT_INTEGER:  /* Fixed-Point datatypes */
@@ -1186,42 +1194,56 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
             dt->shared->u.atomic.lsb_pad = (flags & 0x2) ? DT_PAD_ONE : DT_PAD_ZERO;
             dt->shared->u.atomic.msb_pad = (flags & 0x4) ? DT_PAD_ONE : DT_PAD_ZERO;
             dt->shared->u.atomic.u.i.sign = (flags & 0x8) ? DT_SGN_2 : DT_SGN_NONE;
-            UINT16DECODE(*pp, dt->shared->u.atomic.offset);
-            UINT16DECODE(*pp, dt->shared->u.atomic.prec);
+
 	    if ((flags>>4) != 0) {  /* should be reserved(zero) */
 		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
 		  "Datatype Message:Fixed-Point:Bits 4-23 should be 0 for class bit field", 
 		  logical, NULL);
 		CK_SET_ERR(FAIL)
 	    }
+
+            UINT16DECODE(*pp, dt->shared->u.atomic.offset);
+            UINT16DECODE(*pp, dt->shared->u.atomic.prec);
             break;
 
 	case DT_FLOAT:  /* Floating-Point datatypes */
-            dt->shared->u.atomic.order = (flags & 0x1) ? DT_ORDER_BE : DT_ORDER_LE;
+	    dt->shared->u.atomic.order = (flags & 0x1) ? DT_ORDER_BE : DT_ORDER_LE;
+            if(version >= DT_VERSION_3) {
+                if((flags & 0x40) && !(flags & 0x1)) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+		       	"Datatype Message:Floating-Point:Bad byte order for VAX-endian", logical, NULL);
+		}
+
+                /* VAX order if both 1st and 6th bits are turned on*/
+                if(flags & 0x40)
+                    dt->shared->u.atomic.order = DT_ORDER_VAX;
+            } 
             dt->shared->u.atomic.lsb_pad = (flags & 0x2) ? DT_PAD_ONE : DT_PAD_ZERO;
             dt->shared->u.atomic.msb_pad = (flags & 0x4) ? DT_PAD_ONE : DT_PAD_ZERO;
             dt->shared->u.atomic.u.f.pad = (flags & 0x8) ? DT_PAD_ONE : DT_PAD_ZERO;
-            switch ((flags >> 4) & 0x03) {
+            switch((flags >> 4) & 0x03) {
                 case 0:
                     dt->shared->u.atomic.u.f.norm = DT_NORM_NONE;
                     break;
+
                 case 1:
                     dt->shared->u.atomic.u.f.norm = DT_NORM_MSBSET;
                     break;
+
                 case 2:
                     dt->shared->u.atomic.u.f.norm = DT_NORM_IMPLIED;
                     break;
+
                 default:
 		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
 		      "Datatype Message:Unknown Floating-Point normalization", logical, NULL);
 		    CK_SET_ERR(FAIL)
 		    break;
-            }
-            dt->shared->u.atomic.u.f.sign = (flags >> 8) & 0xff;
+            } /* end switch */
 
-	    if (((flags >> 6) & 0x03) != 0) {
+	    if (((flags >> 7) & 0x01) != 0) {
 		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
-		  "Datatype Message:Floating-Point:Bits 6-7 should be 0 for class bit field", 
+		  "Datatype Message:Floating-Point:Bit 7 should be 0 for class bit field", 
 		  logical, NULL);
 		CK_SET_ERR(FAIL)
 	    }
@@ -1231,15 +1253,29 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 		  logical, NULL);
 		CK_SET_ERR(FAIL)
 	    }
-	
+
+            dt->shared->u.atomic.u.f.sign = (flags >> 8) & 0xff;
             UINT16DECODE(*pp, dt->shared->u.atomic.offset);
             UINT16DECODE(*pp, dt->shared->u.atomic.prec);
             dt->shared->u.atomic.u.f.epos = *(*pp)++;
             dt->shared->u.atomic.u.f.esize = *(*pp)++;
-            assert(dt->shared->u.atomic.u.f.esize > 0);
+
+            if (dt->shared->u.atomic.u.f.esize <= 0) {
+		error_push(ERR_LEV_2, ERR_LEV_2A2d,
+		  "Datatype Message:Floating-Point:size of exponent should be greater than 0", 
+		  logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+
             dt->shared->u.atomic.u.f.mpos = *(*pp)++;
             dt->shared->u.atomic.u.f.msize = *(*pp)++;
-            assert(dt->shared->u.atomic.u.f.msize > 0);
+
+            if (dt->shared->u.atomic.u.f.msize <= 0) {
+		error_push(ERR_LEV_2, ERR_LEV_2A2d,
+		  "Datatype Message:size of matissa should be greater than 0", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+
             UINT32DECODE(*pp, dt->shared->u.atomic.u.f.ebias);
             break;
 
@@ -1273,8 +1309,9 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 		  "Datatype Message:String:Unsupported padding type for class bit field", logical, NULL);
 		CK_SET_ERR(FAIL)
 	    }
-	    /* The only character set supported is the 8-bit ASCII */
-	    if (dt->shared->u.atomic.u.s.cset != DT_CSET_ASCII) {
+
+	    if ((dt->shared->u.atomic.u.s.cset != DT_CSET_ASCII) && 
+		(dt->shared->u.atomic.u.s.cset != DT_CSET_UTF8)) {
 		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
 		  "Datatype Message:String:Unsupported character set for class bit field", logical, NULL);
 		CK_SET_ERR(FAIL)
@@ -1302,7 +1339,13 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 
 	case DT_OPAQUE:  /* Opaque datatypes */
             z = flags & (DT_OPAQUE_TAG_MAX - 1);
-            assert(0==(z&0x7)); /*must be aligned*/
+	    if ((z&0x7) != 0) { /* must be aligned */
+		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+		  "Datatype Message:Opaque:Tag must be aligned", 
+		  logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+
 	    if ((flags>>8) != 0) {  /* should be reserved(zero) */
 		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
 		  "Datatype Message:Opaque:Bits 8-23 should be 0 for class bit field", 
@@ -1311,17 +1354,148 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 	    }
 
             if ((dt->shared->u.opaque.tag=malloc(z+1))==NULL) {
-		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Datatype Message:Internal allocation error for opaque type", logical, NULL);
+		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Datatype Message:Opaque:Internal allocation error", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
 
-	    /*??? should it be nul-terminated???? see spec. */
             memcpy(dt->shared->u.opaque.tag, *pp, z);
             dt->shared->u.opaque.tag[z] = '\0';
             *pp += z;
             break;
 
 	case DT_COMPOUND:  /* Compound datatypes */
+	{
+	    unsigned 	offset_nbytes;   
+	    unsigned 	j;
+
+            /* Compute the # of bytes required to store a member offset */
+            offset_nbytes = (V_log2_gen((uint64_t)dt->shared->size) + 7) / 8;
+
+	    dt->shared->u.compnd.nmembs = flags & 0xffff;
+	    if (dt->shared->u.compnd.nmembs <= 0) {
+		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+		  "Datatype Message:Compound:Number of members should be greater than 0", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+
+            dt->shared->u.compnd.packed = TRUE; /* Start off packed */
+            dt->shared->u.compnd.nalloc = dt->shared->u.compnd.nmembs;
+            dt->shared->u.compnd.memb = (DT_cmemb_t *)calloc(dt->shared->u.compnd.nalloc, sizeof(DT_cmemb_t));
+
+            if(NULL == dt->shared->u.compnd.memb) {
+		error_push(ERR_INTERNAL, ERR_NONE_SEC,
+		    "Datatype Message:Compound:Internal allocation error", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+            for(i = 0; i < dt->shared->u.compnd.nmembs; i++) {
+		unsigned ndims = 0;     /* Number of dimensions of the array field */
+                ck_hsize_t dim[OBJ_LAYOUT_NDIMS];  /* Dimensions of the array */
+                type_t *array_dt;    /* Temporary pointer to the array datatype */
+                type_t *temp_type;   /* Temporary pointer to the field's datatype */
+
+                dt->shared->u.compnd.memb[i].name = strdup((const char *)*pp);
+
+                /* Version 3 of the datatype message eliminated the padding to multiple of 8 bytes */
+                if(version >= DT_VERSION_3)
+		    *pp += strlen((const char *)*pp) + 1;
+                else
+		    *pp += ((strlen((const char *)*pp) + 8) / 8) * 8;
+
+                if (version >= DT_VERSION_3) {
+		    UINT32DECODE_VAR(*pp, dt->shared->u.compnd.memb[i].offset, offset_nbytes);
+                } else {
+                    UINT32DECODE(*pp, dt->shared->u.compnd.memb[i].offset);
+		}
+
+		if (version == DT_VERSION_1) {
+		    /* Decode the number of dimensions */
+		    ndims = *(*pp)++;
+		    if (ndims > 4) {
+			error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+			    "Datatype Message:Compound:Number of dimensions should not exceed 4 for version 1", logical, NULL);
+			CK_GOTO_DONE(FAIL)
+		    }
+		    *pp += 3;  /*reserved bytes */
+		    *pp += 4;  /* skip dimension permutation */
+		    *pp += 4;  /* reserved bytes */
+
+                    /* Decode array dimension sizes */
+                    for(j = 0; j < 4; j++)
+			UINT32DECODE(*pp, dim[j]);
+                } /* end if */
+
+		/* Allocate space for the field's datatype */
+		if ((temp_type = type_alloc(logical)) == NULL) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+			"Datatype Message:Compound:Internal allocation", logical, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
+
+                /* Decode the field's datatype information */
+                if (OBJ_dt_decode_helper(file, pp, temp_type, start_buf, logi_base) != SUCCEED) {
+                    for (j = 0; j <= i; j++)
+                        free(dt->shared->u.compnd.memb[j].name);
+                    free(dt->shared->u.compnd.memb);
+                    error_push(ERR_LEV_2, ERR_LEV_2A2d,
+		      "Datatype Message:Unable to decode Compound member type", logical, NULL);
+		    CK_GOTO_DONE(FAIL)
+                }
+
+		dt->shared->u.compnd.memb[i].size = temp_type->shared->size;
+                dt->shared->u.compnd.memb[i].type = temp_type;
+            } /* end for */
+	    
+	}
+	    break;
+
+#ifdef TEMP /* I don't think I need all these but what if after recurseive need the array?? */
+                /* Go create the array datatype now, for older versions of the datatype message */
+                if(version == DT_VERSION_1) {
+                    /* Check if this member is an array field */
+		    if(ndims > 0) {
+			/* Create the array datatype for the field */
+			if((array_dt = type_array_create(temp_type, ndims, dim)) == NULL) {
+                                for(j = 0; j <= i; j++)
+                                    free(dt->shared->u.compnd.memb[j].name);
+                                free(dt->shared->u.compnd.memb);
+                                "unable to create array datatype")
+			}
+
+			/* Close the base type for the array */
+                        type_close(temp_type);
+
+                        /* Make the array type the type that is set for the field */
+                        temp_type = array_dt;
+		    }
+		} 
+
+		dt->shared->u.compnd.memb[i].size = temp_type->shared->size;
+                dt->shared->u.compnd.memb[i].type = temp_type;
+
+                /* Check if the datatype stayed packed */
+                if(dt->shared->u.compnd.packed) {
+		    /* Check if the member type is packed */
+		    if(type_is_packed(temp_type) > 0) {
+			    if(i == 0) {
+                                /* If the is the first member, the datatype is not packed
+                                 * if the first member isn't at offset 0
+                                 */
+                                if(dt->shared->u.compnd.memb[i].offset > 0)
+                                    dt->shared->u.compnd.packed = FALSE;
+                            } /* end if */
+                            else {
+                                /* If the is not the first member, the datatype is not
+                                 * packed if the new member isn't adjoining the previous member
+                                 */
+                                if(dt->shared->u.compnd.memb[i].offset != (dt->shared->u.compnd.memb[i - 1].offset + dt->shared->u.compnd.memb[i-1].size))
+                                    dt->shared->u.compnd.packed = FALSE;
+                            } /* end else */
+		    } else
+			dt->shared->u.compnd.packed = FALSE;
+                } 
+#endif
+
+#ifdef OLD 
 	    dt->shared->u.compnd.nmembs = flags & 0xffff;
             assert(dt->shared->u.compnd.nmembs > 0);
 	    if ((flags>>16) != 0) {  /* should be reserved(zero) */
@@ -1345,6 +1519,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
                 type_t *temp_type;   /* Temporary pointer to the field's datatype */
 		size_t	tmp_len;
 
+                dt->shared->u.compnd.memb[i].name = strdup((const char *)*pp);
                 /* Decode the field name */
 		if (!((const char *)*pp)) {
 		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
@@ -1407,6 +1582,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 
             }
             break;
+#endif
 
 	case DT_REFERENCE: /* Reference datatypes...  */
             dt->shared->u.atomic.order = DT_ORDER_NONE;
@@ -1442,7 +1618,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 
 	    if ((dt->shared->parent=type_alloc(logical)) == NULL) {
               	error_push(ERR_LEV_2, ERR_LEV_2A2d, 
-		  "Datatype Message:Internal allocation error for enumeration type", logical, NULL);
+		  "Datatype Message:Enumeration:Internal allocation error", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
 
@@ -1454,14 +1630,13 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 
 	    if ((dt->shared->u.enumer.name=calloc(dt->shared->u.enumer.nalloc, sizeof(char*)))==NULL) {
               	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-		  "Datatype Message:Internal allocation error for enumeration type", logical, NULL);
+		  "Datatype Message:Enumeration:Internal allocation error", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
             if ((dt->shared->u.enumer.value=calloc(dt->shared->u.enumer.nalloc,
                  dt->shared->parent->shared->size))==NULL) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-		    "Datatype Message:Internal allocation error for enumeration type", 
-		    logical, NULL);
+		    "Datatype Message:Enumeration:Internal allocation error", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
 
@@ -1470,48 +1645,55 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
             for (i=0; i<dt->shared->u.enumer.nmembs; i++) {
 		size_t	tmp_len;
 
-                /* Decode the field name */
-		if (!((const char *)*pp)) {
-		    error_push(ERR_LEV_2, ERR_LEV_2A2d,
-			"Datatype Message:Invalid enumeration string pointer", logical, NULL);
-		    CK_GOTO_DONE(FAIL)
-		}
-		tmp_len = strlen((const char *)*pp) + 1;
-                if ((dt->shared->u.enumer.name[i]=malloc(tmp_len))==NULL) {
-		    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-			"Datatype Message:Internal allocation error for enumeration string", logical, NULL);
-		    CK_GOTO_DONE(FAIL)
-		}
-		strcpy(dt->shared->u.enumer.name[i], (const char *)*pp);
-                /*multiple of 8 w/ null terminator */
+		 dt->shared->u.enumer.name[i] = strdup((const char*)*pp);
+
+                /* Version 3 of the datatype message eliminated the padding to multiple of 8 bytes */
+                if(version >= DT_VERSION_3)
+                    *pp += strlen((const char *)*pp) + 1;
+                else
+                    /* Advance multiple of 8 w/ null terminator */
+                    *pp += ((strlen((const char *)*pp) + 8) / 8) * 8;
+
                 *pp += ((strlen((const char *)*pp) + 8) / 8) * 8;
             }
 
             /* Values */
             memcpy(dt->shared->u.enumer.value, *pp,
-                 dt->shared->u.enumer.nmembs * dt->shared->parent->shared->size);
+		dt->shared->u.enumer.nmembs * dt->shared->parent->shared->size);
             *pp += dt->shared->u.enumer.nmembs * dt->shared->parent->shared->size;
             break;
 
 	case DT_VLEN:  /* Variable length datatypes */
 	    /* Set the type of VL information, either sequence or string */
             dt->shared->u.vlen.type = (DT_vlen_type_t)(flags & 0x0f);
+	    if ((dt->shared->u.vlen.type != DT_VLEN_STRING) &&
+		(dt->shared->u.vlen.type != DT_VLEN_SEQUENCE)) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+			"Datatype Message:Variable Length:Unsupported variable length datatype", logical, NULL);
+		    CK_SET_ERR(FAIL)
+	    }
+
+
             if(dt->shared->u.vlen.type == DT_VLEN_STRING) {
                 dt->shared->u.vlen.pad  = (DT_str_t)((flags>>4) & 0x0f);
+		if ((dt->shared->u.vlen.pad !=DT_STR_NULLTERM) &&
+		    (dt->shared->u.vlen.pad !=DT_STR_NULLPAD) &&
+		    (dt->shared->u.vlen.pad !=DT_STR_SPACEPAD)) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+			"Datatype Message:Variable Length:Unsupported padding type", logical, NULL);
+		    CK_SET_ERR(FAIL)
+		}
+
                 dt->shared->u.vlen.cset = (DT_cset_t)((flags>>8) & 0x0f);
+		if ((dt->shared->u.vlen.cset != DT_CSET_ASCII) && 
+		    (dt->shared->u.vlen.cset != DT_CSET_UTF8)) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+			"Datatype Message:Variable Length:Unsupported character set", logical, NULL);
+		    CK_SET_ERR(FAIL)
+		}
             } /* end if */
 
-	    /* Only sequence and string are defined */
-	    if (dt->shared->u.vlen.type > DT_VLEN_STRING) {
-/* NEED TO check into this */	
-	    }
-	    /* Padding type and character set should be zero for vlen sequence */
-	    if (dt->shared->u.vlen.type == DT_VLEN_SEQUENCE) {
-		if (((flags>>4)&0x0f) != 0) {
-		}
-		if (((flags>>8)&0x0f)!= 0) {
-		}
-	    }
+
 	    if ((flags>>12) != 0) {
 		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
 		  "Datatype Message:Variable-Length:Bits 12-23 should be 0 for class bit field", 
@@ -1522,7 +1704,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
             /* Decode base type of VL information */
             if((dt->shared->parent = type_alloc(logical))==NULL) {
 		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
-		  "Datatype Message:Internal allocation error for variable-length type", logical, NULL);
+		  "Datatype Message:Variable Length:Internal allocation error", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
 
@@ -1540,10 +1722,15 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
             dt->shared->u.array.ndims = *(*pp)++;
 
             /* Double-check the number of dimensions */
-            assert(dt->shared->u.array.ndims <= OBJ_SDS_MAX_RANK);
+            if (dt->shared->u.array.ndims > OBJ_SDS_MAX_RANK) {
+		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+		  "Datatype Message:Array:Dimension exceeds limit", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
 
             /* Skip reserved bytes */
-            *pp += 3;
+	    if (version < DT_VERSION_3)
+		*pp += 3;
 
             /* Decode array dimension sizes & compute number of elements */
             for (j=0, dt->shared->u.array.nelem=1; j<(unsigned)dt->shared->u.array.ndims; j++) {
@@ -1551,14 +1738,14 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
                 dt->shared->u.array.nelem *= dt->shared->u.array.dim[j];
             } /* end for */
 
-            /* Decode array dimension permutations (even though they are unused currently) */
-            for (j=0; j<(unsigned)dt->shared->u.array.ndims; j++)
-                UINT32DECODE(*pp, dt->shared->u.array.perm[j]);
+	    /* Skip array dimension permutations, if version has them */
+            if(version < DT_VERSION_3)
+                *pp += dt->shared->u.array.ndims * 4;
 
             /* Decode base type of array */
             if((dt->shared->parent = type_alloc(logical))==NULL) {
 		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
-		  "Datatype Message:Internal allocation error for array type", logical, NULL);
+		  "Datatype Message:Array:Internal allocation error", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
             if (OBJ_dt_decode_helper(file, pp, dt->shared->parent, start_buf, logi_base) != SUCCEED) {
@@ -2164,6 +2351,43 @@ done:
     return(ret_ptr);
 }
 
+/* Bogus Message */
+static void *
+OBJ_bogus_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+{
+    OBJ_bogus_t 	*mesg = NULL;
+    int                 ret_value=SUCCEED;
+    void                *ret_ptr=NULL;
+
+    assert(file);
+    assert(p);
+
+    if ((mesg = calloc(1, sizeof(OBJ_bogus_t)))==NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+	    "Bogus Message:Internal allocation error", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    /* decode */
+    UINT32DECODE(p, mesg->u);
+
+    /* Validate the bogus info */
+    if(mesg->u != OBJ_BOGUS_VALUE) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2k, 
+	    "Bogus Message:Invalid bogus value", -1, NULL);
+	CK_SET_ERR(FAIL)
+    }
+
+    if (ret_value == SUCCEED)
+	ret_ptr = mesg;
+done:
+    if(ret_value == FAIL)
+	if(mesg != NULL)
+	    free(mesg);
+
+    return(ret_ptr);
+} 
+
 /* Group Info Message */
 static void *
 OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
@@ -2266,6 +2490,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 
     logical = get_logical_addr(p, start_buf, logi_base);
     pline->nused = *p++;
+printf("PLINE->nused from filter_decode() is %u\n", pline->nused);
     if (pline->nused > OBJ_MAX_NFILTERS) {
 	badinfo = pline->nused;
 	error_push(ERR_LEV_2, ERR_LEV_2A2l, 
@@ -3167,6 +3392,49 @@ done:
     return(ret_value);
 }
 
+#if 0
+static type_t *
+type_array_create(type_t *base, unsigned ndims, const ck_hsize_t dim[/* ndims */])
+{
+    type_t       *ret_value;     /* new array data type  */
+    unsigned    u;               /* local index variable */
+
+    assert(base);
+    assert(ndims <= OBJ_SDS_MAX_RANK);
+    assert(dim);
+
+    /* Build new type */
+    if(NULL == (ret_value = type_alloc(logical))) {
+        "memory allocation failed")
+    }
+    ret_value->shared->type = DT_ARRAY;
+
+    /* Copy the base type of the array */
+    ret_value->shared->parent = H5T_copy(base, H5T_COPY_ALL);
+
+    /* Set the array parameters */
+    ret_value->shared->u.array.ndims = ndims;
+
+    /* Copy the array dimensions & compute the # of elements in the array */
+    for(u = 0, ret_value->shared->u.array.nelem = 1; u < ndims; u++) {
+        H5_ASSIGN_OVERFLOW(ret_value->shared->u.array.dim[u], dim[u], hsize_t, size_t);
+        ret_value->shared->u.array.nelem *= (size_t)dim[u];
+    } /* end for */
+
+    /* Set the array's size (number of elements * element datatype's size) */
+    ret_value->shared->size = ret_value->shared->parent->shared->size * ret_value->shared->u.array.nelem;
+
+    /* Set the "force conversion" flag if the base datatype indicates */
+    if(base->shared->force_conv == TRUE)
+        ret_value->shared->force_conv = TRUE;
+
+    /* Array datatypes need a later version of the datatype object header message */
+    ret_value->shared->version = MAX(base->shared->version, H5O_DTYPE_VERSION_2);
+
+done:
+    FUNC_LEAVE_NOAPI(ret_value)
+}
+#endif
 
 
 static size_t
@@ -4634,6 +4902,7 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 	    case OBJ_DT_ID:
 	    case OBJ_FILL_ID:
 	    case OBJ_FILTER_ID:
+	    case OBJ_BOGUS_ID:
 	    case OBJ_MDT_ID:
 	    case OBJ_MDT_OLD_ID:
 	    case OBJ_COMM_ID:
