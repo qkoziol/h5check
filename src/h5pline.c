@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include "h5_check.h"
 #include <zlib.h>
-#include "/home/packages/szip/static/decoder/Linux2.6-gcc/include/szlib.h"
+#include <szlib.h>
 #include "h5_error.h"
 #include "h5_pline.h"
 
