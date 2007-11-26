@@ -675,10 +675,16 @@ CCDEPMODE
 am__fastdepCC_TRUE
 am__fastdepCC_FALSE
 RANLIB
+USE_FILTER_DEFLATE
 CPP
 GREP
 EGREP
 USE_FILTER_SZIP
+FILTERS
+USE_FILTER_SHUFFLE
+USE_FILTER_FLETCHER32
+USE_FILTER_NBIT
+USE_FILTER_SCALEOFFSET
 LIBOBJS
 LTLIBOBJS'
 ac_subst_files=''
@@ -1267,11 +1273,15 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --disable-dependency-tracking  speeds up one-time build
   --enable-dependency-tracking   do not reject slow dependency extractors
+  --enable-filters=all    Turn on all internal I/O filters. One may also
+                          specify a comma-separated list of filters or the
+                          word no. The default is all internal I/O filters.
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-zlib=DIR         Use zlib library [default=yes]
+  --with-zlib=DIR         Use zlib library for external deflate I/O filter
+                          [default=yes]
   --with-szlib=DIR        Use szlib library [default=yes]
 
 Some influential environment variables:
@@ -3456,6 +3466,7 @@ fi
 
 # Checks for libraries.
 
+ USE_FILTER_DEFLATE="no"
 
 # Check whether --with-zlib was given.
 if test "${with_zlib+set}" = set; then
@@ -4730,6 +4741,21 @@ fi
     ;;
 esac
 
+if test "x$HAVE_ZLIB" = "xyes" -a "x$HAVE_ZLIB_H" = "xyes"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_FILTER_DEFLATE 1
+_ACEOF
+
+    USE_FILTER_DEFLATE="yes"
+
+        if test "X$EXTERNAL_FILTERS" != "X"; then
+        EXTERNAL_FILTERS="${EXTERNAL_FILTERS},"
+    fi
+    EXTERNAL_FILTERS="${EXTERNAL_FILTERS}deflate(zlib)"
+fi
+
+
  USE_FILTER_SZIP="no"
 
 # Check whether --with-szlib was given.
@@ -5317,6 +5343,88 @@ echo "$as_me: error: couldn't find szlib library" >&2;}
     fi
     ;;
 esac
+
+if test "x$HAVE_SZLIB" = "xyes" -a "x$HAVE_SZLIB_H" = "xyes"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_FILTER_SZIP 1
+_ACEOF
+
+    USE_FILTER_SZIP="yes"
+
+        if test "X$EXTERNAL_FILTERS" != "X"; then
+        EXTERNAL_FILTERS="${EXTERNAL_FILTERS},"
+    fi
+    EXTERNAL_FILTERS="${EXTERNAL_FILTERS}szip(decoder)"
+fi
+
+
+ USE_FILTER_SHUFFLE="no"
+ USE_FILTER_FLETCHER32="no"
+ USE_FILTER_NBIT="no"
+ USE_FILTER_SCALEOFFSET="no"
+{ echo "$as_me:$LINENO: checking for I/O filters" >&5
+echo $ECHO_N "checking for I/O filters... $ECHO_C" >&6; }
+# Check whether --enable-filters was given.
+if test "${enable_filters+set}" = set; then
+  enableval=$enable_filters; FILTERS=$enableval
+fi
+
+
+all_filters="shuffle,fletcher32,nbit"
+case "X-$FILTERS" in
+  X-|X-all)
+    FILTERS=$all_filters
+    { echo "$as_me:$LINENO: result: all ($FILTERS)" >&5
+echo "${ECHO_T}all ($FILTERS)" >&6; }
+    ;;
+  X-no|X-none)
+    { echo "$as_me:$LINENO: result: none" >&5
+echo "${ECHO_T}none" >&6; }
+    FILTERS="none"
+    ;;
+  *)
+    { echo "$as_me:$LINENO: result: $FILTERS" >&5
+echo "${ECHO_T}$FILTERS" >&6; }
+    ;;
+esac
+
+if test -n "$FILTERS"; then
+  for filter in `echo $FILTERS | tr ${as_cr_letters}',' ${as_cr_LETTERS}' '`; do
+                    if test $filter = "SHUFFLE"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_FILTER_SHUFFLE 1
+_ACEOF
+
+      USE_FILTER_SHUFFLE="yes"
+    fi
+    if test $filter = "FLETCHER32"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_FILTER_FLETCHER32 1
+_ACEOF
+
+      USE_FILTER_FLETCHER32="yes"
+    fi
+    if test $filter = "NBIT"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_FILTER_NBIT 1
+_ACEOF
+
+      USE_FILTER_NBIT="yes"
+    fi
+    if test $filter = "SCALEOFFSET"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_FILTER_SCALEOFFSET 1
+_ACEOF
+
+      USE_FILTER_SCALEOFFSET="yes"
+    fi
+  done
+fi
 
 # Checks for header files.
 { echo "$as_me:$LINENO: checking for ANSI C header files" >&5
@@ -7478,15 +7586,21 @@ CCDEPMODE!$CCDEPMODE$ac_delim
 am__fastdepCC_TRUE!$am__fastdepCC_TRUE$ac_delim
 am__fastdepCC_FALSE!$am__fastdepCC_FALSE$ac_delim
 RANLIB!$RANLIB$ac_delim
+USE_FILTER_DEFLATE!$USE_FILTER_DEFLATE$ac_delim
 CPP!$CPP$ac_delim
 GREP!$GREP$ac_delim
 EGREP!$EGREP$ac_delim
 USE_FILTER_SZIP!$USE_FILTER_SZIP$ac_delim
+FILTERS!$FILTERS$ac_delim
+USE_FILTER_SHUFFLE!$USE_FILTER_SHUFFLE$ac_delim
+USE_FILTER_FLETCHER32!$USE_FILTER_FLETCHER32$ac_delim
+USE_FILTER_NBIT!$USE_FILTER_NBIT$ac_delim
+USE_FILTER_SCALEOFFSET!$USE_FILTER_SCALEOFFSET$ac_delim
 LIBOBJS!$LIBOBJS$ac_delim
 LTLIBOBJS!$LTLIBOBJS$ac_delim
 _ACEOF
 
-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 81; then
+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 87; then
     break
   elif $ac_last_try; then
     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5

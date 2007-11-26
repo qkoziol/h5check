@@ -23,9 +23,11 @@ dnl `-lz' and their locations might be specified with the `--with-zlib'
 dnl command-line switch. The value is an include path and/or a library path.
 dnl If the library path is specified then it must be preceded by a comma.
 dnl
+AC_SUBST(USE_FILTER_DEFLATE) USE_FILTER_DEFLATE="no"
 AC_ARG_WITH([zlib],
-            [AC_HELP_STRING([--with-zlib=DIR],
-                            [Use zlib library [default=yes]])],,
+	    [AC_HELP_STRING([--with-zlib=DIR],
+                            [Use zlib library for external deflate I/O
+                             filter [default=yes]])],,
             withval=yes)
 
 case $withval in
@@ -82,6 +84,18 @@ case $withval in
                  [LDFLAGS="$saved_LDFLAGS"; unset HAVE_ZLIB])
     ;;
 esac
+
+if test "x$HAVE_ZLIB" = "xyes" -a "x$HAVE_ZLIB_H" = "xyes"; then
+    AC_DEFINE([HAVE_FILTER_DEFLATE], [1], [Define if support for deflate (zlib) filter is enabled])
+    USE_FILTER_DEFLATE="yes"
+
+    dnl Add "deflate" to external filter list
+    if test "X$EXTERNAL_FILTERS" != "X"; then
+        EXTERNAL_FILTERS="${EXTERNAL_FILTERS},"
+    fi
+    EXTERNAL_FILTERS="${EXTERNAL_FILTERS}deflate(zlib)"
+fi
+
 
 dnl ----------------------------------------------------------------------
 dnl Is the szlib present? It has a header file `szlib.h' and a library
@@ -157,6 +171,85 @@ case $withval in
     fi
     ;;
 esac
+
+if test "x$HAVE_SZLIB" = "xyes" -a "x$HAVE_SZLIB_H" = "xyes"; then
+    AC_DEFINE([HAVE_FILTER_SZIP], [1], [Define if support for szip filter is enabled])
+    USE_FILTER_SZIP="yes"
+
+    dnl Add "szip" to external filter list
+    if test "X$EXTERNAL_FILTERS" != "X"; then
+        EXTERNAL_FILTERS="${EXTERNAL_FILTERS},"
+    fi
+    EXTERNAL_FILTERS="${EXTERNAL_FILTERS}szip(decoder)"
+fi
+
+dnl ----------------------------------------------------------------------
+dnl Turn on internal I/O filters by setting macros in header files
+dnl Internal I/O filters are contained entirely within the library and do
+dnl not depend on external headers or libraries.  The shuffle filter is
+dnl an example of an internal filter, while the gzip filter is an example of
+dnl an external filter.  Each external filter is controlled with an
+dnl "--with-foo=" configure flag.
+dnl
+AC_SUBST([FILTERS])
+AC_SUBST(USE_FILTER_SHUFFLE) USE_FILTER_SHUFFLE="no"
+AC_SUBST(USE_FILTER_FLETCHER32) USE_FILTER_FLETCHER32="no"
+AC_SUBST(USE_FILTER_NBIT) USE_FILTER_NBIT="no"
+AC_SUBST(USE_FILTER_SCALEOFFSET) USE_FILTER_SCALEOFFSET="no"
+AC_MSG_CHECKING([for I/O filters])
+AC_ARG_ENABLE([filters],
+              [AC_HELP_STRING([--enable-filters=all],
+                              [Turn on all internal I/O filters. One may
+                               also specify a comma-separated list of filters
+                               or the word no.  The default is all internal
+                               I/O filters.])],
+              [FILTERS=$enableval])
+
+dnl Eventually: all_filters="shuffle,foo,bar,baz"
+dnl Eventually: all_filters="shuffle,fletcher32,nbit,scaleoffset"
+all_filters="shuffle,fletcher32,nbit"
+case "X-$FILTERS" in
+  X-|X-all)
+    FILTERS=$all_filters
+    AC_MSG_RESULT([all ($FILTERS)])
+    ;;
+  X-no|X-none)
+    AC_MSG_RESULT([none])
+    FILTERS="none"
+    ;;
+  *)
+    AC_MSG_RESULT([$FILTERS])
+    ;;
+esac
+
+if test -n "$FILTERS"; then
+  for filter in `echo $FILTERS | tr ${as_cr_letters}',' ${as_cr_LETTERS}' '`; do
+    dnl ------------------------------------------------------------------
+    dnl Have to use separate 'if' construct for each filter, so that
+    dnl autoheader can detect the AC_DEFINE for each one...
+    dnl
+    if test $filter = "SHUFFLE"; then
+      AC_DEFINE([HAVE_FILTER_SHUFFLE], [1],
+                [Define if support for shuffle filter is enabled])
+      USE_FILTER_SHUFFLE="yes"
+    fi
+    if test $filter = "FLETCHER32"; then
+      AC_DEFINE([HAVE_FILTER_FLETCHER32], [1],
+                [Define if support for Fletcher32 checksum is enabled])
+      USE_FILTER_FLETCHER32="yes"
+    fi
+    if test $filter = "NBIT"; then
+      AC_DEFINE([HAVE_FILTER_NBIT], [1],
+                [Define if support for nbit filter is enabled])
+      USE_FILTER_NBIT="yes"
+    fi
+    if test $filter = "SCALEOFFSET"; then
+      AC_DEFINE([HAVE_FILTER_SCALEOFFSET], [1],
+                [Define if support for scaleoffset filter is enabled])
+      USE_FILTER_SCALEOFFSET="yes"
+    fi
+  done
+fi
 
 # Checks for header files.
 AC_HEADER_STDC

@@ -1,14 +1,3 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <assert.h>
-#include <time.h>
-#include <string.h>
-#include <unistd.h>
 #include "h5_check.h"
 #include "h5_error.h"
 #include "h5_pline.h"
@@ -1075,11 +1064,13 @@ printf("iblock->block_off=%llu\n", iblock->block_off);
         dir_rows = MIN(iblock->nrows, hdr->man_dtable.max_direct_rows);
 
         /* Allocate indirect block filtered entry array */
-        if(NULL == (iblock->filt_ents = calloc((ck_size_t)(dir_rows * hdr->man_dtable.cparam.width), sizeof(HF_indirect_filt_ent_t))))
+        if(NULL == (iblock->filt_ents = calloc((ck_size_t)(dir_rows * hdr->man_dtable.cparam.width), sizeof(HF_indirect_filt_ent_t)))) {
 
-            printf("memory allocation failed for block entries");
-    } /* end if */
-    else
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+	    	"Fractal Heap Indirect Block:Internal allocation error", iblock_addr, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+    } else
         iblock->filt_ents = NULL;
 
 printf("iblock->nrows=%u\n", iblock->nrows);
@@ -1296,7 +1287,7 @@ check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t db
 printf("nbytes before filter_pline()=%u\n", nbytes);
         if(filter_pline(hdr->pline, Z_FLAG_REVERSE, &filter_mask, Z_ENABLE_EDC,
                  filter_cb, &nbytes, &read_size, &read_buf) < 0) {
-	    error_push(ERR_FILE, ERR_NONE_SEC, 
+	    error_push(ERR_LEV_1, ERR_LEV_1F, 
 		"Fractal Heap Direct Block:Errors found in filter pipeline", dblock_addr, NULL);
 	    CK_GOTO_DONE(FAIL)
     }

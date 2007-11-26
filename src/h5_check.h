@@ -1,4 +1,17 @@
+#include "h5chk_config.h"
 #include "h5check_public.h"
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <assert.h>
+#include <time.h>
+#include <string.h>
+#include <unistd.h>
+
 
 /* exit status */
 #define         EXIT_SUCCESS		0

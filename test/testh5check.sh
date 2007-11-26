@@ -221,7 +221,8 @@ TOOLFAIL invalidfiles/base_addr.h5
 TOOLFAIL invalidfiles/offsets_lengths.h5
 TOOLFAIL invalidfiles/sb_version.h5
 TOOLFAIL invalidfiles/signature.h5
-TOOLFAIL invalidfiles/vms_data.h5
+# block out this 1.8 file now that h5check understands 1.8 format
+#TOOLFAIL invalidfiles/vms_data.h5
 
 
 

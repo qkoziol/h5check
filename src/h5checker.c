@@ -1,14 +1,3 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <assert.h>
-#include <time.h>
-#include <string.h>
-#include <unistd.h>
 #include "h5_check.h"
 #include "h5_error.h"
 

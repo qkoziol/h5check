@@ -1,19 +1,13 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <assert.h>
-#include <time.h>
-#include <string.h>
-#include <unistd.h>
 #include "h5_check.h"
-#include <zlib.h>
-#include <szlib.h>
 #include "h5_error.h"
 #include "h5_pline.h"
+
+#ifdef HAVE_ZLIB_H
+#include <zlib.h>
+#endif
+#ifdef HAVE_SZLIB_H
+#include <szlib.h>
+#endif
 
 static size_t           Z_table_alloc_g = 0;
 static size_t           Z_table_used_g = 0;
@@ -25,84 +19,6 @@ static int filter_find_idx(Z_filter_t);
 ck_err_t pline_init_interface(void);
 ck_err_t filter_pline(const OBJ_filter_t *, unsigned, unsigned */*in,out*/, Z_EDC_t, Z_cb_t, ck_size_t */*in,out*/,
     ck_size_t */*in,out*/, void **/*in,out*/);
-
-/* 
- * Deflate filter
- */
-static ck_size_t Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], 
-	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
-
-Z_class_t Z_DEFLATE[1] = {{
-    Z_CLASS_T_VERS,     /* Z_class_t version */
-    Z_FILTER_DEFLATE,  	/* Filter id number             */
-    Z_filter_deflate,   /* The actual filter function   */
-}};
-
-/*
- * Shuffle filter
- */
-static ck_size_t Z_filter_shuffle(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
-	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
-
-Z_class_t Z_SHUFFLE[1] = {{
-    Z_CLASS_T_VERS,       /* Z_class_t version */
-    Z_FILTER_SHUFFLE,     /* Filter id number             */
-    Z_filter_shuffle,     /* The actual filter function   */
-}};
-
-
-/* 
- * Fletcher32 filter 
- */
-static ck_size_t Z_filter_fletcher32 (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], 
-	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
-
-/* This message derives from H5Z */
-Z_class_t Z_FLETCHER32[1] = {{
-    Z_CLASS_T_VERS,       /* Z_class_t version */
-    Z_FILTER_FLETCHER32,      /* Filter id number             */
-    Z_filter_fletcher32,      /* The actual filter function   */
-}};
-
-
-/* 
- * szip filter 
- */
-static ck_size_t Z_filter_szip (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], 
-	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
-
-Z_class_t Z_SZIP[1] = {{
-    Z_CLASS_T_VERS,       /* Z_class_t version */
-    Z_FILTER_SZIP,        /* Filter id number             */
-    Z_filter_szip,        /* The actual filter function   */
-}};
-
-#ifdef NOTYET
-/* 
- * nbit filter 
- */
-static size_t Z_filter_nbit(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
-    ck_size_t nbytes, ck_size_t *buf_size, void **buf);
-
-Z_class_t Z_NBIT[1] = {{
-    Z_CLASS_T_VERS,       /* Z_class_t version */
-    Z_FILTER_NBIT,        /* Filter id number             */
-    Z_filter_nbit,        /* The actual filter function   */
-}};
-
-/* 
- * scaleoffset filter 
- */
-static ck_size_t Z_filter_scaleoffset(unsigned flags, ck_size_t cd_nelmts,
-    const unsigned cd_values[], ck_size_t nbytes, size_t *buf_size, void **buf);
-
-Z_class_t Z_SCALEOFFSET[1] = {{
-    Z_CLASS_T_VERS,       /* Z_class_t version */
-    Z_FILTER_SCALEOFFSET, /* Filter id number         */
-    Z_filter_scaleoffset,     /* The actual filter function   */
-}};
-
-#endif
 
 
 static ck_err_t
@@ -157,41 +73,66 @@ pline_init_interface(void)
     if (debug_verbose())
         printf("INITIALIZING filters ...\n");
 
+#ifdef HAVE_FILTER_DEFLATE
     if (pline_register(Z_DEFLATE) < SUCCEED) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register deflate filter", -1, NULL);
 	CK_SET_ERR(FAIL)
     }
+#endif
 
+#ifdef HAVE_FILTER_SHUFFLE
     if (pline_register(Z_SHUFFLE) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register shuffle filter", -1, NULL);
 	CK_SET_ERR(FAIL)
     }
+#endif
 
+#ifdef HAVE_FILTER_FLETCHER32
     if (pline_register(Z_FLETCHER32) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register fletcher32 filter", -1, NULL);
 	CK_SET_ERR(FAIL)
     }
+#endif
 
+#ifdef HAVE_FILTER_SZIP
     if (pline_register(Z_SZIP) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register szip filter", -1, NULL);
 	CK_SET_ERR(FAIL)
     }
+#endif
 
-#ifdef NOTYET
-    if (Z_register(Z_NBIT) < 0)
-        "unable to register nbit filter"
+#ifdef HAVE_FILTER_NBIT
+    if (pline_register(Z_NBIT) < 0) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register nbit filter", -1, NULL);
+	CK_SET_ERR(FAIL)
+    }
+#endif
 
-    if (Z_register(Z_SCALEOFFSET) < 0)
-        "unable to register scaleoffset filter"
+#ifdef HAVE_FILTER_SCALEOFFSET
+    if (pline_register(Z_SCALEOFFSET) < 0) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register scaleoffset filter", -1, NULL);
+	CK_SET_ERR(FAIL)
+    };
 #endif
 
 done:
     return(ret_value);
 }
 
+
+#ifdef HAVE_FILTER_DEFLATE
 /* 
  * Deflate filter
  */
+static ck_size_t Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], 
+	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
+
+Z_class_t Z_DEFLATE[1] = {{
+    Z_CLASS_T_VERS,     /* Z_class_t version */
+    Z_FILTER_DEFLATE,  	/* Filter id number             */
+    Z_filter_deflate,   /* The actual filter function   */
+}};
+
 static ck_size_t
 Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], ck_size_t nbytes, ck_size_t *buf_size, void **buf)
 {
@@ -289,10 +230,21 @@ done:
 
     return(ret_value);
 }
+#endif
 
+#ifdef HAVE_FILTER_SHUFFLE
 /*
  * Shuffle filter
  */
+static ck_size_t Z_filter_shuffle(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
+	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
+
+Z_class_t Z_SHUFFLE[1] = {{
+    Z_CLASS_T_VERS,       /* Z_class_t version */
+    Z_FILTER_SHUFFLE,     /* Filter id number             */
+    Z_filter_shuffle,     /* The actual filter function   */
+}};
+
 static size_t
 Z_filter_shuffle(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], ck_size_t nbytes, ck_size_t *buf_size, void **buf)
 {
@@ -408,7 +360,23 @@ Z_filter_shuffle(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
 done:
     return(ret_value);
 }
+#endif
 
+
+#ifdef HAVE_FILTER_FLETCHER32
+
+/* 
+ * Fletcher32 filter 
+ */
+static ck_size_t Z_filter_fletcher32 (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], 
+	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
+
+/* This message derives from H5Z */
+Z_class_t Z_FLETCHER32[1] = {{
+    Z_CLASS_T_VERS,       /* Z_class_t version */
+    Z_FILTER_FLETCHER32,      /* Filter id number             */
+    Z_filter_fletcher32,      /* The actual filter function   */
+}};
 
 /* suppport routine for Fletcher32 filter  */
 static uint32_t
@@ -518,11 +486,22 @@ done:
         free(outbuf);
     return(ret_value);
 }
+#endif
 
 
+#ifdef HAVE_FILTER_SZIP
 /* 
  * szip filter 
  */
+static ck_size_t Z_filter_szip (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], 
+	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
+
+Z_class_t Z_SZIP[1] = {{
+    Z_CLASS_T_VERS,       /* Z_class_t version */
+    Z_FILTER_SZIP,        /* Filter id number             */
+    Z_filter_szip,        /* The actual filter function   */
+}};
+
 static ck_size_t
 Z_filter_szip (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
     ck_size_t nbytes, ck_size_t *buf_size, void **buf)
@@ -589,9 +568,40 @@ done:
         free(outbuf);
     return(ret_value);
 }
+#endif
 
 
-#ifdef NOTYET
+#ifdef HAVE_FILTER_NBIT
+
+/* 
+ * nbit filter 
+ */
+static size_t Z_filter_nbit(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
+    ck_size_t nbytes, ck_size_t *buf_size, void **buf);
+
+Z_class_t Z_NBIT[1] = {{
+    Z_CLASS_T_VERS,       /* Z_class_t version */
+    Z_FILTER_NBIT,        /* Filter id number             */
+    Z_filter_nbit,        /* The actual filter function   */
+}};
+
+/* Struct of parameters needed for compressing/decompressing
+ * one nbit atomic datatype: integer or floating-point
+ */
+typedef struct {
+   size_t size;   /* size of datatype */
+   int order;     /* datatype endianness order */
+   int precision; /* datatype precision */
+   int offset;    /* datatype offset */
+} parms_atomic;
+
+static unsigned parms_index = 0;
+
+static void Z_nbit_decompress_one_array(unsigned char *data, size_t data_offset,
+           unsigned char *buffer, size_t *j, int *buf_len, const unsigned parms[]);
+static void Z_nbit_decompress_one_compound(unsigned char *data, size_t data_offset,
+              unsigned char *buffer, size_t *j, int *buf_len, const unsigned parms[]);
+
 /* support routine for nbit filter */
 static void
 Z_nbit_next_byte(ck_size_t *j, int *buf_len)
@@ -602,8 +612,7 @@ Z_nbit_next_byte(ck_size_t *j, int *buf_len)
 
 /* support routine for nbit filter */
 static void 
-Z_nbit_decompress_one_byte(unsigned char *data, ck_size_t data_offset, int k, int begin_i,
-int end_i, unsigned char *buffer, ck_size_t *j, int *buf_len, parms_atomic p, int datatype_len)
+Z_nbit_decompress_one_byte(unsigned char *data, ck_size_t data_offset, int k, int begin_i, int end_i, unsigned char *buffer, ck_size_t *j, int *buf_len, parms_atomic p, int datatype_len)
 {
    int dat_len; /* dat_len is the number of bits to be copied in each data byte */
    int uchar_offset;
@@ -682,7 +691,7 @@ Z_nbit_decompress_one_atomic(unsigned char *data, ck_size_t data_offset,
 
    datatype_len = p.size * 8;
 
-   if(p.order == Z_NBIT_ORDER_LE) { /* little endian */
+   if (p.order == Z_NBIT_ORDER_LE) { /* little endian */
       /* calculate begin_i and end_i */
       if((p.precision + p.offset) % 8 != 0)
          begin_i = (p.precision + p.offset) / 8;
@@ -710,10 +719,50 @@ Z_nbit_decompress_one_atomic(unsigned char *data, ck_size_t data_offset,
 
 /* support routine for nbit filter */
 static void 
+Z_nbit_decompress_one_compound(unsigned char *data, ck_size_t data_offset,
+    unsigned char *buffer, ck_size_t *j, int *buf_len, const unsigned parms[])
+{
+   unsigned i, nmembers, member_offset, member_class, size;
+   parms_atomic p;
+
+   parms_index++; /* skip total size of compound datatype */
+   nmembers = parms[parms_index++];
+
+   for(i = 0; i < nmembers; i++) {
+      member_offset = parms[parms_index++];
+      member_class = parms[parms_index++];
+      switch(member_class) {
+         case Z_NBIT_ATOMIC:
+              p.size = parms[parms_index++];
+              p.order = parms[parms_index++];
+              p.precision = parms[parms_index++];
+              p.offset = parms[parms_index++];
+              Z_nbit_decompress_one_atomic(data, data_offset + member_offset,
+                                             buffer, j, buf_len, p);
+              break;
+         case Z_NBIT_ARRAY:
+              Z_nbit_decompress_one_array(data, data_offset + member_offset,
+                                            buffer, j, buf_len, parms);
+              break;
+         case Z_NBIT_COMPOUND:
+              Z_nbit_decompress_one_compound(data, data_offset+member_offset,
+                                               buffer, j, buf_len, parms);
+              break;
+         case Z_NBIT_NOOPTYPE:
+              size = parms[parms_index++];
+              Z_nbit_decompress_one_nooptype(data, data_offset+member_offset,
+                                               buffer, j, buf_len, size);
+              break;
+      } /* end switch */
+   }
+}
+
+/* support routine for nbit filter */
+static void 
 Z_nbit_decompress_one_array(unsigned char *data, ck_size_t data_offset,
 	unsigned char *buffer, ck_size_t *j, int *buf_len, const unsigned parms[])
 {
-   unsigned i, total_size, base_class, base_size, n, begin_index;
+   unsigned 	i, total_size, base_class, base_size, n, begin_index;
    parms_atomic p;
 
    total_size = parms[parms_index++];
@@ -757,45 +806,6 @@ Z_nbit_decompress_one_array(unsigned char *data, ck_size_t data_offset,
    } /* end switch */
 }
 
-/* support routine for nbit filter */
-static void 
-Z_nbit_decompress_one_compound(unsigned char *data, ck_size_t data_offset,
-    unsigned char *buffer, ck_size_t *j, int *buf_len, const unsigned parms[])
-{
-   unsigned i, nmembers, member_offset, member_class, size;
-   parms_atomic p;
-
-   parms_index++; /* skip total size of compound datatype */
-   nmembers = parms[parms_index++];
-
-   for(i = 0; i < nmembers; i++) {
-      member_offset = parms[parms_index++];
-      member_class = parms[parms_index++];
-      switch(member_class) {
-         case Z_NBIT_ATOMIC:
-              p.size = parms[parms_index++];
-              p.order = parms[parms_index++];
-              p.precision = parms[parms_index++];
-              p.offset = parms[parms_index++];
-              Z_nbit_decompress_one_atomic(data, data_offset + member_offset,
-                                             buffer, j, buf_len, p);
-              break;
-         case Z_NBIT_ARRAY:
-              Z_nbit_decompress_one_array(data, data_offset + member_offset,
-                                            buffer, j, buf_len, parms);
-              break;
-         case Z_NBIT_COMPOUND:
-              Z_nbit_decompress_one_compound(data, data_offset+member_offset,
-                                               buffer, j, buf_len, parms);
-              break;
-         case Z_NBIT_NOOPTYPE:
-              size = parms[parms_index++];
-              Z_nbit_decompress_one_nooptype(data, data_offset+member_offset,
-                                               buffer, j, buf_len, size);
-              break;
-      } /* end switch */
-   }
-}
 
 /* support routine for nbit filter */
 static void 
@@ -859,12 +869,15 @@ Z_filter_nbit(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
     /* check arguments
      * cd_values[0] stores actual number of parameters in cd_values[]
      */
-    if (cd_nelmts != cd_values[0])
-	printf("invalid nbit aggression level");
+    if (cd_nelmts != cd_values[0]) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Nbit filter:Invalid aggression level", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
 
     /* check if need to do nbit compress or decompress
      * cd_values[1] stores the flag if true indicating no need to compress
      */
+/* NEED to check into this */
     if (cd_values[1]) {
         ret_value = *buf_size;
         goto done;
@@ -878,15 +891,17 @@ Z_filter_nbit(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
         size_out = d_nelmts * cd_values[4]; /* cd_values[4] stores datatype size */
 
         /* allocate memory space for decompressed buffer */
-        if(NULL==(outbuf = malloc(size_out)))
-	    printf("memory allocation failed for nbit decompression");
+        if(NULL==(outbuf = malloc(size_out))) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Nbit filter:Internal allocation error", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
 
         /* decompress the buffer */
         Z_nbit_decompress(outbuf, d_nelmts, *buf, cd_values);
     }
 
     /* free the input buffer */
-    xfree(*buf);
+    free(*buf);
 
     /* set return values */
     *buf = outbuf;
@@ -899,6 +914,22 @@ done:
         free(outbuf);
     return(ret_value);
 }
+#endif
+
+#ifdef HAVE_FILTER_SCALEOFFSET
+/* IT IS NOT WORKING YET */
+
+/* 
+ * scaleoffset filter 
+ */
+static ck_size_t Z_filter_scaleoffset(unsigned flags, ck_size_t cd_nelmts,
+    const unsigned cd_values[], ck_size_t nbytes, size_t *buf_size, void **buf);
+
+Z_class_t Z_SCALEOFFSET[1] = {{
+    Z_CLASS_T_VERS,       /* Z_class_t version */
+    Z_FILTER_SCALEOFFSET, /* Filter id number         */
+    Z_filter_scaleoffset,     /* The actual filter function   */
+}};
 
 /* 
  * scaleoffset filter 
@@ -1103,6 +1134,7 @@ filter_find_idx(Z_filter_t id)
     ck_size_t 	i;
     int 	ret_value=FAIL;
 
+printf("filter_find_idx = %d\n", id);
     for (i = 0; i < Z_table_used_g; i++)
         if (Z_table_g[i].id == id)
             CK_GOTO_DONE((int)i)
@@ -1136,14 +1168,16 @@ printf("I am in Z_pipeline() read\n");
             idx = i-1;
 printf("I am in Z_pipeline() nused\n");
 
+#if 0
             if (*filter_mask & ((unsigned)1<<idx)) {
 printf("I am in filter exclued\n");
                 failed |= (unsigned)1 << idx;
                 continue;/*filter excluded*/
             }
+#endif
 printf("I am done with filter mask\n");
             if ((fclass_idx = filter_find_idx(pline->filter[idx].id)) < 0) {
-		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal pipeline:Filter not registered", 
+		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Filter pipeline:Filter not registered", 
 		    -1, NULL);
 		CK_GOTO_DONE(FAIL)
             }
@@ -1158,7 +1192,7 @@ printf("new_nbytes=%u\n", new_nbytes);
             if (new_nbytes == 0) {
                 if((cb_struct.func && (Z_CB_FAIL==cb_struct.func(pline->filter[idx].id, *buf, *buf_size, cb_struct.op_data)))
                     || !cb_struct.func) {
-			error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal pipeline:Read failed", -1, NULL);
+			error_push(ERR_INTERNAL, ERR_NONE_SEC, "Filter pipeline:Read failed", -1, NULL);
 			CK_GOTO_DONE(FAIL)
 		}
 
@@ -1169,7 +1203,7 @@ printf("new_nbytes=%u\n", new_nbytes);
             }
         }
     } else { /* Write */
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal pipeline:Illegal operation", -1, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "pipeline:Illegal operation", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
