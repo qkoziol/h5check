@@ -17,7 +17,7 @@ INCLUDES=-I$(top_srcdir)/src
 
 # Test programs and scripts
 TEST_PROG=testgen
-TEST_SCRIPT=testh5check.sh
+TEST_SCRIPT=$(srcdir)/testh5check.sh
 
 check_PROGRAMS=$(TEST_PROG)
 check_SCRIPTS=$(TEST_SCRIPT)
@@ -29,8 +29,8 @@ bin_PROGRAMS=testgen
 # All the programs depend on the hdf5 and h5tools libraries
 LDADD=../src/libh5check.a
 
-testgen: testgen.c
-	h5cc testgen.c -o testgen
+testgen: $(srcdir)/testgen.c
+	h5cc $(srcdir)/testgen.c -o testgen
 
 # The testscript depends on the testgen program to generated data files
 # it uses.

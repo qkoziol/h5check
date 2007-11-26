@@ -227,7 +227,7 @@ INCLUDES = -I$(top_srcdir)/src
 
 # Test programs and scripts
 TEST_PROG = testgen
-TEST_SCRIPT = testh5check.sh
+TEST_SCRIPT = $(srcdir)/testh5check.sh
 check_SCRIPTS = $(TEST_SCRIPT)
 SCRIPT_DEPEND = testgen$(EXEEXT)
 
@@ -519,8 +519,8 @@ uninstall-am: uninstall-binPROGRAMS uninstall-info-am
 help:
 	@$(top_srcdir)/bin/makehelp
 
-testgen: testgen.c
-	h5cc testgen.c -o testgen
+testgen: $(srcdir)/testgen.c
+	h5cc $(srcdir)/testgen.c -o testgen
 
 # The testscript depends on the testgen program to generated data files
 # it uses.
