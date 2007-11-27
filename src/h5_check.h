@@ -666,9 +666,14 @@ typedef enum {
     L_TYPE_EXTERNAL = 64,     /* External link id             */
     L_TYPE_MAX = 255          /* Maximum link type id         */
 } L_type_t;
+
+
 #define L_TYPE_BUILTIN_MAX L_TYPE_SOFT      /* Maximum value link value for "built-in" link types */
 #define L_TYPE_UD_MIN      L_TYPE_EXTERNAL  /* Link ids at or above this value are "user-defined" link types. */
 
+/* Version and flags of external link format */
+#define L_EXT_VERSION         0
+#define L_EXT_FLAGS_ALL       0
 
 typedef struct L_link_hard_t {
     ck_addr_t     addr;                 /* Object header address */

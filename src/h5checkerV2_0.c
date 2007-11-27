@@ -974,7 +974,6 @@ HF_dtable_size_to_rows(const HF_dtable_t *dtable, ck_hsize_t size)
      */
     assert(dtable);
 
-    printf("Entering HF_dtable_size_to_rows()\n");
     rows = (V_log2_gen(size) - dtable->first_row_bits) + 1;
 
     return(rows);
@@ -993,8 +992,6 @@ check_iblock_real(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned
     unsigned		entry, row, col;
     int			i;
     int			ret_value=SUCCEED;     /* Return value */
-
-    printf("Entering check_iblock_real()\n");
 
     /* Allocate space for the fractal heap indirect block */
     if(NULL == (iblock = calloc(1, sizeof(HF_indirect_t)))) {
@@ -1072,8 +1069,6 @@ printf("iblock->block_off=%llu\n", iblock->block_off);
 	}
     } else
         iblock->filt_ents = NULL;
-
-printf("iblock->nrows=%u\n", iblock->nrows);
 
     for(u = 0; u < (iblock->nrows * hdr->man_dtable.cparam.width); u++) {
         /* Decode child block address */
@@ -1284,7 +1279,6 @@ check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t db
 
         /* Push direct block data through I/O filter pipeline */
         nbytes = read_size;
-printf("nbytes before filter_pline()=%u\n", nbytes);
         if(filter_pline(hdr->pline, Z_FLAG_REVERSE, &filter_mask, Z_ENABLE_EDC,
                  filter_cb, &nbytes, &read_size, &read_buf) < 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
@@ -1292,7 +1286,6 @@ printf("nbytes before filter_pline()=%u\n", nbytes);
 	    CK_GOTO_DONE(FAIL)
     }
 
-printf("nbytes=%u, dblock->size=%u\n", nbytes, dblock->size);
 	if (nbytes != dblock->size) {
 	    error_push(ERR_FILE, ERR_NONE_SEC, 
 		"Fractal Heap Direct Block:Unable to read direct block", dblock_addr, NULL);
@@ -2584,171 +2577,3 @@ done:
     return(ret_value);
 } 
 
-#ifdef OBSOLETE
-ck_err_t
-HF_read(driver_t *file, HF_hdr_t *fhdr, const void *_id, void *obj/*out*/)
-{
-    const uint8_t 	*id = (const uint8_t *)_id; /* Object ID */
-    uint8_t 		id_flags;                   /* Heap ID flag bits */
-    ck_err_t 		ret_value=SUCCEED;          /* Return value */
-
-    assert(fhdr);
-    assert(id);
-    assert(obj);
-
-    /* Get the ID flags */
-    id_flags = *id;
-
-    /* Check for correct heap ID version */
-    if((id_flags & HF_ID_VERS_MASK) != HF_ID_VERS_CURR)
-        printf("incorrect heap ID version");
-
-    /* Check type of object in heap */
-    if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_MAN) {
-        /* Read object from managed heap blocks */
-        if(HF_man_read(file, fhdr, id, obj) < 0)
-            printf("can't read object from fractal heap");
-    } else if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_HUGE) {
-#if 0
-        /* Read 'huge' object from file */
-        if(HF_huge_read(fh->hdr, dxpl_id, id, obj) < 0)
-            printf("can't read 'huge' object from fractal heap");
-#endif
-    } else if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_TINY) {
-        /* Read 'tiny' object from file */
-        if(HF_tiny_read(file, fhdr, id, obj) < 0)
-            printf("can't read 'tiny' object from fractal heap");
-    } else {
-	    printf("Heap ID type not supported yet!\n");
-    }
-
-done:
-    return(ret_value);
-}
-
-/* SOON to be OBSOLETE */
-ck_err_t
-HF_get_obj_len(HF_hdr_t *fhdr, const void *_id, size_t *obj_len_p)
-{
-    const uint8_t 	*id = (const uint8_t *)_id;   	/* Object ID */
-    uint8_t 		id_flags;               	/* Heap ID flag bits */
-    ck_err_t 		ret_value=SUCCEED;      	/* Return value */
-
-    assert(fhdr);
-    assert(id);
-    assert(obj_len_p);
-    
-    /* Get the ID flags */
-    id_flags = *id;
-            
-    /* Check for correct heap ID version */
-    if((id_flags & HF_ID_VERS_MASK) != HF_ID_VERS_CURR)
-        printf("incorrect heap ID version");
-        
-    /* Check type of object in heap */
-    if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_MAN) {
-	printf("TYPE_MAN is encountered\n");
-        id++;  /* skip over the flag byte */
-        id += fhdr->heap_off_size;  /* skip over the object offset */
-        UINT64DECODE_VAR(id, *obj_len_p, fhdr->heap_len_size);
-    } else if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_HUGE) {
-            printf("huge' object's length\n");
-#if 0
-        if(HF_huge_get_obj_len(fh->hdr, dxpl_id, id, obj_len_p) < 0)
-            printf("can't get 'huge' object's length");
-#endif
-    } else if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_TINY) {
-           printf("'tiny' object's length\n");
-#if 0
-        if(HF_tiny_get_obj_len(fh->hdr, id, obj_len_p) < 0)
-           printf("can't get 'tiny' object's length");
-#endif
-    } else {
-	printf("Heap ID type not supported yet!\n");
-    } 
-
-done:
-    return(ret_value);
-} 
-
-/* SOON to be OBSOLTE */
-static ck_err_t
-HF_man_read(driver_t *file, HF_hdr_t *fhdr, const uint8_t *id, void *op_data)
-{
-    HF_direct_t *dblock = NULL;       	/* Pointer to direct block to query */
-    ck_addr_t 	dblock_addr;            /* Direct block address */
-    ck_size_t 	dblock_size;            /* Direct block size */
-    ck_size_t 	blk_off;                /* Offset of object in block */
-    uint8_t 	*p;                     /* Temporary pointer to obj info in block */
-    ck_err_t 	ret_value=SUCCEED;       /* Return value */
-
-    ck_hsize_t obj_off;                    /* Object's offset in heap */
-    ck_size_t obj_len;                     /* Object's length in heap */
-
-    assert(file);
-    assert(fhdr);
-    assert(op_data);
-
-
-    /* Skip over the flag byte */
-    id++;
-
-    UINT64DECODE_VAR(id, obj_off, fhdr->heap_off_size);
-    UINT64DECODE_VAR(id, obj_len, fhdr->heap_len_size);
-
-printf("HF_man_read():obj_off=%llu, obj_len=%u\n", obj_off, obj_len);
-    assert(obj_off > 0);
-    assert(obj_len > 0);
-
-    /* Check for root direct block */
-    if(fhdr->man_dtable.curr_root_rows == 0) {
-        /* Set direct block info */
-        dblock_addr = fhdr->man_dtable.table_addr;
-        dblock_size = fhdr->man_dtable.cparam.start_block_size;
-
-/* NEED to check for error return*/
-	check_dblock(file, dblock_addr, fhdr, dblock_size, &dblock);
-    } else {
-        HF_indirect_t *iblock;        /* Pointer to indirect block */
-	unsigned entry;               /* Entry of block */
-
-        if(HF_man_dblock_locate(file, fhdr, obj_off, &iblock, &entry) < 0)
-            printf("can't compute row & column of section");
-
-        /* Set direct block info */
-        dblock_addr =  iblock->ents[entry].addr;
-        dblock_size =  fhdr->man_dtable.row_block_size[entry / fhdr->man_dtable.cparam.width];
-
-        /* Check for offset of invalid direct block */
-        if(!addr_defined(dblock_addr)) {
-            /* Unlock indirect block */
-            printf("fractal heap ID not in allocated direct block");
-        }
- /* NEED to check for error return*/
-	check_dblock(file, dblock_addr, fhdr, dblock_size, &dblock);
-
-        iblock = NULL;
-    }
-
-    /* Compute offset of object within block */
-    assert((obj_off - dblock->block_off) < (ck_hsize_t)dblock_size);
-    blk_off = (size_t)(obj_off - dblock->block_off);
-
-    /* Check for object's offset in the direct block prefix information */
-    if(blk_off < HF_MAN_ABS_DIRECT_OVERHEAD(file->shared, fhdr))
-        printf("object located in prefix of direct block\n");
-
-    /* Check for object's length overrunning the end of the direct block */
-    if((blk_off + obj_len) > dblock_size)
-        printf("object overruns end of direct block\n");
-
-    /* Point to location for object */
-    p = dblock->blk + blk_off;
-
-    memcpy(op_data, p, obj_len);
-
-done:
-    return(ret_value);
-} 
-
-#endif

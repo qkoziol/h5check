@@ -1081,8 +1081,6 @@ OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     unsigned        	version;
     ck_addr_t		logical;
 
-    printf("Entering OBJ_linfo_decode()\n");
-
     assert(file);
     assert(p);
 
@@ -1899,9 +1897,6 @@ done:
     return(ret_ptr);
 }
 
-/*
-NEED SOMETHING needs to be done here...get the latest copy to update this....
-*/
 /* Link Message */
 static void *
 OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
@@ -2032,8 +2027,8 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
             p += len;
             break;
 
-        /* User-defined links */
-        default:
+        /* External & User-defined links */
+        default: /* user-defined link */
             if(lnk->type < L_TYPE_UD_MIN || lnk->type > L_TYPE_MAX) {
 		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid user-defined link type", -1, &badinfo);
 		CK_SET_ERR(FAIL)
@@ -2042,16 +2037,48 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
             /* A UD link.  Get the user-supplied data */
             UINT16DECODE(p, len)
             lnk->u.ud.size = len;
-            if(len > 0)
-            {
+            if (len > 0) {
                 if(NULL == (lnk->u.ud.udata = malloc((ck_size_t)len))) {
 		    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Link Message:Internal allocation error", -1, NULL);
 		    CK_GOTO_DONE(FAIL)
 		}
                 memcpy(lnk->u.ud.udata, p, len);
-                p += len;
-            }
-            else
+		if (lnk->type == L_TYPE_EXTERNAL) { /* external link */
+		    uint8_t    	*s; 
+		    char 	*file_name, *obj_name;
+		    ck_size_t	fname_len, obj_len;
+
+		    s = lnk->u.ud.udata;
+		    /* Check external link version & flags */
+		    if(((*s >> 4) & 0x0F) > L_EXT_VERSION) {
+			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad version # for external link type", 
+			    -1, &badinfo);
+			CK_SET_ERR(FAIL)
+		    }
+		    if ((*s & 0x0F) & ~L_EXT_FLAGS_ALL) {
+			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad flags for external link type", 
+			    -1, &badinfo);
+			CK_SET_ERR(FAIL)
+		    }
+		    s++;
+		    file_name = (char *)s;
+		    fname_len = strlen((const char *)file_name) + 1;
+		    if (1 + fname_len > len) {
+			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid file length for external link type", 
+			    -1, &badinfo);
+			CK_SET_ERR(FAIL)
+		    }
+		    obj_name = (char *)s + fname_len;
+		    obj_len = strlen((const char *)obj_name) + 1;
+
+		    if ((1 + fname_len + obj_len) > len) {
+			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid object length for external link type", 
+			    -1, &badinfo);
+			CK_SET_ERR(FAIL)
+		    }
+		} else
+		    p += len;
+            } else
                 lnk->u.ud.udata = NULL;
     } /* end switch */
 
@@ -2479,7 +2506,6 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 
     logical = get_logical_addr(p, start_buf, logi_base);
     pline->nused = *p++;
-printf("PLINE->nused from filter_decode() is %u\n", pline->nused);
     if (pline->nused > OBJ_MAX_NFILTERS) {
 	badinfo = pline->nused;
 	error_push(ERR_LEV_2, ERR_LEV_2A2l, 
@@ -2672,7 +2698,6 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     if (flags & OBJ_ATTR_FLAG_TYPE_SHARED) {
 	OBJ_shared_t *sh_shared; 
 	
-	printf("I am in OBJ_ATTR_FLAG_TYPE_SHARED\n");
         /* Get the shared information */
         if (NULL == (sh_shared = OBJ_shared_decode(file, p, OBJ_DT, start_buf, logi_base))) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, 
@@ -2680,7 +2705,6 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	    CK_GOTO_DONE(FAIL)
 	}
 	/* Get the actual datatype information */
-	printf("Going to OBJ_shared_read\n");
 	if ((attr->dt = OBJ_shared_read(file, sh_shared, OBJ_DT))==NULL) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, 
 		"Attribute Message:Errors found when reading shared datatype", logical, NULL);
@@ -2710,7 +2734,6 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     if (flags & OBJ_ATTR_FLAG_SPACE_SHARED) {
 	OBJ_shared_t *sh_shared; 
 	
-	printf("I am in OBJ_ATTR_FLAG_SPACE_SHARED for attribute's shared dataspace\n");
         /* Get the shared information */
         if (NULL == (sh_shared = OBJ_shared_decode(file, p, OBJ_SDS, start_buf, logi_base))) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, 
@@ -2719,7 +2742,6 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	    CK_GOTO_DONE(FAIL)
 	}
 	/* Get the actual dataspace information */
-	printf("Going to OBJ_shared_read for attribute's shared dataspace\n");
 	if ((extent = OBJ_shared_read(file, sh_shared, OBJ_SDS))==NULL) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, 
 		"Attribute Message:Errors found when reading shared dataspace", logical, NULL);
@@ -2934,8 +2956,6 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
 	CK_SET_ERR(FAIL)
     }
 
-printf("SOHM:version=%u, addr=%llu, nindex=%u\n", mesg->version, mesg->addr, mesg->nindexes);
-
     if (ret_value == SUCCEED)
 	ret_ptr = (void *)mesg;
 
@@ -3107,8 +3127,6 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
     unsigned		version;
     int			badinfo;
 
-    printf("In OBJ_btreek_decode()\n");
-
     /* check arguments */
     assert(file);
     assert(buf);
@@ -3171,8 +3189,6 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf,
     /* check arguments */
     assert(file);
     assert(buf);
-
-    printf("In OBJ_drvinfo_decode()\n");
 
     if ((mesg = calloc(1, sizeof(OBJ_drvinfo_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
@@ -3892,7 +3908,7 @@ check_superblock(driver_t *file)
 	/* NEED to validate lshared->root_grp->name_off??? to be within size of local heap */
 	if ((lshared->root_grp->header==CK_ADDR_UNDEF) || 
 	    (lshared->root_grp->header >= lshared->stored_eoa)) {
-printf("I AM IN HERE\n");
+
 if (lshared->root_grp->header==CK_ADDR_UNDEF) printf("root grp header is undefined\n");
 else printf("root_grp->header=%llu; stored_eoa=%llu\n", lshared->root_grp->header, lshared->stored_eoa);
 
@@ -5125,7 +5141,6 @@ find_in_ohdr(driver_t *file, OBJ_t *oh, int type_id)
     assert(file);
     assert(oh);
 
-printf("Entering find_in_ohdr:type_id=%d, nmesgs=%u\n", type_id, oh->nmesgs);
     /* Scan through the messages looking for the right one */
     for (u = 0; u < oh->nmesgs; u++) {
 	if (oh->mesg[u].type->id == type_id)
@@ -5174,7 +5189,6 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
     /* Check args */
     assert (buf);
 
-printf("I am in OBJ_shared_decode()\n");
     if ((mesg = calloc(1, sizeof(OBJ_shared_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal Shared Message: Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
@@ -5216,7 +5230,6 @@ printf("I am in OBJ_shared_decode()\n");
 		CK_SET_ERR(FAIL)
 	    }
             memcpy(&mesg->u.heap_id, buf, sizeof(mesg->u.heap_id));
-printf("heap_id=%llu\n", mesg->u.heap_id);
         } else {
             if(version < OBJ_SHARED_VERSION_3)
                 mesg->type = OBJ_SHARE_TYPE_COMMITTED;
@@ -5226,7 +5239,6 @@ printf("heap_id=%llu\n", mesg->u.heap_id);
         }
     }
     mesg->msg_type_id = type->id;
-printf("shared message type=%u, version=%u\n", type->id, version);
 
     if (mesg->type != OBJ_SHARE_TYPE_SOHM) {
 	if (mesg->u.loc.oh_addr == CK_ADDR_UNDEF) {
@@ -5272,16 +5284,12 @@ OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *typ
     assert(obj_shared);
     assert(type);
 
-printf("I am OBJ_shared_read()\n");
-
     if (obj_shared->type == OBJ_SHARE_TYPE_SOHM) {
-	printf("Retrieve the fractal heap address for the shared messages\n");
 	if (SM_get_fheap_addr(file, type->id, &fheap_addr) < SUCCEED) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 		"Internal Shared Read:Cannot get fractal heap address for shared message", -1, NULL);
 	    CK_GOTO_DONE(NULL)
 	}
-	printf("fheap_addr from SOHM for type id=%u is %llu\n", type->id, fheap_addr);
 	if ((fhdr = HF_open(file, fheap_addr)) == NULL) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 		"Internal Shared Read:Cannot open fractal heap header", -1, NULL);
@@ -5294,9 +5302,6 @@ printf("I am OBJ_shared_read()\n");
 	    CK_GOTO_DONE(NULL)
 	}
 
-	printf("OBJ_shared_read()->objinfo():mesg_size=%u, objinfo.u.off=%llu, objinfo.u.addr=\n", 
-	    objinfo.size, objinfo.u.off, objinfo.u.addr);
-
 	mesg_ptr = malloc(objinfo.size);
 	if (HF_read(file, fhdr, &(obj_shared->u.heap_id), mesg_ptr, &objinfo) < SUCCEED) {
 	    error_push(ERR_FILE, ERR_NONE_SEC, "Internal Shared Read:Unable to read fractal heap header", 
@@ -5307,7 +5312,6 @@ printf("I am OBJ_shared_read()\n");
 	ret_value = type->decode(file, mesg_ptr, start_buf, logi_base);
     } else {
 	assert(obj_shared->type == OBJ_SHARE_TYPE_COMMITTED);
-printf("the obj_shared_type is OBJ_SHARE_TYPE_COMMITTED\n");
 	if (check_obj_header(file, obj_shared->u.loc.oh_addr, &oh) < 0) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 		"Internal Shared Read:Error found when checking object header", -1, NULL);
@@ -5354,8 +5358,11 @@ OBJ_alloc_msgs(OBJ_t *oh, size_t min_alloc)
     na = oh->alloc_nmesgs + MAX(oh->alloc_nmesgs, min_alloc);   /* At least double */
 
     /* Attempt to allocate more memory */
-    if(NULL == (new_mesg = realloc(oh->mesg, na*sizeof(OBJ_mesg_t))))
-	printf("memory allocation failed");
+    if(NULL == (new_mesg = realloc(oh->mesg, na*sizeof(OBJ_mesg_t)))) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+	    "Object Header:Internal allocation error", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
 
     /* Update ohdr information */
     oh->alloc_nmesgs = na;
@@ -5363,6 +5370,7 @@ OBJ_alloc_msgs(OBJ_t *oh, size_t min_alloc)
 
     /* Set new object header info to zeros */
     memset(&oh->mesg[old_alloc], 0, (oh->alloc_nmesgs - old_alloc) * sizeof(OBJ_mesg_t));
+done:
     return(ret_value);
 }
 
@@ -5439,7 +5447,6 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	p += OBJ_SIZEOF_MAGIC;
         oh->version = *p++;
         if(OBJ_VERSION_2 != oh->version) {
-            printf("bad object header version number");
     	    badinfo = oh->version;
 	    error_push(ERR_LEV_2, ERR_LEV_2A1b, "version 2 Object Header:Bad version number", logical, &badinfo);
 	    CK_SET_ERR(FAIL)
@@ -5469,8 +5476,11 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
         if(oh->flags & OBJ_HDR_ATTR_STORE_PHASE_CHANGE) {
             UINT16DECODE(p, oh->max_compact);
             UINT16DECODE(p, oh->min_dense);
-            if(oh->max_compact < oh->min_dense)
-                printf("bad object header attribute phase change values");
+            if(oh->max_compact < oh->min_dense) {
+		error_push(ERR_LEV_2, ERR_LEV_2A1b, 
+		    "version 2 Object Header:Invalid attribute phase changed values", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
         } else {
             oh->max_compact = OBJ_CRT_ATTR_MAX_COMPACT_DEF;
             oh->min_dense = OBJ_CRT_ATTR_MIN_DENSE_DEF;
