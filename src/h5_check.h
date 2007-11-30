@@ -626,8 +626,18 @@ typedef struct DT_cmemb_t {
 /* 
  * Data Storage -  Fill Value 
  */
-#define OBJ_FILL_VERSION      1
-#define OBJ_FILL_VERSION_2    2
+#define OBJ_FILL_VERSION      	1
+#define OBJ_FILL_VERSION_2    	2
+#define OBJ_FILL_VERSION_3    	3
+#define OBJ_FILL_VERSION_LATEST OBJ_FILL_VERSION_3
+
+#define OBJ_FILL_MASK_ALLOC_TIME        0x03
+#define OBJ_FILL_SHIFT_ALLOC_TIME       0
+#define OBJ_FILL_MASK_FILL_TIME         0x03
+#define OBJ_FILL_SHIFT_FILL_TIME        2
+#define OBJ_FILL_FLAG_UNDEFINED_VALUE   0x10
+#define OBJ_FILL_FLAG_HAVE_VALUE        0x20
+#define OBJ_FILL_FLAGS_ALL              (OBJ_FILL_MASK_ALLOC_TIME | (OBJ_FILL_MASK_FILL_TIME << OBJ_FILL_SHIFT_FILL_TIME) | OBJ_FILL_FLAG_UNDEFINED_VALUE | OBJ_FILL_FLAG_HAVE_VALUE)
 
 typedef enum fill_alloc_time_t {
     FILL_ALLOC_TIME_ERROR        =-1,
@@ -646,11 +656,12 @@ typedef enum fill_time_t {
 
 
 typedef struct OBJ_fill_t {
+    unsigned            version;   
     ssize_t             size;           /*number of bytes in the fill value  */
     void                *buf;           /*the fill value                     */
-    fill_alloc_time_t    alloc_time;     /* time to allocate space            */
-    fill_time_t     fill_time;      /* time to write fill value          */
-    ck_bool_t             fill_defined;   /* whether fill value is defined     */
+    fill_alloc_time_t   alloc_time;     /* time to allocate space            */
+    fill_time_t     	fill_time;      /* time to write fill value          */
+    ck_bool_t           fill_defined;   /* whether fill value is defined     */
 } OBJ_fill_t;
 
 /* end Data Storage - Fill Value */
@@ -2051,8 +2062,10 @@ ck_err_t check_btree2(driver_t *, ck_addr_t, const B2_class_t *);
 HF_hdr_t *HF_open(driver_t *, ck_addr_t fh_addr);
 ck_err_t HF_close(HF_hdr_t *fhdr);
 ck_err_t HF_get_obj_info(driver_t *, HF_hdr_t *, const void *, obj_info_t *);
-ck_err_t HF_read_new(driver_t *, HF_hdr_t *, const void *, void */*out*/, obj_info_t *);
+ck_err_t HF_read(driver_t *, HF_hdr_t *, const void *, void */*out*/, obj_info_t *);
 ck_err_t SM_get_fheap_addr(driver_t *, unsigned, ck_addr_t *);
+unsigned V_log2_gen(uint64_t);
+
 
 
 ck_err_t        FD_read(driver_t *, ck_addr_t, size_t, void */*out*/);

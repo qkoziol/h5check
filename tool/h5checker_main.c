@@ -144,22 +144,20 @@ ck_addr_t     force_fheap_addr;
 	/* still have and need info in shared */
 	ret = FD_close(thefile);
 	if (ret != SUCCEED) {
-			error_push(ERR_FILE, ERR_NONE_SEC, 
-			  "Errors in closing input file using the default driver", -1, NULL);
-			error_print(stderr, thefile);
-			error_clear();
+	    error_push(ERR_FILE, ERR_NONE_SEC, 
+		"Errors in closing input file using the default driver", -1, NULL);
+	    error_print(stderr, thefile);
+	    error_clear();
 	}
 	printf("Switching to new file driver...\n");
 	thefile = FD_open(fname, shared, shared->driverid);
 	if (thefile == NULL) {
-	    error_push(ERR_FILE, ERR_NONE_SEC, 
-		"Errors in opening input file. Validation stopped.", -1, NULL);
+	    error_push(ERR_FILE, ERR_NONE_SEC, "Errors in opening input file. Validation stopped.", -1, NULL);
 	    error_print(stderr, thefile);
 	    error_clear();
 	    goto done;
         }
     }
-
 
     ss = FD_get_eof(thefile);
     if ((ss==CK_ADDR_UNDEF) || (ss<shared->stored_eoa)) {
