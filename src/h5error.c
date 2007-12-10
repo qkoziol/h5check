@@ -20,7 +20,7 @@ static  const   secondary_err_mesg_t secondary_err_mesg_g[] = {
         {ERR_LEV_0A,   "0A-File Signature and Super Block"},
         {ERR_LEV_0B,   "0B-File Driver Info"},
         {ERR_LEV_0C,   "0C-Superblock Extension"},
-        {ERR_LEV_1A1,   "1A1-Version 1 B-Trees (B-link trees"},
+        {ERR_LEV_1A1,   "1A1-Version 1 B-Trees (B-link trees)"},
         {ERR_LEV_1A2,   "1A2-Version 2 B-Trees"},
         {ERR_LEV_1B,    "1B-Group Symbol Table"},
         {ERR_LEV_1C,    "1C-Group Symbol Table Entry"},

@@ -53,7 +53,7 @@ typedef struct table_t {
 #define CK_SET_ERR(ret_val) {ret_value = ret_val;}
 #define CK_GOTO_DONE(ret_val) {ret_value = ret_val; goto done;}
 
-#define SUPERBLOCK_VERSION_DEF     0   /* The default super block format         */
+#define SUPERBLOCK_VERSION_0       0   
 #define SUPERBLOCK_VERSION_1       1   /* Version with non-default B-tree 'K' value */
 #define SUPERBLOCK_VERSION_2       2   /* Revised version with superblock extension and checksum */
 #define SUPERBLOCK_VERSION_LATEST  SUPERBLOCK_VERSION_2  /* The maximum super block format */
@@ -354,21 +354,22 @@ typedef enum OBJ_sds_class_t {
     OBJ_SDS_NO_CLASS         = -1,  /*error                                      */
     OBJ_SDS_SCALAR           = 0,   /*scalar variable                            */
     OBJ_SDS_SIMPLE           = 1,   /*simple data space                          */
-    OBJ_SDS_COMPLEX          = 2    /*complex data space                         */
+    OBJ_SDS_NULL	     = 2    /* 1.8 null data space 			 */
+				    /* 1.6 OBJ_SDS_COMPLEX: not supported yet 	 */
 } OBJ_sds_class_t;
 
 
-#define OBJ_SDS_VERSION        1
-#define OBJ_SDS_VALID_MAX   0x01
-
+#define OBJ_SDS_VERSION_1  		1
+#define OBJ_SDS_VERSION_2  		2
+#define OBJ_SDS_VERSION_LATEST 		OBJ_SDS_VERSION_2
+#define OBJ_SDS_VALID_MAX   		0x01
 
 typedef struct OBJ_sds_extent_t {
-    OBJ_sds_class_t type;   /* Type of extent */
-    ck_size_t nelem;    /* Number of elements in extent */
-
-    unsigned rank;      /* Number of dimensions */
-    ck_size_t *size;    /* Current size of the dimensions */
-    ck_size_t *max;     /* Maximum size of the dimensions */
+    OBJ_sds_class_t 	type;     /* Type of extent */
+    ck_hsize_t 		nelem;    /* Number of elements in extent */
+    unsigned 		rank;     /* Number of dimensions */
+    ck_hsize_t 		*size;    /* Current size of the dimensions */
+    ck_hsize_t 		*max;     /* Maximum size of the dimensions */
 } OBJ_sds_extent_t;
 
 /* end Simple Dataspace */

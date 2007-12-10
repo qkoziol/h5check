@@ -424,21 +424,22 @@ set_driver(int *driverid, char *driver_name)
 static driver_class_t *
 get_driver(int driver_id)
 {
-    driver_class_t	*driver = NULL;
+    driver_class_t	*driver=NULL;
     size_t		size;
 
     size = sizeof(driver_class_t);
-    driver = malloc(size);
 
     switch (driver_id) {
     case SEC2_DRIVER:
+	driver = malloc(size);
 	memcpy(driver, &sec2_g, size);
 	break;
     case MULTI_DRIVER:
+	driver = malloc(size);
 	memcpy(driver, &multi_g, size);
 	break;
     default:
-	printf("Something is wrong\n");
+	printf("Unsupported file driver\n");
 	break;
     }  /* end switch */
 
@@ -449,12 +450,11 @@ get_driver(int driver_id)
 static void *
 get_driver_info(int driver_id, global_shared_t *shared)
 {
-    driver_multi_fapl_t 	*driverinfo;
+    driver_multi_fapl_t 	*driverinfo=NULL;
     size_t			size;
 
     switch (driver_id) {
     case SEC2_DRIVER:
-	driverinfo = NULL;
 	break;
     case MULTI_DRIVER:
 	size = sizeof(driver_multi_fapl_t);
@@ -462,7 +462,7 @@ get_driver_info(int driver_id, global_shared_t *shared)
 	memcpy(driverinfo, shared->fa, size);
 	break;
     default:
-	printf("Something is wrong\n");
+	printf("get_driver_info():Something is wrong\n");
 	break;
     }  /* end switch */
     return(driverinfo);
@@ -479,16 +479,17 @@ decode_driver(global_shared_t *shared, const uint8_t *buf)
 driver_t *
 FD_open(const char *name, global_shared_t *shared, int driver_id)
 {
-    driver_t	*file= NULL;
+    driver_t		*file= NULL;
     driver_class_t 	*driver;
 
-    file = calloc(1, sizeof(driver_t));
     driver = get_driver(driver_id);
-    file = driver->open(name, shared, driver_id);
-    if (file != NULL) {
-	file->cls = driver;
-	file->driver_id = driver_id;
-	file->shared = shared;
+    if (driver != NULL) {
+    	file = driver->open(name, shared, driver_id);
+	if (file != NULL) {
+	   file->cls = driver;
+	   file->driver_id = driver_id;
+	   file->shared = shared;
+	}
     }
     return(file);
 }
@@ -598,25 +599,31 @@ sec2_close(driver_t *file)
 }
 
 
+/* NEED To find out about lseek64??? */
 static ck_err_t
 sec2_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/)
 {
     int	status;
     int	ret = SUCCEED;
     int	fd;
+size_t bytes;
 
-#ifdef TEMP
-    /* adjust logical "addr" to be the physical address */
-    addr = addr + shared_info.super_addr;
+    
+    if (addr == CK_ADDR_UNDEF)
+	ret = FAIL;
+    else if (addr + size >((driver_sec2_t *)file)->eof)
+	ret = FAIL;
+    else {
+	fd = ((driver_sec2_t *)file)->fd;
+	if (lseek(fd, addr, SEEK_SET) < 0)
+	    ret = FAIL;
+	else if ((bytes=read(fd, buf, size)) < 0)
+	    ret = FAIL;
+    }
+
+#ifdef TOBEFIXED
+check for number of bytes returned from read??
 #endif
-
-    /* NEED To find out about lseek64??? */
-    fd = ((driver_sec2_t *)file)->fd;
-    if (lseek(fd, addr, SEEK_SET) < 0)
-	ret = FAIL;
-    /* end of file: return 0; errors: return -1 */
-    else if (read(fd, buf, size) <= 0)
-	ret = FAIL;
     return(ret);
 }
 
@@ -1012,15 +1019,13 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     logical = get_logical_addr(p, start_buf, logi_base);
     version = *p++;
 
-    if (version != OBJ_SDS_VERSION) {
+    if (version < OBJ_SDS_VERSION_1 || version > OBJ_SDS_VERSION_2) {
 	badinfo = version;
 	error_push(ERR_LEV_2, ERR_LEV_2A2b, 
-	    "Dataspace Message:Bad version number", logical, &badinfo);
+	    "Dataspace Message:Wrong version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
-    /* SHOULD I CHECK FOR IT: not specified in the specification, but in coding only?? */
-    /* Get rank */
     logical = get_logical_addr(p, start_buf, logi_base);
     sdim->rank = *p++;
     if (sdim->rank > OBJ_SDS_MAX_RANK) {
@@ -1032,32 +1037,47 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     /* Get dataspace flags for later */
     logical = get_logical_addr(p, start_buf, logi_base);
     flags = *p++;
-    if (flags > 0x3) {  /* Only bit 0 and bit 1 can be set */
-	error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message:Corrupt flags", logical, NULL);
+    if ((version == OBJ_SDS_VERSION_1) && (flags > 0x3)) {  /* For version 1: Only bit 0 and bit 1 can be set */
+	error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message v.1:Corrupt flags", logical, NULL);
+	CK_SET_ERR(FAIL)
+    } else if ((version == OBJ_SDS_VERSION_2) && (flags > 0x1)) { /* For version 2: Only bit 0 can be set */
+	error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message v.2:Corrupt flags", logical, NULL);
 	CK_SET_ERR(FAIL)
     }
 
-    /* Set the dataspace type to be simple or scalar as appropriate */
-    if(sdim->rank>0)
-	sdim->type = OBJ_SDS_SIMPLE;
-    else
-        sdim->type = OBJ_SDS_SCALAR;
+    if (version >= OBJ_SDS_VERSION_2) {
+	logical = get_logical_addr(p, start_buf, logi_base);
+        sdim->type = (OBJ_sds_class_t)*p++;
+	if ((sdim->type != OBJ_SDS_SCALAR) && 
+	    (sdim->type != OBJ_SDS_SIMPLE) && 
+	    (sdim->type != OBJ_SDS_NULL)) {
+	    error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message v.2:Invalid type", logical, NULL);
+	    CK_SET_ERR(FAIL)
+	}
+    } else {
+	if(sdim->rank>0)
+	    sdim->type = OBJ_SDS_SIMPLE;
+	else
+	    sdim->type = OBJ_SDS_SCALAR;
+	p++;
+    }
 
-
-    p += 5; /*reserved*/
+    if(version == OBJ_SDS_VERSION_1)
+        p += 4; /*reserved*/
 
     logical = get_logical_addr(p, start_buf, logi_base);
     if (sdim->rank > 0) {
-	if ((sdim->size=malloc(sizeof(ck_size_t)*sdim->rank))==NULL) {
+	if ((sdim->size = (ck_hsize_t *)malloc(sizeof(ck_hsize_t) * (ck_size_t)sdim->rank))==NULL) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Dataspace Message:Internal allocation error", 
 		logical, NULL);
 	    CK_GOTO_DONE(FAIL)
 	}
         for (i = 0; i < sdim->rank; i++)
 	    DECODE_LENGTH(file->shared, p, sdim->size[i]);
+
 	logical = get_logical_addr(p, start_buf, logi_base);
         if (flags & OBJ_SDS_VALID_MAX) {
-             if ((sdim->max=malloc(sizeof(ck_size_t)*sdim->rank))==NULL) {
+             if ((sdim->max = (ck_hsize_t *)malloc(sizeof(ck_hsize_t) * (ck_size_t)sdim->rank))==NULL) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Dataspace Message:Internal allocation error", 
 		    logical, NULL);
 		CK_GOTO_DONE(FAIL)
@@ -1068,8 +1088,12 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     }
 
     /* Compute the number of elements in the extent */
-    for(i=0, sdim->nelem=1; i<sdim->rank; i++)
-	sdim->nelem *= sdim->size[i];
+    if (sdim->type == OBJ_SDS_NULL)
+        sdim->nelem = 0;
+    else {
+	for (i = 0, sdim->nelem = 1; i < sdim->rank; i++)
+	    sdim->nelem *= sdim->size[i];
+    }
 
     if (ret_value == SUCCEED)
 	ret_ptr = (void*)sdim;
@@ -1657,8 +1681,6 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
                 else
                     /* Advance multiple of 8 w/ null terminator */
                     *pp += ((strlen((const char *)*pp) + 8) / 8) * 8;
-
-                *pp += ((strlen((const char *)*pp) + 8) / 8) * 8;
             }
 
             /* Values */
@@ -3561,6 +3583,7 @@ gp_ent_decode(global_shared_t *shared, const uint8_t **pp, GP_entry_t *ent)
             break;
 
         default:  /* allows other cache values; will be validated later */
+	    printf("I am in DEFAULT, type=%u\n", ent->type);
 	    return FAIL;
     }
 
@@ -3739,7 +3762,7 @@ locate_super_signature(driver_t *file)
     for (n=8; n<maxpow; n++) {
        	addr = (8==n) ? 0 : (ck_addr_t)1 << n;
 	if (FD_read(file, addr, (size_t)HDF_SIGNATURE_LEN, buf) == FAIL) {
-	    error_push(ERR_FILE, ERR_NONE_SEC, 
+	    error_push(ERR_LEV_0, ERR_LEV_0A, 
 		"Superblock:Errors when reading superblock signature", LOGI_SUPER_BASE, NULL);
 	    addr = CK_ADDR_UNDEF;
 	    break;
@@ -3842,7 +3865,7 @@ check_superblock(driver_t *file)
     set_driver(&(lshared->driverid), driver_name);
 
     /* Check for older version of superblock format */
-    if(super_vers < SUPERBLOCK_VERSION_2) {
+    if (super_vers == SUPERBLOCK_VERSION_0 || super_vers == SUPERBLOCK_VERSION_1) {
 	if (debug_verbose())
 	    printf("Version 0/1 superblock is found\n");
      	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
@@ -3927,7 +3950,7 @@ check_superblock(driver_t *file)
      	 * If the superblock version # is greater than 0, read in the indexed
      	 * storage B-tree internal 'K' value
      	 */
-    	if (super_vers > SUPERBLOCK_VERSION_DEF) {
+    	if (super_vers > SUPERBLOCK_VERSION_0) {
 	    logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
 	    UINT16DECODE(p, lshared->btree_k[BT_ISTORE_ID]);
 	    p += 2;   /* reserved */
@@ -4050,7 +4073,7 @@ check_superblock(driver_t *file)
 	    }
 	    decode_driver(lshared, p);
 	}  /* DONE with driver information block */
-    } else { /* version 2 format */
+    } else if (super_vers == SUPERBLOCK_VERSION_2) { /* version 2 format */
 	uint32_t	read_chksum;
 
 	if (debug_verbose())
@@ -4117,7 +4140,19 @@ check_superblock(driver_t *file)
 
 	/* NEED CHECK: validate checksum ?? */
         UINT32DECODE(p, read_chksum);
-    }
+
+	printf("base_addr=%llu, super_addr=%llu, stored_eoa=%llu, extension_addr=%llu\n",
+		lshared->base_addr, lshared->super_addr, lshared->stored_eoa, 
+		lshared->extension_addr);
+	printf("size_offsets=%d, size_lengths=%d\n",	
+		lshared->size_offsets, lshared->size_lengths);
+	printf("header_address=%llu\n", lshared->root_grp->header);
+    } else  /* error should have pushed already onto the error stack */
+	CK_SET_ERR(FAIL)
+
+    /* check for errors before proceeding further */
+    if (ret_value != SUCCEED)
+	goto done;
 
 /* should I return mesg ptr instead of idx from find_in_ohdr()? */
     lshared->sohm_tbl = NULL;
@@ -4125,10 +4160,13 @@ check_superblock(driver_t *file)
 	OBJ_t	*oh;
 	int	idx;
 
-	if (debug_verbose())
+	if (debug_verbose()) {
 	    printf("Superblock extension is found\n");
-	if (check_obj_header(file, lshared->extension_addr, &oh) < 0)
+	    printf("GOING to validate the object header for the superblock extension at %llu...\n", lshared->extension_addr);
+	}
+	if (check_obj_header(file, lshared->extension_addr, &oh) < 0) {
 	    CK_GOTO_DONE(FAIL)
+	}
 	if ((idx = find_in_ohdr(file, oh, OBJ_SHMESG_ID)) < SUCCEED)
 	    printf("There is no OBJ_SHMESG_ID in superblock extension.\n");
 	else {
@@ -5430,12 +5468,19 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
     ck_addr_t   	rel_eoa;        /* Relative end of file address */
 
     int			version, nlink, idx, badinfo;
-    int			ret_value = SUCCEED;
+    int			ret_value=SUCCEED;
 
     OBJ_t		*oh=NULL;
     OBJ_cont_t 		*cont;
     global_shared_t	*lshared;
 
+#ifdef TOBEFIXED
+/* Make certain we don't speculatively read off the end of the file */
+    if(HADDR_UNDEF == (abs_eoa = H5F_get_eoa(f)))
+        HGOTO_ERROR(H5E_OHDR, H5E_CANTGET, NULL, "unable to determine file size")
+
+need to check for size see H5O_load at beginning check
+#endif
 
     if (debug_verbose())
 	printf("VALIDATING the object header at logical address %llu...\n", obj_head_addr);
@@ -5457,9 +5502,11 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
     lshared = file->shared;
     start_buf = buf;
 
+
     p = buf;
-    rel_eoa = lshared->stored_eoa - lshared->base_addr;
+    rel_eoa = FD_get_eof(file) - lshared->base_addr;
     spec_read_size = MIN(rel_eoa-obj_head_addr, OBJ_SPEC_READ_SIZE);
+
     if (FD_read(file, obj_head_addr, spec_read_size, buf) == FAIL) {
 	error_push(ERR_FILE, ERR_NONE_SEC, 
 	    "Object Header:Unable to read object header", obj_head_addr, NULL);
@@ -5589,10 +5636,10 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	UINT32DECODE(p, chunk_size);
 	p += 4;
     }
-	
 
+	
     prefix_size = (size_t)(p - buf);
-    chunk_addr = obj_head_addr + (ck_addr_t)prefix_size;
+    chunk_addr = obj_head_addr + prefix_size;
 
     logical = get_logical_addr(p, start_buf, chunk_addr);
 
@@ -5603,7 +5650,15 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
     }
 
     printf("oh->version =%d, nmesgs=%d, oh->nlink=%d\n", oh->version, nmesgs, oh->nlink);
-    printf("chunk_addr=%llu, chunk_size=%ld\n", chunk_addr, chunk_size);
+    printf("chunk_addr=%llu, chunk_size=%u\n", chunk_addr, chunk_size);
+#ifdef TOBEFIXED
+SHOULD i check for chunk_size bigger than file size as error and also if there are errors
+already so far, should NOT proceed any further, otherwise migth be in infinite loop...
+if that does not stop it, then what....should have some check inside the while loop
+OK: should have caught the chunk_size too big in sec2_read() which is updated to include
+checking for addr+file_size > EOF
+#endif
+
 
     /* read each chunk from disk */
     while (addr_defined(chunk_addr)) {
@@ -5741,7 +5796,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	    mesgno = oh->nmesgs++;
             oh->mesg[mesgno].flags = flags;
 	    oh->mesg[mesgno].native = NULL;
-	    oh->mesg[mesgno].raw = p;
+	    oh->mesg[mesgno].raw = (uint8_t *)p;
 	    oh->mesg[mesgno].raw_size = mesg_size;
 	    oh->mesg[mesgno].chunkno = chunkno;
 

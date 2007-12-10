@@ -132,7 +132,7 @@ ck_addr_t     force_fheap_addr;
     ret = check_superblock(thefile);
     /* superblock validation has to be all passed before proceeding further */
     if (ret != SUCCEED) {
-	error_push(ERR_LEV_0, ERR_NONE_SEC, 
+	error_push(ERR_LEV_0, ERR_LEV_0A, 
 	    "Errors found when checking superblock. Validation stopped.", -1, NULL);
 	error_print(stderr, thefile);
 	error_clear();
