@@ -3583,7 +3583,9 @@ gp_ent_decode(global_shared_t *shared, const uint8_t **pp, GP_entry_t *ent)
             break;
 
         default:  /* allows other cache values; will be validated later */
+#ifdef DEBUG
 	    printf("I am in DEFAULT, type=%u\n", ent->type);
+#endif
 	    return FAIL;
     }
 
@@ -4012,8 +4014,10 @@ check_superblock(driver_t *file)
 	}
 	lshared->root_grp = root_ent;
 
+#ifdef DEBUG
 	printf("header_addr=%llu, stored_eoa=%llu, base_addr=%llu, super_addr=%llu\n",
 		lshared->root_grp->header,lshared->stored_eoa, lshared->base_addr, lshared->super_addr);
+#endif
 
 	if (lshared->root_grp->header == CK_ADDR_UNDEF) {
 	    error_push(ERR_LEV_0, ERR_LEV_0A, 
@@ -4141,12 +4145,14 @@ check_superblock(driver_t *file)
 	/* NEED CHECK: validate checksum ?? */
         UINT32DECODE(p, read_chksum);
 
+#ifdef DEBUG
 	printf("base_addr=%llu, super_addr=%llu, stored_eoa=%llu, extension_addr=%llu\n",
 		lshared->base_addr, lshared->super_addr, lshared->stored_eoa, 
 		lshared->extension_addr);
 	printf("size_offsets=%d, size_lengths=%d\n",	
 		lshared->size_offsets, lshared->size_lengths);
 	printf("header_address=%llu\n", lshared->root_grp->header);
+#endif
     } else  /* error should have pushed already onto the error stack */
 	CK_SET_ERR(FAIL)
 
@@ -4162,24 +4168,35 @@ check_superblock(driver_t *file)
 
 	if (debug_verbose()) {
 	    printf("Superblock extension is found\n");
+#ifdef DEBUG
 	    printf("GOING to validate the object header for the superblock extension at %llu...\n", lshared->extension_addr);
+#endif
 	}
 	if (check_obj_header(file, lshared->extension_addr, &oh) < 0) {
 	    CK_GOTO_DONE(FAIL)
 	}
 	if ((idx = find_in_ohdr(file, oh, OBJ_SHMESG_ID)) < SUCCEED)
+	    ;
+#ifdef DEBUG
 	    printf("There is no OBJ_SHMESG_ID in superblock extension.\n");
+#endif
 	else {
 	    assert(oh->mesg[idx].native); 
+#ifdef DEBUG
 	    printf("Found OBJ_SHMESG_ID in superblock extension.\n");
+#endif
 	}
 	if ((idx = find_in_ohdr(file, oh, OBJ_BTREEK_ID)) < SUCCEED) {
+#ifdef DEBUG
 	    printf("Unable to find OBJ_BTREEK_ID in superblock extension...set default SNODE/ISTORE values\n");
+#endif
 	    lshared->btree_k[BT_SNODE_ID] = BT_SNODE_K;
 	    lshared->btree_k[BT_ISTORE_ID] = BT_ISTORE_K;
 	    lshared->gr_leaf_node_k = CRT_SYM_LEAF_DEF;
 	} else {
+#ifdef DEBUG
 	    printf("Found OBJ_BTREEK_ID in superblock extension...set SNODE/ISTORE values\n");
+#endif
 	    assert(oh->mesg[idx].native); 
 	    lshared->btree_k[BT_SNODE_ID] = ((OBJ_btreek_t *)(oh->mesg[idx].native))->btree_k[BT_SNODE_ID];
 	    lshared->btree_k[BT_ISTORE_ID] = ((OBJ_btreek_t *)(oh->mesg[idx].native))->btree_k[BT_ISTORE_ID];
@@ -4187,9 +4204,13 @@ check_superblock(driver_t *file)
 	}
 
 	if ((idx = find_in_ohdr(file, oh, OBJ_DRVINFO_ID)) < SUCCEED) {
+#ifdef DEBUG
 	    printf("Unable to find OBJ_DRVINFO_ID in superblock extension.\n");
+#endif
 	} else {
+#ifdef DEBUG
 	    printf("Found OBJ_DRVINFO_ID in superblock extension...set_driver()\n");
+#endif
 	    assert(oh->mesg[idx].native); 
 	    set_driver(&(lshared->driverid), ((OBJ_drvinfo_t *)(oh->mesg[idx].native))->name);
 	}
@@ -4928,15 +4949,20 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
     unsigned	ndims = 0, local_ndims = 0;
     ck_addr_t	btree_addr;
 
+#ifdef DEBUG
 printf("Entering decode_validate_message()\n");
+#endif
+
     for (i = 0; i < oh->nmesgs; i++) {	
 	start_buf = oh->chunk[oh->mesg[i].chunkno].image;
 	p = oh->mesg[i].raw;
 	logi_base = oh->chunk[oh->mesg[i].chunkno].addr;
 	logical = get_logical_addr(p, start_buf, logi_base);
 
+#ifdef DEBUG
 printf("addr=%llu, type=%d, logical=%llu, raw_size=%llu\n", 
 	logi_base, oh->mesg[i].type->id, logical, oh->mesg[i].raw_size);
+#endif
 
 	id = oh->mesg[i].type->id;
 	if (id == OBJ_CONT_ID) {
@@ -4947,7 +4973,9 @@ printf("addr=%llu, type=%d, logical=%llu, raw_size=%llu\n",
 	    error_push(ERR_LEV_2, ERR_LEV_2A, "Unsupported message encountered", logical, NULL);
 	    CK_CONTINUE(FAIL)
 	} else if (oh->mesg[i].flags & OBJ_FLAG_SHARED) {
+#ifdef DEBUG
 printf("OBJ_FLAG_SHARED is on for message id =%u\n", id);
+#endif
 	    mesg = OBJ_shared_decode(file, oh->mesg[i].raw, oh->mesg[i].type, start_buf, logi_base);
 	    if (mesg != NULL) {
 		mesg = OBJ_shared_read(file, mesg, oh->mesg[i].type);
@@ -5069,7 +5097,9 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 
 
 	    case OBJ_LINFO_ID:
+#ifdef DEBUG
 		printf("Decoded an OBJ_LINFO_ID...going to validate version 2 btree/fractal heap\n");
+#endif
 		if (addr_defined(((OBJ_linfo_t *)mesg)->corder_bt2_addr)) {
 		    if (check_btree2(file, ((OBJ_linfo_t *)mesg)->corder_bt2_addr, G_BT2_CORDER) != SUCCEED) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2c, 
@@ -5080,7 +5110,11 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 			}
 			CK_SET_ERR(SUCCEED)
 		    }
-		} else printf("not defined corder_bt2_addr for OBJ_LINFO_ID\n");
+		} 
+#ifdef DEBUG
+		else 
+		    printf("not defined corder_bt2_addr for OBJ_LINFO_ID\n");
+#endif
 
 		if (addr_defined(((OBJ_linfo_t *)mesg)->name_bt2_addr)) {
 		    if (check_btree2(file, ((OBJ_linfo_t *)mesg)->name_bt2_addr, G_BT2_NAME) != SUCCEED) {
@@ -5092,7 +5126,11 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 			}
 			CK_SET_ERR(SUCCEED)
 		    }
-		} else printf("not defined name_bt2_addr for OBJ_LINFO_ID\n");
+		} 
+#ifdef DEBUG
+		else 
+		    printf("not defined name_bt2_addr for OBJ_LINFO_ID\n");
+#endif
 
 		if (addr_defined(((OBJ_linfo_t *)mesg)->fheap_addr)) {
 		    if (check_fheap(file, ((OBJ_linfo_t *)mesg)->fheap_addr) != SUCCEED) {
@@ -5104,19 +5142,29 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 			}
 			CK_SET_ERR(SUCCEED)
 		    }
-		} else printf("not defined fheap_addr for OBJ_LINFO_ID\n");
+		} 
+#ifdef DEBUG
+		else 
+		    printf("not defined fheap_addr for OBJ_LINFO_ID\n");
+#endif
 		break;
 
 	    case OBJ_GINFO_ID:
+#ifdef DEBUG
 		printf("Decoded an OBJ_GINFO_ID...nothing more to be done\n");
+#endif
 		break;
 
 	    case OBJ_SHMESG_ID:
+#ifdef DEBUG
 		printf("Got a OBJ_SHMESG_ID...validating version 2 btree/fheap in SOHM table\n");
+#endif
 		if (addr_defined(((OBJ_shmesg_table_t *)mesg)->addr)) {
+#ifdef DEBUG
 		    printf("The SOHM table address from message is %llu; num of indices=%u\n",
 			((OBJ_shmesg_table_t *)mesg)->addr,
 			((OBJ_shmesg_table_t *)mesg)->nindexes);
+#endif
 		    if ((check_SOHM(file, ((OBJ_shmesg_table_t *)mesg)->addr,
 			((OBJ_shmesg_table_t *)mesg)->nindexes)) != SUCCEED) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2p, 
@@ -5131,14 +5179,20 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 		break;
 
 	    case OBJ_BTREEK_ID:
+#ifdef DEBUG
 		printf("Got a OBJ_BTREEK_ID...something is done in check_super()\n");
+#endif
 		break;
 	    case OBJ_DRVINFO_ID:
+#ifdef DEBUG
 		printf("Got a OBJ_DRVINFO_ID...something is done in check_super()\n");
+#endif
 		break;
 
 	    case OBJ_AINFO_ID:
+#ifdef DEBUG
 		printf("Decoded an OBJ_AINFO_ID...going to validate version 2 btree/fractal heap\n");
+#endif
 		if (addr_defined(((OBJ_ainfo_t *)mesg)->corder_bt2_addr)) {
 		    if (check_btree2(file, ((OBJ_ainfo_t *)mesg)->corder_bt2_addr, A_BT2_CORDER) != SUCCEED) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2v, 
@@ -5177,19 +5231,27 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 		break;
 
 	    case OBJ_REFCOUNT_ID:
+#ifdef DEBUG
 		printf("Got a OBJ_REFCOUNT_ID...\n");
+#endif
 		break;
 
 	    case OBJ_LINK_ID:
+#ifdef DEBUG
 		printf("Got a OBJ_LINK_ID...\n");
+#endif
 		break;
 
 	    case OBJ_UNKNOWN_ID:
+#ifdef DEBUG
 		printf("Got a OBJ_UNKNOWN_ID...\n");
+#endif
 		break;
 		
 	    default:
+#ifdef DEBUG
 		printf("Done with decode/validate for a TO-BE-HANDLED message id=%d.\n", id);
+#endif
 		break;
 	}  /* end switch on id */
     }  /* end for nmesgs */
@@ -5649,8 +5711,10 @@ need to check for size see H5O_load at beginning check
 	CK_GOTO_DONE(FAIL)
     }
 
+#ifdef DEBUG
     printf("oh->version =%d, nmesgs=%d, oh->nlink=%d\n", oh->version, nmesgs, oh->nlink);
     printf("chunk_addr=%llu, chunk_size=%u\n", chunk_addr, chunk_size);
+#endif
 #ifdef TOBEFIXED
 SHOULD i check for chunk_size bigger than file size as error and also if there are errors
 already so far, should NOT proceed any further, otherwise migth be in infinite loop...
@@ -5786,7 +5850,9 @@ checking for addr+file_size > EOF
 		CK_GOTO_DONE(FAIL)
 	    }
 
+#ifdef DEBUG
 	    printf("id is %u, mesg_size=%u\n", id, mesg_size);
+#endif
 
             if(oh->nmesgs >= oh->alloc_nmesgs)
 		if (OBJ_alloc_msgs(oh, (size_t)1) < 0)
@@ -5801,7 +5867,9 @@ checking for addr+file_size > EOF
 	    oh->mesg[mesgno].chunkno = chunkno;
 
 	    if (id >= NELMTS(message_type_g) || NULL == message_type_g[id]) {
+#ifdef DEBUG
 		printf("Made this into an unknown id for id=%d\n", id);
+#endif
 		oh->mesg[mesgno].type = message_type_g[OBJ_UNKNOWN_ID];
 	    } else
 		oh->mesg[mesgno].type = message_type_g[id];

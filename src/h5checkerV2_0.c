@@ -708,8 +708,10 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
 	addr_decode(file->shared, (const uint8_t **)&p, &int_node_ptr->addr);
 	UINT64DECODE_VAR(p, int_node_ptr->node_nrec, bt2_shared->max_nrec_size);
 
+#ifdef DEBUG
 	printf("int_node_ptr->addr=%llu, int_node_ptr->node_nrec=%u\n", 
 	    int_node_ptr->addr, int_node_ptr->node_nrec);
+#endif
 
 	if (depth > 1)
 	    UINT64DECODE_VAR(p, int_node_ptr->all_nrec, bt2_shared->node_info[depth - 1].cum_max_nrec_size)
@@ -1007,7 +1009,6 @@ HF_dtable_lookup(const HF_dtable_t *dtable, ck_hsize_t off, unsigned *row, unsig
     assert(row);
     assert(col);
 
-    printf("Entering HF_dtable_lookup()\n");
 
     /* Check for offset in first row */
     if(off < dtable->num_id_first_row) {
@@ -1178,13 +1179,17 @@ printf("iblock->block_off=%llu\n", iblock->block_off);
 
         /* Count child blocks */
         if(addr_defined(iblock->ents[u].addr)) {
+#ifdef DEBUG
 printf("child block address=%llu\n", iblock->ents[u].addr);
+#endif
             iblock->nchildren++;
             iblock->max_child = u;
         } /* end if */
     } /* end for */
 
+#ifdef DEBUG
 printf("iblock->nchildren=%u\n", iblock->nchildren);
+#endif
 
     if (iblock->nchildren <= 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Indirect Block:should have nonzero # of child blocks", 
@@ -1228,7 +1233,9 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
     assert(fhdr);
     assert(fhdr->man_dtable.curr_root_rows);   /* Only works for heaps with indirect root block */
 
+#ifdef DEBUG
     printf("Entering HF_man_dblock_locate()\n");
+#endif
 
     /* Look up row & column for object */
     if(HF_dtable_lookup(&fhdr->man_dtable, obj_off, &row, &col) < 0) {
@@ -2000,7 +2007,9 @@ ck_err_t
 HF_close(HF_hdr_t *fhdr)
 {
     assert(fhdr);
+#ifdef DEBUG
     printf("Should free the fractal header and its associated data structures\n");
+#endif
 }
 
 /* ENTRY */
@@ -2121,18 +2130,24 @@ HF_get_obj_info(driver_t *file, HF_hdr_t *fhdr, const void *_id, obj_info_t *obj
     }
         
     if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_MAN) {
+#ifdef DEBUG
 	printf("TYPE_MAN is encountered\n");
+#endif
         id++;  /* skip over the flag byte */
 	UINT64DECODE_VAR(id, objinfo->u.off, fhdr->heap_off_size);
 	UINT64DECODE_VAR(id, objinfo->size, fhdr->heap_len_size);
     } else if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_HUGE) {
+#ifdef DEBUG
             printf("huge' object's length\n");
+#endif
         if(HF_huge_get_obj_info(file, fhdr, id, objinfo) < 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, "HF_get_obj_info:Cannot get huge object's info", -1, NULL);
 	    CK_SET_ERR(FAIL)
 	}
     } else if((id_flags & HF_ID_TYPE_MASK) == HF_ID_TYPE_TINY) {
+#ifdef DEBUG
 	printf("'tiny' object's length\n");
+#endif
 	if(!fhdr->tiny_len_extended)
 	    enc_obj_size = *id & HF_TINY_MASK_SHORT;
 	else
@@ -2202,7 +2217,9 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
     assert(objinfo->u.off > 0);
     assert(objinfo->size > 0);
 
+#ifdef DEBUG
     printf("HF_man_read():obj_off=%llu, obj_len=%u\n", objinfo->u.off, objinfo->size);
+#endif
 
     if(objinfo->u.off > fhdr->man_size) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, "HF_man_read:Fractal heap object offset too large", -1, NULL);
@@ -2517,7 +2534,9 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
         /* Address of the actual index */
         addr_decode(file->shared, &p, &(table->indexes[x].index_addr));
 	if (addr_defined(table->indexes[x].index_addr) && (table->indexes[x].index_type == SM_BTREE)) {
+#ifdef DEBUG
 	    printf("Doing check_btree2() from check_SOHM()\n");
+#endif
 	    if (check_btree2(file, table->indexes[x].index_addr, SM_INDEX)) {
 		error_push(ERR_LEV_2, ERR_LEV_2A2p, 
 		    "SOHM:Errors found when checking version 2 B-tree", logical, NULL);
@@ -2529,7 +2548,9 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
         /* Address of the index's heap */
         addr_decode(file->shared, &p, &(table->indexes[x].heap_addr));
 	if (addr_defined(table->indexes[x].heap_addr)) {
+#ifdef DEBUG
 	    printf("Doing check_fheap() from check_SOHM()\n");
+#endif
 	    if (check_fheap(file, table->indexes[x].heap_addr)) {
 		error_push(ERR_LEV_2, ERR_LEV_2A, 
 		    "SOHM:Errors found when checking fractal heap", logical, NULL);

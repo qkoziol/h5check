@@ -11,7 +11,7 @@
 
 #include <math.h>
 
-/* NEED TO: asserts */
+/* NEED TO: take care of asserts */
 
 
 static ck_size_t           Z_table_alloc_g = 0;
@@ -1371,7 +1371,7 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
     if (debug_verbose())
         printf("Applying scaleoffset filter ...\n");
 
-    if(cd_nelmts != Z_SCALEOFFSET_TOTAL_NPARMS) {
+    if (cd_nelmts != Z_SCALEOFFSET_TOTAL_NPARMS) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid # of parameters", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
@@ -1381,7 +1381,6 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
 #else
     native_order = DT_ORDER_LE;
 #endif
-printf("native_order in scaleoffest is %u\n", native_order);
 
     /* Check if memory byte order matches dataset datatype byte order */
     switch(native_order) {
@@ -1578,7 +1577,6 @@ filter_find_idx(Z_filter_t id)
     ck_size_t 	i;
     int 	ret_value=FAIL;
 
-printf("filter_find_idx = %d\n", id);
     for (i = 0; i < Z_table_used_g; i++)
         if (Z_table_g[i].id == id)
             CK_GOTO_DONE((int)i)
@@ -1605,12 +1603,9 @@ filter_pline(const OBJ_filter_t *pline, unsigned flags, unsigned *filter_mask/*i
     assert(buf && *buf);
     assert(!pline || pline->nused<Z_MAX_NFILTERS);
 
-printf("I am in Z_pipeline\n");
     if (pline && (flags & Z_FLAG_REVERSE)) { /* Read */
-printf("I am in Z_pipeline() read\n");
 	for (i = pline->nused; i > 0; --i) {
             idx = i-1;
-printf("I am in Z_pipeline() nused\n");
 
 #if 0
             if (*filter_mask & ((unsigned)1<<idx)) {
@@ -1618,20 +1613,19 @@ printf("I am in filter exclued\n");
                 failed |= (unsigned)1 << idx;
                 continue;/*filter excluded*/
             }
-#endif
 printf("I am done with filter mask\n");
+printf("new_nbytes=%u\n", new_nbytes);
+#endif
             if ((fclass_idx = filter_find_idx(pline->filter[idx].id)) < 0) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Filter pipeline:Filter not registered", 
 		    -1, NULL);
 		CK_GOTO_DONE(FAIL)
             }
-printf("I am done with find_idx()\n");
             fclass = &Z_table_g[fclass_idx];
             tmp_flags = flags|(pline->filter[idx].flags);
             tmp_flags |= (edc_read == Z_DISABLE_EDC) ? Z_FLAG_SKIP_EDC : 0;
             new_nbytes = (fclass->filter)(tmp_flags, pline->filter[idx].cd_nelmts,
                                         pline->filter[idx].cd_values, *nbytes, buf_size, buf);
-printf("new_nbytes=%u\n", new_nbytes);
 
             if (new_nbytes == 0) {
                 if((cb_struct.func && (Z_CB_FAIL==cb_struct.func(pline->filter[idx].id, *buf, *buf_size, cb_struct.op_data)))
