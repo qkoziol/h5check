@@ -6,6 +6,7 @@ AC_INIT(FULL-PACKAGE-NAME, VERSION, BUG-REPORT-ADDRESS)
 AC_CONFIG_SRCDIR([test/testgen.c])
 AC_CONFIG_AUX_DIR([bin])
 AC_CONFIG_HEADER([src/h5chk_config.h])
+AC_C_BIGENDIAN
 
 dnl AM_INIT_AUTOMAKE takes a list of options that should be applied to
 dnl every Makefile.am when automake is run.
@@ -207,7 +208,7 @@ AC_ARG_ENABLE([filters],
 
 dnl Eventually: all_filters="shuffle,foo,bar,baz"
 dnl Eventually: all_filters="shuffle,fletcher32,nbit,scaleoffset"
-all_filters="shuffle,fletcher32,nbit"
+all_filters="shuffle,fletcher32,nbit,scaleoffset"
 case "X-$FILTERS" in
   X-|X-all)
     FILTERS=$all_filters
@@ -251,6 +252,13 @@ if test -n "$FILTERS"; then
   done
 fi
 
+dnl Byte sex from the AC_C_BIGENDIAN macro.
+if test "X$ac_cv_c_bigendian" = "Xyes"; then
+      AC_DEFINE([HAVE_BIG_ENDIAN], [1],
+                [Define if machine is big endian])
+fi
+
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h])
@@ -262,6 +270,7 @@ AC_TYPE_SIZE_T
 AC_STRUCT_TM
 
 # Checks for library functions.
+AC_CHECK_LIB([m], [pow])
 AC_FUNC_MALLOC
 AC_FUNC_MEMCMP
 AC_FUNC_REALLOC

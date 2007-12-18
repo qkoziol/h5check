@@ -611,7 +611,7 @@ size_t bytes;
     
     if (addr == CK_ADDR_UNDEF)
 	ret = FAIL;
-    else if (addr + size >((driver_sec2_t *)file)->eof)
+    else if ((addr + size) > ((driver_sec2_t *)file)->eof)
 	ret = FAIL;
     else {
 	fd = ((driver_sec2_t *)file)->fd;

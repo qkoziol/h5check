@@ -9,9 +9,14 @@
 #include <szlib.h>
 #endif
 
-static size_t           Z_table_alloc_g = 0;
-static size_t           Z_table_used_g = 0;
-static Z_class_t      	*Z_table_g = NULL;
+#include <math.h>
+
+/* NEED TO: asserts */
+
+
+static ck_size_t           Z_table_alloc_g = 0;
+static ck_size_t           Z_table_used_g = 0;
+static Z_class_t      	   *Z_table_g = NULL;
 
 static ck_err_t pline_register(const Z_class_t *);
 static int filter_find_idx(Z_filter_t);
@@ -68,7 +73,7 @@ done:
 ck_err_t
 pline_init_interface(void)
 {
-    ck_err_t      ret_value=SUCCEED;    
+    ck_err_t    ret_value=SUCCEED;    
 
     if (debug_verbose())
         printf("INITIALIZING filters ...\n");
@@ -371,6 +376,8 @@ done:
 static ck_size_t Z_filter_fletcher32 (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[], 
 	ck_size_t nbytes, ck_size_t *buf_size, void **buf);
 
+static uint32_t checksum_fletcher32(const void *, ck_size_t);
+
 /* This message derives from H5Z */
 Z_class_t Z_FLETCHER32[1] = {{
     Z_CLASS_T_VERS,       /* Z_class_t version */
@@ -585,7 +592,8 @@ Z_class_t Z_NBIT[1] = {{
     Z_filter_nbit,        /* The actual filter function   */
 }};
 
-/* Struct of parameters needed for compressing/decompressing
+/* 
+ * Struct of parameters needed for compressing/decompressing
  * one nbit atomic datatype: integer or floating-point
  */
 typedef struct {
@@ -593,14 +601,18 @@ typedef struct {
    int order;     /* datatype endianness order */
    int precision; /* datatype precision */
    int offset;    /* datatype offset */
-} parms_atomic;
+} nbit_parms_atomic;
 
 static unsigned parms_index = 0;
 
-static void Z_nbit_decompress_one_array(unsigned char *data, size_t data_offset,
-           unsigned char *buffer, size_t *j, int *buf_len, const unsigned parms[]);
-static void Z_nbit_decompress_one_compound(unsigned char *data, size_t data_offset,
-              unsigned char *buffer, size_t *j, int *buf_len, const unsigned parms[]);
+static void Z_nbit_next_byte(ck_size_t *, int *);
+static void Z_nbit_decompress_one_byte(unsigned char *, ck_size_t, int, int, int, unsigned char *, ck_size_t *, int *, nbit_parms_atomic, int);
+static void Z_nbit_decompress_one_nooptype(unsigned char *, ck_size_t, unsigned char *, ck_size_t *, int *, unsigned);
+static void Z_nbit_decompress_one_atomic(unsigned char *, ck_size_t, unsigned char *, ck_size_t *, int *, nbit_parms_atomic);
+static void Z_nbit_decompress_one_compound(unsigned char *data, size_t data_offset, unsigned char *buffer, size_t *j, int *buf_len, const unsigned parms[]);
+static void Z_nbit_decompress_one_array(unsigned char *data, size_t data_offset, unsigned char *buffer, size_t *j, int *buf_len, const unsigned parms[]);
+static void Z_nbit_decompress(unsigned char *, unsigned, unsigned char *, const unsigned parms[]);
+
 
 /* support routine for nbit filter */
 static void
@@ -612,7 +624,7 @@ Z_nbit_next_byte(ck_size_t *j, int *buf_len)
 
 /* support routine for nbit filter */
 static void 
-Z_nbit_decompress_one_byte(unsigned char *data, ck_size_t data_offset, int k, int begin_i, int end_i, unsigned char *buffer, ck_size_t *j, int *buf_len, parms_atomic p, int datatype_len)
+Z_nbit_decompress_one_byte(unsigned char *data, ck_size_t data_offset, int k, int begin_i, int end_i, unsigned char *buffer, ck_size_t *j, int *buf_len, nbit_parms_atomic p, int datatype_len)
 {
    int dat_len; /* dat_len is the number of bits to be copied in each data byte */
    int uchar_offset;
@@ -683,7 +695,7 @@ Z_nbit_decompress_one_nooptype(unsigned char *data, ck_size_t data_offset,
 /* support routine for nbit filter */
 static void 
 Z_nbit_decompress_one_atomic(unsigned char *data, ck_size_t data_offset,
-	unsigned char *buffer, ck_size_t *j, int *buf_len, parms_atomic p)
+	unsigned char *buffer, ck_size_t *j, int *buf_len, nbit_parms_atomic p)
 {
    /* begin_i: the index of byte having first significant bit
       end_i: the index of byte having last significant bit */
@@ -723,7 +735,7 @@ Z_nbit_decompress_one_compound(unsigned char *data, ck_size_t data_offset,
     unsigned char *buffer, ck_size_t *j, int *buf_len, const unsigned parms[])
 {
    unsigned i, nmembers, member_offset, member_class, size;
-   parms_atomic p;
+   nbit_parms_atomic p;
 
    parms_index++; /* skip total size of compound datatype */
    nmembers = parms[parms_index++];
@@ -763,7 +775,7 @@ Z_nbit_decompress_one_array(unsigned char *data, ck_size_t data_offset,
 	unsigned char *buffer, ck_size_t *j, int *buf_len, const unsigned parms[])
 {
    unsigned 	i, total_size, base_class, base_size, n, begin_index;
-   parms_atomic p;
+   nbit_parms_atomic p;
 
    total_size = parms[parms_index++];
    base_class = parms[parms_index++];
@@ -813,9 +825,9 @@ Z_nbit_decompress(unsigned char *data, unsigned d_nelmts, unsigned char *buffer,
 {
    /* i: index of data, j: index of buffer,
       buf_len: number of bits to be filled in current byte */
-   ck_size_t 	i, j, size;
-   int 		buf_len;
-   parms_atomic p;
+   ck_size_t 		i, j, size;
+   int 			buf_len;
+   nbit_parms_atomic 	p;
 
    /* may not have to initialize to zeros */
    for(i = 0; i < d_nelmts*parms[4]; i++) data[i] = 0;
@@ -917,19 +929,418 @@ done:
 #endif
 
 #ifdef HAVE_FILTER_SCALEOFFSET
-/* IT IS NOT WORKING YET */
-
 /* 
  * scaleoffset filter 
  */
+
 static ck_size_t Z_filter_scaleoffset(unsigned flags, ck_size_t cd_nelmts,
     const unsigned cd_values[], ck_size_t nbytes, size_t *buf_size, void **buf);
+
 
 Z_class_t Z_SCALEOFFSET[1] = {{
     Z_CLASS_T_VERS,       /* Z_class_t version */
     Z_FILTER_SCALEOFFSET, /* Filter id number         */
     Z_filter_scaleoffset,     /* The actual filter function   */
 }};
+
+/* Struct of parameters needed for compressing/decompressing one atomic datatype */
+typedef struct {
+   ck_size_t 	size;      /* datatype size */
+   uint32_t 	minbits;   /* minimum bits to compress one value of such datatype */
+   unsigned 	mem_order; /* current memory endianness order */
+} so_parms_atomic;
+
+static void Z_scaleoffset_convert(void *, unsigned, ck_size_t);
+static void Z_scaleoffset_next_byte(ck_size_t *, int *);
+static void Z_scaleoffset_decompress_one_byte(unsigned char *, ck_size_t, int, int, unsigned char *, ck_size_t *, int *, so_parms_atomic, int);
+static void Z_scaleoffset_decompress_one_atomic(unsigned char *, ck_size_t, unsigned char *, ck_size_t *, int *, so_parms_atomic);
+static void Z_scaleoffset_decompress(unsigned char *, unsigned, unsigned char *, so_parms_atomic);
+static enum Z_scaleoffset_type Z_scaleoffset_get_type(unsigned, unsigned, unsigned);
+static void Z_scaleoffset_postdecompress_i(void *, unsigned, enum Z_scaleoffset_type, unsigned, const void *, uint32_t, unsigned long_long);
+static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleoffset_type, unsigned, const void *, uint32_t, unsigned long_long, double);
+
+/* Get the fill value for integer type */
+#define Z_scaleoffset_get_filval_1(i, type, filval_buf, filval)               \
+{                                                                             \
+    type filval_mask;                                                         \
+                                                                              \
+    /* retrieve fill value from corresponding positions of cd_values[]        \
+     * retrieve them corresponding to how they are stored                     \
+     */                                                                       \
+    for(i = 0; i < sizeof(type); i++) {                                       \
+	filval_mask = ((const unsigned char *)filval_buf)[i];                 \
+	filval_mask <<= i*8;                                                  \
+	filval |= filval_mask;                                                \
+    }                                                                         \
+}
+
+/* Postdecompress for unsigned integer type */
+#define Z_scaleoffset_postdecompress_1(type, data, d_nelmts, filavail, filval_buf, minbits, minval)	\
+{                                                                                 			\
+    type *buf = data, filval = 0; unsigned i;                                      			\
+                                                                                  			\
+    if(filavail == Z_SCALEOFFSET_FILL_DEFINED) { /* fill value defined */        			\
+	Z_scaleoffset_get_filval_1(i, type, filval_buf, filval)                   			\
+	for(i = 0; i < d_nelmts; i++)                                               			\
+	    buf[i] = (type)((buf[i] == (((type)1 << minbits) - 1))?filval:(buf[i] + minval));		\
+    } else /* fill value undefined */                                              			\
+	for (i = 0; i < d_nelmts; i++) 									\
+	    buf[i] += (type)(minval);                     						\
+}
+
+/* Postdecompress for signed integer type */
+#define Z_scaleoffset_postdecompress_2(type, data, d_nelmts, filavail, filval_buf, minbits, minval)	\
+{                                                                                          		\
+    type *buf = data, filval = 0; unsigned i;                                               		\
+                                                                                           		\
+    if(filavail == Z_SCALEOFFSET_FILL_DEFINED) { /* fill value defined */                 		\
+	Z_scaleoffset_get_filval_1(i, type, filval_buf, filval)                            		\
+	for(i = 0; i < d_nelmts; i++)                                                        		\
+	    buf[i] = (type)(((unsigned type)buf[i] == (((unsigned type)1 << minbits) - 1)) ? filval : (buf[i] + minval));\
+    } else /* fill value undefined */                                                      		\
+	for(i = 0; i < d_nelmts; i++) 									\
+	    buf[i] += (type)(minval);                              					\
+}
+
+/* Get the fill value for floating-point type */
+#define Z_scaleoffset_get_filval_2(i, type, filval_buf, filval)                     	\
+{                                                                                   	\
+    if(sizeof(type)==sizeof(int))                                                   	\
+	Z_scaleoffset_get_filval_1(i, int, filval_buf, *(int *)&filval)            	\
+    else if(sizeof(type)==sizeof(long))                                              	\
+	Z_scaleoffset_get_filval_1(i, long, filval_buf, *(long *)&filval)            	\
+    else if(sizeof(type)==sizeof(long_long))                                           	\
+	Z_scaleoffset_get_filval_1(i, long_long, filval_buf, *(long_long *)&filval)   	\
+    else {                                                                              \
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL); \
+	CK_GOTO_DONE(FAIL)											    \
+    }											\
+}
+
+/* Modify values of data in postdecompression if fill value defined for floating-point type */
+#define Z_scaleoffset_modify_3(i, type, buf, d_nelmts, filval, minbits, min, D_val)     \
+{                                                                                       \
+    if (sizeof(type)==sizeof(int))                                                      \
+	for(i = 0; i < d_nelmts; i++)                                                   \
+	    buf[i] = (*(int *)&buf[i]==(((unsigned int)1 << minbits) - 1))?             \
+		filval:(*(int *)&buf[i])/pow(10.0, D_val) + min;                        \
+    else if(sizeof(type)==sizeof(long))                                                 \
+	for(i = 0; i < d_nelmts; i++)                                                   \
+	    buf[i] = (*(long *)&buf[i]==(((unsigned long)1 << minbits) - 1))?           \
+		filval:(*(long *)&buf[i])/pow(10.0, D_val) + min;                       \
+    else if(sizeof(type)==sizeof(long_long))                                            \
+	for(i = 0; i < d_nelmts; i++)                                                   \
+	    buf[i] = (*(long_long *)&buf[i]==(((unsigned long_long)1 << minbits) - 1))? \
+		filval:(*(long_long *)&buf[i])/pow(10.0, D_val) + min;                  \
+    else {                                                                              \
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL); \
+	CK_GOTO_DONE(FAIL)											    \
+    }											\
+}
+
+/* Modify values of data in postdecompression if fill value undefined for floating-point type */
+#define Z_scaleoffset_modify_4(i, type, buf, d_nelmts, min, D_val)                   	\
+{                                                                                      	\
+    if (sizeof(type) == sizeof(int))                                                    \
+	for(i = 0; i < d_nelmts; i++)                                                   \
+	    buf[i] = (*(int *)&buf[i])/pow(10.0, D_val) + min;                          \
+    else if(sizeof(type) == sizeof(long))                                               \
+	for(i = 0; i < d_nelmts; i++)                                                   \
+	    buf[i] = (*(long *)&buf[i])/pow(10.0, D_val) + min;                         \
+    else if(sizeof(type)==sizeof(long_long))                                            \
+	for(i = 0; i < d_nelmts; i++)                                                   \
+	    buf[i] = (*(long_long *)&buf[i])/pow(10.0, D_val) + min;                    \
+    else {                                                                              \
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL); \
+	CK_GOTO_DONE(FAIL)											    \
+    }											\
+}
+
+
+
+/* Retrive minimum value of floating-point type */
+#define Z_scaleoffset_get_min(i, type, minval, min)                                	\
+{                                                                                     	\
+    if (sizeof(type)==sizeof(int)) {                                                    \
+	int 	mask;                                                                   \
+	for (i = 0; i < sizeof(int); i++) {                                             \
+	    mask = ((unsigned char *)&minval)[i]; 					\
+	    mask <<= i*8; 								\
+	    *(int *)&min |= mask;    							\
+	}                                                                               \
+    } else if(sizeof(type)==sizeof(long)) {                                            	\
+	long 	mask;                                                                   \
+	for (i = 0; i < sizeof(long); i++) {                                            \
+	    mask = ((unsigned char *)&minval)[i]; 					\
+	    mask <<= i*8; 								\
+	    *(long *)&min |= mask;   							\
+	}                                                                               \
+    } else if(sizeof(type) == sizeof(long_long)) {                                      \
+	long_long 	mask;                                                           \
+	for (i = 0; i < sizeof(long_long); i++) {                                      	\
+	    mask = ((unsigned char *)&minval)[i]; 					\
+	    mask <<= i*8; 								\
+	    *(long_long *)&min |= mask;							\
+	}                                                                               \
+    } else {                                                                    	\
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL); \
+	CK_GOTO_DONE(FAIL)											    \
+    }											\
+}
+
+/* Postdecompress for floating-point type using variable-minimum-bits method */
+#define Z_scaleoffset_postdecompress_3(type, data, d_nelmts, filavail, filval_buf,   \
+                                         minbits, minval, D_val)                     \
+{                                                                                    \
+    type *buf = data, filval = 0, min = 0; unsigned i;                               \
+                                                                                     \
+    Z_scaleoffset_get_min(i, type, minval, min)                                      \
+                                                                                     \
+    if (filavail == Z_SCALEOFFSET_FILL_DEFINED) { /* fill value defined */           \
+	Z_scaleoffset_get_filval_2(i, type, filval_buf, filval)                      \
+	Z_scaleoffset_modify_3(i, type, buf, d_nelmts, filval, minbits, min, D_val)  \
+    } else /* fill value undefined */                                                \
+	Z_scaleoffset_modify_4(i, type, buf, d_nelmts, min, D_val)                   \
+}
+
+/* 
+ * Support routine for scaleoffset filter:
+ * Change byte order of input buffer either from little-endian to big-endian
+ * or from big-endian to little-endian.
+ */
+static void
+Z_scaleoffset_convert(void *buf, unsigned d_nelmts, ck_size_t dtype_size)
+{
+    if (dtype_size > 1) {
+
+	unsigned 	i, j;
+	unsigned char 	*buffer, temp;
+
+	buffer = buf;
+	for(i = 0; i < d_nelmts * dtype_size; i += dtype_size)
+	    for(j = 0; j < dtype_size/2; j++) {
+		/* swap pair of bytes */
+		temp = buffer[i+j];
+		buffer[i+j] = buffer[i+dtype_size-1-j];
+		buffer[i+dtype_size-1-j] = temp;
+	    }
+    }
+}
+
+/* Support routine for scaleoffset filter */
+static void 
+Z_scaleoffset_next_byte(ck_size_t *j, int *buf_len)
+{
+    ++(*j); *buf_len = 8 * sizeof(unsigned char);
+}
+
+
+/* Support routine for scaleoffset filter */
+static void 
+Z_scaleoffset_decompress_one_byte(unsigned char *data, ck_size_t data_offset, int k, int begin_i, 
+    unsigned char *buffer, ck_size_t *j, int *buf_len, so_parms_atomic p, int dtype_len)
+{
+    int 		dat_len; /* dat_len is the number of bits to be copied in each data byte */
+    unsigned 	char val; /* value to be copied in each data byte */
+
+    /* initialize value and bits of unsigned char to be copied */
+    val = buffer[*j];
+    if (k == begin_i)
+	dat_len = 8 - (dtype_len - p.minbits) % 8;
+    else
+	dat_len = 8;
+
+    if (*buf_len > dat_len) {
+	data[data_offset + k] = ((val >> (*buf_len - dat_len)) & ~(~0 << dat_len));
+	*buf_len -= dat_len;
+    } else {
+	data[data_offset + k] = ((val & ~(~0 << *buf_len)) << (dat_len - *buf_len));
+	dat_len -= *buf_len;
+	Z_scaleoffset_next_byte(j, buf_len);
+	if (dat_len == 0) 
+	    return;
+	val = buffer[*j];
+	data[data_offset + k] |= ((val >> (*buf_len - dat_len)) & ~(~0 << dat_len));
+	*buf_len -= dat_len;
+    }
+}
+
+/* Support routine for scaleoffset filter */
+static void 
+Z_scaleoffset_decompress_one_atomic(unsigned char *data, ck_size_t data_offset, unsigned char *buffer, 
+    ck_size_t *j, int *buf_len, so_parms_atomic p)
+{
+   /* begin_i: the index of byte having first significant bit */
+    int 	k, begin_i, dtype_len;
+
+    assert(p.minbits > 0);
+
+    dtype_len = p.size * 8;
+
+    if (p.mem_order == Z_SCALEOFFSET_ORDER_LE) { /* little endian */
+	begin_i = p.size - 1 - (dtype_len - p.minbits) / 8;
+
+	for (k = begin_i; k >= 0; k--)
+	    Z_scaleoffset_decompress_one_byte(data, data_offset, k, begin_i, buffer, j, buf_len, p, dtype_len);
+    }
+
+    if(p.mem_order == Z_SCALEOFFSET_ORDER_BE) { /* big endian */
+	begin_i = (dtype_len - p.minbits) / 8;
+
+	for (k = begin_i; k <= p.size - 1; k++)
+	    Z_scaleoffset_decompress_one_byte(data, data_offset, k, begin_i, buffer, j, buf_len, p, dtype_len);
+    }
+}
+
+/* Support routine for scaleoffset filter */
+static void 
+Z_scaleoffset_decompress(unsigned char *data, unsigned d_nelmts, unsigned char *buffer, so_parms_atomic p)
+{
+   /* 
+    * i: index of data
+    * j: index of buffer
+    * buf_len: number of bits to be filled in current byte 
+    */
+    ck_size_t 	i, j;
+    int 	buf_len;
+
+    /* must initialize to zeros */
+    for (i = 0; i < d_nelmts*p.size; i++) 
+	data[i] = 0;
+
+    /* initialization before the loop */
+    j = 0;
+    buf_len = sizeof(unsigned char) * 8;
+
+    /* decompress */
+    for (i = 0; i < d_nelmts; i++)
+	Z_scaleoffset_decompress_one_atomic(data, i*p.size, buffer, &j, &buf_len, p);
+}
+
+
+/* Support routine for scaleoffset filter */
+static enum Z_scaleoffset_type
+Z_scaleoffset_get_type(unsigned dtype_class, unsigned dtype_size, unsigned dtype_sign)
+{
+    enum Z_scaleoffset_type 	type = t_bad; /* integer type */
+    enum Z_scaleoffset_type 	ret_value;           
+
+    if (dtype_class == Z_SCALEOFFSET_CLS_INTEGER) {
+	if (dtype_sign == Z_SCALEOFFSET_SGN_NONE) { /* unsigned integer */
+	    if (dtype_size == sizeof(unsigned char))      
+		type = t_uchar;
+            else if (dtype_size == sizeof(unsigned short))     
+		type = t_ushort;
+            else if (dtype_size == sizeof(unsigned int))       
+		type = t_uint;
+            else if (dtype_size == sizeof(unsigned long))      
+		type = t_ulong;
+            else if (dtype_size == sizeof(unsigned long_long)) 
+		type = t_ulong_long;
+            else {
+		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+        }
+
+        if (dtype_sign == Z_SCALEOFFSET_SGN_2) { /* signed integer */
+            if (dtype_size == sizeof(signed char)) 
+		type = t_schar;
+            else if(dtype_size == sizeof(short))       
+		type = t_short;
+            else if(dtype_size == sizeof(int))         
+		type = t_int;
+            else if(dtype_size == sizeof(long))        
+		type = t_long;
+            else if(dtype_size == sizeof(long_long))   
+		type = t_long_long;
+            else {
+		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+        }
+    }
+
+    if (dtype_class == Z_SCALEOFFSET_CLS_FLOAT) {
+        if (dtype_size == sizeof(float))       
+	    type = t_float;
+        else if(dtype_size == sizeof(double)) 
+	    type = t_double;
+        else {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+    }
+
+    /* Set return value */
+    ret_value = type;
+
+done:
+    return(ret_value);
+}
+
+
+
+/* Support routine for scaleoffset filter */
+/* postdecompress for integer type */
+static void
+Z_scaleoffset_postdecompress_i(void *data, unsigned d_nelmts, enum Z_scaleoffset_type type,
+    unsigned filavail, const void *filval_buf, uint32_t minbits, unsigned long_long minval)
+{
+    long_long sminval = *(long_long*)&minval; /* for signed integer types */
+
+    if (type == t_uchar)
+	Z_scaleoffset_postdecompress_1(unsigned char, data, d_nelmts, filavail, filval_buf, minbits, minval)
+    else if(type == t_ushort)
+	Z_scaleoffset_postdecompress_1(unsigned short, data, d_nelmts, filavail, filval_buf, minbits, minval)
+   else if(type == t_uint)
+	Z_scaleoffset_postdecompress_1(unsigned int, data, d_nelmts, filavail, filval_buf, minbits, minval)
+   else if(type == t_ulong)
+	Z_scaleoffset_postdecompress_1(unsigned long, data, d_nelmts, filavail, filval_buf, minbits, minval)
+   else if(type == t_ulong_long)
+	Z_scaleoffset_postdecompress_1(unsigned long_long, data, d_nelmts, filavail, filval_buf, minbits, minval)
+   else if(type == t_schar) {
+	signed char *buf = data, filval = 0; unsigned i;
+
+	if(filavail == Z_SCALEOFFSET_FILL_DEFINED) { /* fill value defined */
+	    Z_scaleoffset_get_filval_1(i, signed char, filval_buf, filval)
+	    for(i = 0; i < d_nelmts; i++)
+		buf[i] = (buf[i] == (((unsigned char)1 << minbits) - 1))?filval:(buf[i] + sminval);
+	} else /* fill value undefined */
+	    for(i = 0; i < d_nelmts; i++) 
+		buf[i] += sminval;
+   } else if (type == t_short)
+	Z_scaleoffset_postdecompress_2(short, data, d_nelmts, filavail, filval_buf, minbits, sminval)
+   else if (type == t_int)
+      Z_scaleoffset_postdecompress_2(int, data, d_nelmts, filavail, filval_buf, minbits, sminval)
+   else if(type == t_long)
+      Z_scaleoffset_postdecompress_2(long, data, d_nelmts, filavail, filval_buf, minbits, sminval)
+   else if(type == t_long_long)
+      Z_scaleoffset_postdecompress_2(long_long, data, d_nelmts, filavail, filval_buf, minbits, sminval)
+}
+
+/* 
+ * Support routine for scaleoffset filter:
+ * postdecompress for floating-point type, variable-minimum-bits method
+ * success: non-negative
+ * failure: negative
+ */
+static ck_err_t
+Z_scaleoffset_postdecompress_fd(void *data, unsigned d_nelmts, enum Z_scaleoffset_type type,
+    unsigned filavail, const void *filval_buf, uint32_t minbits, unsigned long_long minval, double D_val)
+{
+   long_long 	sminval = *(long_long*)&minval; /* for signed integer types */
+   ck_err_t 	ret_value=SUCCEED;
+
+   if(type == t_float)
+      Z_scaleoffset_postdecompress_3(float, data, d_nelmts, filavail, filval_buf, minbits, sminval, D_val)
+   else if(type == t_double)
+      Z_scaleoffset_postdecompress_3(double, data, d_nelmts, filavail, filval_buf, minbits, sminval, D_val)
+
+done:
+   return(ret_value);
+}
+
 
 /* 
  * scaleoffset filter 
@@ -938,53 +1349,67 @@ static size_t
 Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
 	ck_size_t nbytes, ck_size_t *buf_size, void **buf)
 {
-    ck_size_t ret_value = 0;           /* return value */
-    ck_size_t size_out  = 0;           /* size of output buffer */
-    unsigned d_nelmts = 0;          /* number of data elements in the chunk */
-    unsigned dtype_class;           /* datatype class */
-    unsigned dtype_sign;            /* integer datatype sign */
-    unsigned filavail;              /* flag indicating if fill value is defined or not */
-    Z_SO_scale_type_t scale_type = 0;/* scale type */
-    int scale_factor = 0;           /* scale factor */
-    double D_val = 0.0;             /* decimal scale factor */
-    uint32_t minbits = 0;           /* minimum number of bits to store values */
-    unsigned long_long minval= 0;   /* minimum value of input buffer */
-    enum Z_scaleoffset_type type;   /* memory type corresponding to dataset datatype */
-    int need_convert = FALSE;       /* flag indicating convertion of byte order */
-    unsigned char *outbuf = NULL;   /* pointer to new output buffer */
-    unsigned buf_offset = 21;       /* buffer offset because of parameters stored in file */
-    unsigned i;                     /* index */
-    parms_atomic p;                 /* paramters needed for compress/decompress functions */
+    ck_size_t 	ret_value=0;           	/* return value */
+    ck_size_t 	size_out=0;           	/* size of output buffer */
+    unsigned 	d_nelmts=0;          	/* number of data elements in the chunk */
+    unsigned 	dtype_class;           	/* datatype class */
+    unsigned 	dtype_sign;            	/* integer datatype sign */
+    unsigned 	filavail;              	/* flag indicating if fill value is defined or not */
+    int 	scale_factor=0;         /* scale factor */
+    double 	D_val=0.0;             	/* decimal scale factor */
+    uint32_t 	minbits=0;           	/* minimum number of bits to store values */
+    int 	need_convert=FALSE;     /* flag indicating convertion of byte order */
+    unsigned 	char *outbuf=NULL;   	/* pointer to new output buffer */
+    unsigned 	buf_offset=21;       	/* buffer offset because of parameters stored in file */
+    unsigned 	i;                     	/* index */
+    DT_order_t 	native_order;
+    unsigned 	long_long 	minval= 0;   	/* minimum value of input buffer */
+    enum Z_scaleoffset_type	type;   	/* memory type corresponding to dataset datatype */
+    Z_SO_scale_type_t 		scale_type = 0;	/* scale type */
+    so_parms_atomic 		p;      	/* paramters needed for compress/decompress functions */
 
+    if (debug_verbose())
+        printf("Applying scaleoffset filter ...\n");
 
-    if(cd_nelmts != Z_SCALEOFFSET_TOTAL_NPARMS)
-        printf("invalid scaleoffset number of paramters");
+    if(cd_nelmts != Z_SCALEOFFSET_TOTAL_NPARMS) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid # of parameters", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
 
+#ifdef HAVE_BIG_ENDIAN
+    native_order = DT_ORDER_BE;
+#else
+    native_order = DT_ORDER_LE;
+#endif
+printf("native_order in scaleoffest is %u\n", native_order);
 
     /* Check if memory byte order matches dataset datatype byte order */
-    switch(H5T_native_order_g) {
-        case H5T_ORDER_LE:      /* memory is little-endian byte order */
-            if(cd_values[H5Z_SCALEOFFSET_PARM_ORDER] == H5Z_SCALEOFFSET_ORDER_BE)
+    switch(native_order) {
+	case DT_ORDER_LE:      /* memory is little-endian byte order */
+            if (cd_values[Z_SCALEOFFSET_PARM_ORDER] == Z_SCALEOFFSET_ORDER_BE)
                 need_convert = TRUE;
             break;
 
-        case H5T_ORDER_BE:      /* memory is big-endian byte order */
-            if(cd_values[H5Z_SCALEOFFSET_PARM_ORDER] == H5Z_SCALEOFFSET_ORDER_LE)
+        case DT_ORDER_BE:      /* memory is big-endian byte order */
+            if(cd_values[Z_SCALEOFFSET_PARM_ORDER] == Z_SCALEOFFSET_ORDER_LE)
                 need_convert = TRUE;
             break;
 
         default:
-            HGOTO_ERROR(H5E_PLINE, H5E_BADTYPE, 0, "bad H5T_NATIVE_INT endianness order")
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid endianness order", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
     } /* end switch */
 
     /* copy filter parameters to local variables */
-    d_nelmts     = cd_values[H5Z_SCALEOFFSET_PARM_NELMTS];
-    dtype_class  = cd_values[H5Z_SCALEOFFSET_PARM_CLASS];
-    dtype_sign   = cd_values[H5Z_SCALEOFFSET_PARM_SIGN];
-    filavail     = cd_values[H5Z_SCALEOFFSET_PARM_FILAVAIL];
-    scale_factor = (int) cd_values[H5Z_SCALEOFFSET_PARM_SCALEFACTOR];
-    scale_type   = cd_values[H5Z_SCALEOFFSET_PARM_SCALETYPE];
-    /* check and assign proper values set by user to related parameters
+    d_nelmts     = cd_values[Z_SCALEOFFSET_PARM_NELMTS];
+    dtype_class  = cd_values[Z_SCALEOFFSET_PARM_CLASS];
+    dtype_sign   = cd_values[Z_SCALEOFFSET_PARM_SIGN];
+    filavail     = cd_values[Z_SCALEOFFSET_PARM_FILAVAIL];
+    scale_factor = (int)cd_values[Z_SCALEOFFSET_PARM_SCALEFACTOR];
+    scale_type   = cd_values[Z_SCALEOFFSET_PARM_SCALETYPE];
+
+    /* 
+     * Check and assign proper values set by user to related parameters
      * scale type can be H5Z_SO_FLOAT_DSCALE (0), H5Z_SO_FLOAT_ESCALE (1) or H5Z_SO_INT (other)
      * H5Z_SO_FLOAT_DSCALE : floating-point type, variable-minimum-bits method,
      *                      scale factor is decimal scale factor
@@ -992,33 +1417,43 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
      *                      scale factor is the fixed minimum number of bits
      * H5Z_SO_INT          : integer type, scale_factor is minimum number of bits
      */
-    if(dtype_class==H5Z_SCALEOFFSET_CLS_FLOAT) { /* floating-point type */
-        if(scale_type!=H5Z_SO_FLOAT_DSCALE && scale_type!=H5Z_SO_FLOAT_ESCALE)
-            HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, 0, "invalid scale type")
+    if (dtype_class == Z_SCALEOFFSET_CLS_FLOAT) { /* floating-point type */
+        if(scale_type != Z_SO_FLOAT_DSCALE && scale_type != Z_SO_FLOAT_ESCALE) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid scale type", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
     }
 
-    if(dtype_class==H5Z_SCALEOFFSET_CLS_INTEGER) { /* integer type */
-        if(scale_type!=H5Z_SO_INT)
-            HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, 0, "invalid scale type")
+    if (dtype_class==Z_SCALEOFFSET_CLS_INTEGER) { /* integer type */
+        if(scale_type != Z_SO_INT) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid scale type", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
 
-        /* if scale_factor is less than 0 for integer, library will reset it to 0
-         * in this case, library will calculate the minimum-bits
+        /* 
+	 * If scale_factor is less than 0 for integer, library will reset it to 0.
+         * In this case, library will calculate the minimum-bits
          */
-        if(scale_factor < 0) scale_factor = 0;
+        if (scale_factor < 0) 
+	    scale_factor = 0;
     }
 
     /* fixed-minimum-bits method is not implemented and is forbidden */
-    if(scale_type==H5Z_SO_FLOAT_ESCALE)
-         HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, 0, "E-scaling method not supported")
+    if(scale_type == Z_SO_FLOAT_ESCALE) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Unsupported E-scaling method", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
 
-    if(scale_type==H5Z_SO_FLOAT_DSCALE) { /* floating-point type, variable-minimum-bits */
+    if (scale_type == Z_SO_FLOAT_DSCALE) { /* floating-point type, variable-minimum-bits */
         D_val = (double)scale_factor;
     } else { /* integer type, or floating-point type with fixed-minimum-bits method */
-        if(scale_factor > (int)(cd_values[H5Z_SCALEOFFSET_PARM_SIZE] * 8))
-            HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, 0, "minimum number of bits exceeds maximum")
+        if (scale_factor > (int)(cd_values[Z_SCALEOFFSET_PARM_SIZE] * 8)) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Minimum # of bits exceeds maximum", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
 
         /* no need to process data */
-        if(scale_factor == (int)(cd_values[H5Z_SCALEOFFSET_PARM_SIZE] * 8)) {
+        if (scale_factor == (int)(cd_values[Z_SCALEOFFSET_PARM_SIZE] * 8)) {
             ret_value = *buf_size;
             goto done;
         }
@@ -1026,30 +1461,32 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
     }
 
     /* prepare paramters to pass to compress/decompress functions */
-    p.size = cd_values[H5Z_SCALEOFFSET_PARM_SIZE];
-    p.mem_order = H5T_native_order_g;
+    p.size = cd_values[Z_SCALEOFFSET_PARM_SIZE];
+    p.mem_order = native_order;
     /* input; decompress */
-    if (flags & H5Z_FLAG_REVERSE) {
-        /* retrieve values of minbits and minval from input compressed buffer
-         * retrieve them corresponding to how they are stored during compression
+    if (flags & Z_FLAG_REVERSE) {
+        /* 
+	 * Retrieve values of minbits and minval from input compressed buffer.
+         * Retrieve them corresponding to how they are stored during compression.
          */
-        uint32_t minbits_mask = 0;
-        unsigned long_long minval_mask = 0;
-        unsigned minval_size = 0;
+        uint32_t 	minbits_mask = 0;
+        unsigned 	long_long minval_mask = 0;
+        unsigned 	minval_size = 0;
 
         minbits = 0;
         for(i = 0; i < 4; i++) {
-            minbits_mask = ((unsigned char *)*buf)[i];
+	    minbits_mask = ((unsigned char *)*buf)[i];
             minbits_mask <<= i*8;
             minbits |= minbits_mask;
         }
 
-        /* retrieval of minval takes into consideration situation where sizeof
+        /* 
+	 * Retrieval of minval takes into consideration situation where sizeof
          * unsigned long_long (datatype of minval) may change from compression
          * to decompression, only smaller size is used
          */
         minval_size = sizeof(unsigned long_long) <= ((unsigned char *)*buf)[4] ?
-                      sizeof(unsigned long_long) : ((unsigned char *)*buf)[4];
+			sizeof(unsigned long_long) : ((unsigned char *)*buf)[4];
         minval = 0;
         for(i = 0; i < minval_size; i++) {
             minval_mask = ((unsigned char *)*buf)[5+i];
@@ -1064,16 +1501,18 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
         size_out = d_nelmts * p.size;
 
         /* allocate memory space for decompressed buffer */
-        if(NULL==(outbuf = H5MM_malloc(size_out)))
-            HGOTO_ERROR(H5E_RESOURCE, H5E_NOSPACE, 0, "memory allocation failed for scaleoffset decompression")
+        if(NULL == (outbuf = malloc(size_out))) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Internal allocation error", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
 
         /* special case: minbits equal to full precision */
         if(minbits == p.size * 8) {
-            HDmemcpy(outbuf, (unsigned char*)(*buf)+buf_offset, size_out);
+	    memcpy(outbuf, (unsigned char*)(*buf)+buf_offset, size_out);
 
             /* convert to dataset datatype endianness order if needed */
             if(need_convert)
-                H5Z_scaleoffset_convert(outbuf, d_nelmts, p.size);
+                Z_scaleoffset_convert(outbuf, d_nelmts, p.size);
 
             *buf = outbuf;
             outbuf = NULL;
@@ -1084,31 +1523,36 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
 
         /* decompress the buffer if minbits not equal to zero */
         if(minbits != 0)
-            H5Z_scaleoffset_decompress(outbuf, d_nelmts, (unsigned char*)(*buf)+buf_offset, p);
+            Z_scaleoffset_decompress(outbuf, d_nelmts, (unsigned char*)(*buf)+buf_offset, p);
         else {
             /* fill value is not defined and all data elements have the same value */
-            for(i = 0; i < size_out; i++) outbuf[i] = 0;
+            for (i = 0; i < size_out; i++) 
+		outbuf[i] = 0;
         }
 
         /* before postprocess, get memory type */
-        if((type = H5Z_scaleoffset_get_type(dtype_class, (unsigned)p.size, dtype_sign)) == 0)
-            HGOTO_ERROR(H5E_PLINE, H5E_BADTYPE, 0, "cannot use C integer datatype for cast")
+        if((type = Z_scaleoffset_get_type(dtype_class, (unsigned)p.size, dtype_sign)) == 0) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot get memory type", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
 
         /* postprocess after decompression */
-        if(dtype_class==H5Z_SCALEOFFSET_CLS_INTEGER)
-            H5Z_scaleoffset_postdecompress_i(outbuf, d_nelmts, type, filavail,
-                                             &cd_values[H5Z_SCALEOFFSET_PARM_FILVAL], minbits, minval);
+        if(dtype_class==Z_SCALEOFFSET_CLS_INTEGER)
+            Z_scaleoffset_postdecompress_i(outbuf, d_nelmts, type, filavail,
+                                             &cd_values[Z_SCALEOFFSET_PARM_FILVAL], minbits, minval);
 
-        if(dtype_class==H5Z_SCALEOFFSET_CLS_FLOAT)
-            if(scale_type==0) { /* variable-minimum-bits method */
-                if(H5Z_scaleoffset_postdecompress_fd(outbuf, d_nelmts, type, filavail,
-                   &cd_values[H5Z_SCALEOFFSET_PARM_FILVAL], minbits, minval, D_val)==FAIL)
-                    HGOTO_ERROR(H5E_PLINE, H5E_BADTYPE, 0, "post-decompression failed")
+        if(dtype_class==Z_SCALEOFFSET_CLS_FLOAT)
+            if (scale_type==0) { /* variable-minimum-bits method */
+                if (Z_scaleoffset_postdecompress_fd(outbuf, d_nelmts, type, filavail,
+			&cd_values[Z_SCALEOFFSET_PARM_FILVAL], minbits, minval, D_val) == FAIL) {
+		    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Internal post-decompression failed", -1, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
             }
 
         /* after postprocess, convert to dataset datatype endianness order if needed */
         if(need_convert)
-            H5Z_scaleoffset_convert(outbuf, d_nelmts, p.size);
+            Z_scaleoffset_convert(outbuf, d_nelmts, p.size);
     }
 
     /* free the input buffer */
@@ -1121,7 +1565,7 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
     ret_value = size_out;
 
 done:
-    if(outbuf)
+    if (outbuf)
         free(outbuf);
     return(ret_value);
 }

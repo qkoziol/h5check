@@ -54,7 +54,9 @@ Z_class_t Z_SZIP[1];
 
 
 
-/* nbit filter */
+/* 
+ * nbit filter 
+ */
 Z_class_t Z_NBIT[1];
 
 #define Z_NBIT_ATOMIC          1     /* Atomic datatype class: integer/floating-point */
@@ -66,29 +68,59 @@ Z_class_t Z_NBIT[1];
 #define Z_NBIT_ORDER_BE        1     /* Big endian for datatype byte order */
 
 
-/* scaleoffset filter */
+/* 
+ * scaleoffset filter 
+ */
 Z_class_t Z_SCALEOFFSET[1];
 
-#define Z_SCALEOFFSET_TOTAL_NPARMS     20   /* Total number of parameters for filter */
 typedef enum Z_SO_scale_type_t {
     Z_SO_FLOAT_DSCALE = 0,
     Z_SO_FLOAT_ESCALE = 1,
     Z_SO_INT          = 2
 } Z_SO_scale_type_t;
 
-/* Values to decide if EDC is enabled for reading data */
-typedef enum Z_EDC_t {
-    Z_ERROR_EDC       = -1,   /* error value */
-    Z_DISABLE_EDC     = 0,
-    Z_ENABLE_EDC      = 1,
-    Z_NO_EDC          = 2     /* must be the last */
-} Z_EDC_t;
+enum Z_scaleoffset_type {
+    t_bad = 0,
+    t_uchar = 1,
+    t_ushort,
+    t_uint,
+    t_ulong,
+    t_ulong_long,
+    t_schar,
+    t_short,
+    t_int,
+    t_long,
+    t_long_long,
+    t_float,
+    t_double
+};
+
+#define Z_SCALEOFFSET_TOTAL_NPARMS     20   /* Total number of parameters for filter */
+#define Z_SCALEOFFSET_ORDER_LE         0    /* Little endian (datatype byte order) */
+#define Z_SCALEOFFSET_ORDER_BE         1    /* Big endian (datatype byte order) */
+#define Z_SCALEOFFSET_PARM_SCALETYPE   0    /* "User" parameter for scale type */
+#define Z_SCALEOFFSET_PARM_SCALEFACTOR 1    /* "User" parameter for scale factor */
+#define Z_SCALEOFFSET_PARM_NELMTS      2    /* "Local" parameter for number of elements in the chunk */
+#define Z_SCALEOFFSET_PARM_CLASS       3    /* "Local" parameter for datatype class */
+#define Z_SCALEOFFSET_PARM_SIZE        4    /* "Local" parameter for datatype size */
+#define Z_SCALEOFFSET_PARM_SIGN        5    /* "Local" parameter for integer datatype sign */
+#define Z_SCALEOFFSET_PARM_ORDER       6    /* "Local" parameter for datatype byte order */
+#define Z_SCALEOFFSET_PARM_FILAVAIL    7    /* "Local" parameter for dataset fill value existence */
+#define Z_SCALEOFFSET_PARM_FILVAL      8    /* "Local" parameter for start location to store dataset fill value */
+#define Z_SCALEOFFSET_CLS_INTEGER      0    /* Integer (datatype class) */
+#define Z_SCALEOFFSET_CLS_FLOAT        1    /* Floatig-point (datatype class) */
+#define Z_SCALEOFFSET_SGN_NONE         0    /* Unsigned integer type */
+#define Z_SCALEOFFSET_SGN_2            1    /* Two's complement signed integer type */
+#define Z_SCALEOFFSET_FILL_DEFINED     1    /* Fill value is defined */
 
 
+/* 
+ * General filter defines
+ */
 
-#define 	Z_FLAG_INVMASK        	0xff00  /*invocation flag mask          */
-#define 	Z_FLAG_REVERSE  	0x0100  /*reverse direction; read       */
-#define 	Z_FLAG_SKIP_EDC   	0x0200  /*skip EDC filters for read     */
+#define Z_FLAG_INVMASK        	0xff00  /*invocation flag mask          */
+#define Z_FLAG_REVERSE  	0x0100  /*reverse direction; read       */
+#define Z_FLAG_SKIP_EDC   	0x0200  /*skip EDC filters for read     */
 
 /* Filter IDs */
 #define Z_FILTER_ERROR        (-1)    /*no filter                     */
@@ -109,3 +141,10 @@ typedef enum Z_EDC_t {
                                          * so the format would have to be
                                          * changed to accomodate that) */
 
+/* Values to decide if EDC is enabled for reading data */
+typedef enum Z_EDC_t {
+    Z_ERROR_EDC       = -1,   /* error value */
+    Z_DISABLE_EDC     = 0,
+    Z_ENABLE_EDC      = 1,
+    Z_NO_EDC          = 2     /* must be the last */
+} Z_EDC_t;

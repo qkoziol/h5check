@@ -35,6 +35,9 @@
 typedef size_t                  ck_size_t;
 typedef unsigned long long      ck_hsize_t;
 
+/* NEED to check into this more */
+#define 	long_long   long long
+
 
 /* for handling hard links */
 typedef struct obj_t {
@@ -858,7 +861,6 @@ typedef struct OBj_bogus_t {
 #define OBJ_FILTER_VERSION_LATEST 	OBJ_FILTER_VERSION_2
 #define OBJ_MAX_NFILTERS         	32 
 
-/* NEED:define these 3 HERE FOR NOW:when filter is added, there will be definition there */
 #define OBJ_FILTER_RESERVED    	256     /* filter ids below this value are reserved for library use */
 #define Z_COMMON_NAME_LEN    	12
 #define Z_COMMON_CD_VALUES    	4
