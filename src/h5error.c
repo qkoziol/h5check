@@ -32,6 +32,7 @@ static  const   secondary_err_mesg_t secondary_err_mesg_g[] = {
         {ERR_LEV_2A,    "2A-Data Object Headers"},
         {ERR_LEV_2A1a,  "2A1a-Version 1 Data Object Header Prefix"},
         {ERR_LEV_2A1b,  "2A1b-Version 2 Data Object Header Prefix"},
+        {ERR_LEV_2A2,   "2A2-Shared Message"},
         {ERR_LEV_2A2a,  "2A2a-Header Message: NIL"},
         {ERR_LEV_2A2b,  "2A2b-Header Message: Dataspace"},
         {ERR_LEV_2A2c,  "2A2c-Header Message: Link Info"},

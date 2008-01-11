@@ -25,6 +25,7 @@ typedef enum secondary_err_t {
         ERR_LEV_2A,
         ERR_LEV_2A1a,
         ERR_LEV_2A1b,
+        ERR_LEV_2A2,	/* Shared Message */
         ERR_LEV_2A2a,	/* NIL */
         ERR_LEV_2A2b,	/* Dataspace */
         ERR_LEV_2A2c,	/* Link Info */

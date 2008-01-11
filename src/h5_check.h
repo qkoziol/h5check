@@ -13,6 +13,10 @@
 #include <unistd.h>
 
 
+#define FORMAT_ONE_SIX		1.6
+#define FORMAT_ONE_EIGHT	1.8
+#define DEFAULT_FORMAT		FORMAT_ONE_EIGHT
+
 /* exit status */
 #define         EXIT_SUCCESS		0
 #define         EXIT_COMMAND_FAILURE    1
@@ -1161,8 +1165,8 @@ typedef struct OBJ_chunk_t {
 
 
 /* size of the header for the data object headers */
-#define OBJ_SIZEOF_HDR(O)                                                     \
-    (((O)->version == OBJ_VERSION_1)                                          \
+#define OBJ_SIZEOF_HDR_VERS(V, O)                                                     \
+    (((V) == OBJ_VERSION_1)                                          \
         ?                                                                     \
             OBJ_ALIGN_OLD(1 +   /*version number        */                    \
                 1 +             /*reserved              */                    \
@@ -1186,6 +1190,9 @@ typedef struct OBJ_chunk_t {
                 (1 << ((O)->flags & OBJ_HDR_CHUNK0_SIZE)) + /*chunk 0 data size */ \
                 OBJ_SIZEOF_CHKSUM) /*checksum size      */                    \
     )
+
+#define OBJ_SIZEOF_HDR(O)                                                     \
+    OBJ_SIZEOF_HDR_VERS((O)->version, O)
 
 /*
  * Size of checksum for each chunk
@@ -2028,6 +2035,7 @@ char     	*FD_get_fname(driver_t *, ck_addr_t);
 
 /* command line option */
 int     	g_verbose_num;
+double		g_format_num;
 ck_addr_t 	g_obj_addr;
 void            print_version(const char *);
 void            usage(char *);

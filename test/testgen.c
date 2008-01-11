@@ -1947,7 +1947,6 @@ static void gen_array(hid_t fid1, int fill_dataset)
 
 }
 
-
 /* main function of test generator */
 
 int main(int argc, char *argv[])

@@ -1019,11 +1019,21 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     logical = get_logical_addr(p, start_buf, logi_base);
     version = *p++;
 
-    if (version < OBJ_SDS_VERSION_1 || version > OBJ_SDS_VERSION_2) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2b, 
-	    "Dataspace Message:Wrong version number", logical, &badinfo);
-	CK_SET_ERR(FAIL)
+    /* version adjusted if error for further continuation */
+    if (g_format_num == FORMAT_ONE_SIX) {
+	if (version != OBJ_SDS_VERSION_1) {
+	    badinfo = version;
+	    version = OBJ_SDS_VERSION_1;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message v.1:Wrong version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+    } else {
+	if (version < OBJ_SDS_VERSION_1 || version > OBJ_SDS_VERSION_2) {
+	    badinfo = version;
+	    version = OBJ_SDS_VERSION_2;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message:Wrong version number", logical, &badinfo);
+	       	CK_SET_ERR(FAIL)
+	}
     }
 
     logical = get_logical_addr(p, start_buf, logi_base);
@@ -1125,6 +1135,11 @@ OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     assert(file);
     assert(p);
 
+    if (g_format_num == FORMAT_ONE_SIX) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2c, "Link Info Message:Unsupported message", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
     /* Version of message */
     logical = get_logical_addr(p, start_buf, logi_base);
     version = *p++;
@@ -1200,10 +1215,23 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
     logical = get_logical_addr(*pp, start_buf, logi_base);
     UINT32DECODE(*pp, flags);
     version = (flags>>4) & 0x0f;
-    if (version < DT_VERSION_1 || version > DT_VERSION_3) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2d, "Datatype Message:Bad version number", logical, &badinfo);
-	CK_SET_ERR(FAIL)
+
+
+    /* version is adjusted if error for continuation */
+    if (g_format_num == FORMAT_ONE_SIX) {
+	if (version != DT_VERSION_1 && version != DT_VERSION_2) {
+	    badinfo = version;
+	    version = DT_VERSION_2;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2d, "Datatype Message:Bad version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+    } else {
+	if (version < DT_VERSION_1 || version > DT_VERSION_3) {
+	    badinfo = version;
+	    version = DT_VERSION_3;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2d, "Datatype Message:Bad version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
     }
 
     dt->shared->type = (DT_class_t)(flags & 0x0f);
@@ -1236,16 +1264,23 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 
 	case DT_FLOAT:  /* Floating-Point datatypes */
 	    dt->shared->u.atomic.order = (flags & 0x1) ? DT_ORDER_BE : DT_ORDER_LE;
-            if(version >= DT_VERSION_3) {
-                if((flags & 0x40) && !(flags & 0x1)) {
+	    if (version == DT_VERSION_1 || version == DT_VERSION_2) {
+                if (flags & 0x40) { /* bit 6 should be reserved */
 		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
-		       	"Datatype Message:Floating-Point:Bad byte order for VAX-endian", logical, NULL);
+		       	"Datatype Message:Floating-Point:Bit 6 should be reserved", logical, NULL);
+		    CK_SET_ERR(FAIL)
 		}
-
-                /* VAX order if both 1st and 6th bits are turned on*/
-                if(flags & 0x40)
-                    dt->shared->u.atomic.order = DT_ORDER_VAX;
-            } 
+	    } else {
+		if (version == DT_VERSION_3) {
+		    if ((flags & 0x40) && (flags & 0x1))
+			    dt->shared->u.atomic.order = DT_ORDER_VAX;
+		    else {
+			error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+			    "Datatype Message:Floating-Point:Bad byte order for VAX-endian", logical, NULL);
+			CK_SET_ERR(FAIL)
+		    }
+		} 
+	    }
             dt->shared->u.atomic.lsb_pad = (flags & 0x2) ? DT_PAD_ONE : DT_PAD_ZERO;
             dt->shared->u.atomic.msb_pad = (flags & 0x4) ? DT_PAD_ONE : DT_PAD_ZERO;
             dt->shared->u.atomic.u.f.pad = (flags & 0x8) ? DT_PAD_ONE : DT_PAD_ZERO;
@@ -1908,6 +1943,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     int		ret_value=SUCCEED;
     ck_addr_t	logical;
     int		badinfo;
+    unsigned	version;
 
 
     assert(file);
@@ -1922,14 +1958,26 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     }
 
     logical = get_logical_addr(p, start_buf, logi_base);
-    mesg->version = *p++;
-    if (mesg->version < OBJ_FILL_VERSION || mesg->version > OBJ_FILL_VERSION_LATEST) {
-	badinfo = mesg->version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2f, "FIll Value Message:Bad version number", logical, &badinfo);
-	CK_SET_ERR(FAIL)
+    mesg->version = version = *p++;
+
+    /* version is adjusted if error for further continuation */
+    if (g_format_num == FORMAT_ONE_SIX) {
+	if (version != OBJ_FILL_VERSION && version != OBJ_FILL_VERSION_2) {
+	    badinfo = version;
+	    version = OBJ_FILL_VERSION_2;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2f, "FIll Value Message:Bad version number", logical, &badinfo);
+		CK_SET_ERR(FAIL)
+	}
+    } else {
+	if (version < OBJ_FILL_VERSION || version > OBJ_FILL_VERSION_LATEST) {
+	    badinfo = version;
+	    version = OBJ_FILL_VERSION_LATEST;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2f, "FIll Value Message:Bad version number", logical, &badinfo);
+		CK_SET_ERR(FAIL)
+	}
     }
 
-    if (mesg->version < OBJ_FILL_VERSION_3) {
+    if (version < OBJ_FILL_VERSION_3) {
         /* Space allocation time */
 	logical = get_logical_addr(p, start_buf, logi_base);
         mesg->alloc_time = (fill_alloc_time_t)*p++;
@@ -1966,8 +2014,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
             if (mesg->size > 0) {
 		CHECK_OVERFLOW(mesg->size, ssize_t, ck_size_t);
 		if (NULL == (mesg->buf=malloc((ck_size_t)mesg->size))) {
-		    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-			"Fill Value Message:Internal allocation error", logical, NULL);
+		    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Fill Value Message:Internal allocation error", logical, NULL);
 		    CK_GOTO_DONE(FAIL)
 		}
 		memcpy(mesg->buf, p, (ck_size_t)mesg->size);
@@ -2010,8 +2057,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
             /* Fill value */
             CHECK_OVERFLOW(mesg->size, ssize_t, ck_size_t);
             if(NULL == (mesg->buf = malloc((ck_size_t)mesg->size))) {
-		error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-		    "Fill Value Message:Internal allocation error", logical, NULL);
+		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Fill Value Message:Internal allocation error", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
             memcpy(mesg->buf, p, (ck_size_t)mesg->size);
@@ -2051,6 +2097,11 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 
     assert(file);
     assert(p);
+
+    if (g_format_num == FORMAT_ONE_SIX) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Unsupported message", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
 
     /* Allocate space for message */
     if((lnk = calloc(1, sizeof (OBJ_link_t))) == NULL) {
@@ -2271,8 +2322,7 @@ OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     version = *p++;
     if (version != OBJ_EDF_VERSION) {
 	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2h, 
-	    "External Data Files Message:Bad version number", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2h, "External Data Files Message:Bad version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
@@ -2355,6 +2405,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
     int			ret_value=SUCCEED;
     ck_addr_t		logical;
     int			badinfo;
+    unsigned		version;
 
     assert(file);
     assert(p);
@@ -2362,21 +2413,23 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
     logical = get_logical_addr(p, start_buf, logi_base);
 
     if ((mesg=calloc(1, sizeof(OBJ_layout_t)))==NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	  "Layout Message:Internal allocation error", logical, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Layout Message:Internal allocation error", logical, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
     /* Version. 1 when space allocated; 2 when space allocation is delayed */
     logical = get_logical_addr(p, start_buf, logi_base);
-    mesg->version = *p++;
-    if (mesg->version < OBJ_LAYOUT_VERSION_1 || mesg->version>OBJ_LAYOUT_VERSION_3) {
-	error_push(ERR_LEV_2, ERR_LEV_2A2i, 
-	  "Layout Message:Bad version number", logical, NULL);
+    mesg->version = version = *p++;
+
+    /* version is adjusted if error for further continuation */
+    if (version < OBJ_LAYOUT_VERSION_1 || version>OBJ_LAYOUT_VERSION_3) {
+	badinfo = version;
+	version = OBJ_LAYOUT_VERSION_3;
+	error_push(ERR_LEV_2, ERR_LEV_2A2i, "Layout Message:Bad version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
-    if(mesg->version < OBJ_LAYOUT_VERSION_3) {  /* version 1 & 2 */
+    if (version < OBJ_LAYOUT_VERSION_3) {  /* version 1 & 2 */
         unsigned        ndims;    /* Num dimensions in chunk */
 
         /* Dimensionality */
@@ -2558,6 +2611,11 @@ OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     assert(file);
     assert(p);
 
+    if (g_format_num == FORMAT_ONE_SIX) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2k, "Group Info Message:Unsupported message", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
     if ((mesg = calloc(1, sizeof(OBJ_ginfo_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	    "Group Info Message:Internal allocation error", logical, NULL);
@@ -2637,19 +2695,31 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 
     logical = get_logical_addr(p, start_buf, logi_base);
     version = *p++;
-    if (version < OBJ_FILTER_VERSION_1 || version > OBJ_FILTER_VERSION_LATEST) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2l, 
-	    "Filter Pipeline Message:Bad version number", logical, &badinfo);
-	CK_SET_ERR(FAIL)
+    
+    /* version is adjusted if error for further continuation */
+    if (g_format_num == FORMAT_ONE_SIX) {
+	if (version != OBJ_FILTER_VERSION_1) {
+	    badinfo = version;
+	    version = OBJ_FILTER_VERSION_1;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2l, 
+		"Filter Pipeline Message:Bad version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+    } else {
+	if (version < OBJ_FILTER_VERSION_1 || version > OBJ_FILTER_VERSION_LATEST) {
+	    badinfo = version;
+	    version = OBJ_FILTER_VERSION_LATEST;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2l, "Filter Pipeline Message:Bad version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
     }
 
     logical = get_logical_addr(p, start_buf, logi_base);
     pline->nused = *p++;
-    if (pline->nused > OBJ_MAX_NFILTERS) {
+    if ((pline->nused > OBJ_MAX_NFILTERS) || (pline->nused <= 0)) {
 	badinfo = pline->nused;
 	error_push(ERR_LEV_2, ERR_LEV_2A2l, 
-	    "Filter Pipeline Message:Too many filters", logical, &badinfo);
+	    "Filter Pipeline Message:Invalid # of filters", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
@@ -2669,7 +2739,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 	logical = get_logical_addr(p, start_buf, logi_base);
 
 	/* Length of filter name */
-        if(version > OBJ_FILTER_VERSION_1 && pline->filter[i].id < OBJ_FILTER_RESERVED)
+        if (version > OBJ_FILTER_VERSION_1 && pline->filter[i].id < OBJ_FILTER_RESERVED)
             name_length = 0;
         else {
             UINT16DECODE(p, name_length);
@@ -2726,7 +2796,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
             for(j = 0; j < pline->filter[i].cd_nelmts; j++)
                 UINT32DECODE(p, pline->filter[i].cd_values[j]);
 
-            if(version == OBJ_FILTER_VERSION_1)
+            if (version == OBJ_FILTER_VERSION_1)
                 if(pline->filter[i].cd_nelmts % 2)
                     p += 4; /*padding*/
         }
@@ -2778,12 +2848,22 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     logical = get_logical_addr(p, start_buf, logi_base);
 
     version = *p++;
-    /* The format specification only describes version 1 of attribute messages */
-    if (version < OBJ_ATTR_VERSION_1 || version > OBJ_ATTR_VERSION_LATEST) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2m, 
-	    "Attribute Message:Bad version number", logical, &badinfo);
-	CK_SET_ERR(FAIL)
+
+    /* version is adjusted if error for further continuation */
+    if (g_format_num == FORMAT_ONE_SIX) {
+	if (version != OBJ_ATTR_VERSION_1 && version != OBJ_ATTR_VERSION_2) {
+	    badinfo = version;
+	    version = OBJ_ATTR_VERSION_2;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Bad version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+    } else {
+	if (version < OBJ_ATTR_VERSION_1 || version > OBJ_ATTR_VERSION_LATEST) {
+	    badinfo = version;
+	    version = OBJ_ATTR_VERSION_LATEST;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Bad version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
     }
 
     logical = get_logical_addr(p, start_buf, logi_base);
@@ -2815,8 +2895,7 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     /* Decode and store the name */
     attr->name = NULL;
     if ((attr->name = strdup((const char *)p)) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	    "Attribute Message:Internal allocation error", logical, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Attribute Message:Internal allocation error", logical, NULL);
 	CK_GOTO_DONE(FAIL)
     }
     
@@ -3065,6 +3144,11 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
     assert(file);
     assert(buf);
 
+    if (g_format_num == FORMAT_ONE_SIX) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2p, "Shared Message Table Message:Unsupported message", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
     if ((mesg = calloc(1, sizeof(OBJ_shmesg_table_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	    "Shared Message Table Message:Internal allocation error", -1, NULL);
@@ -3271,6 +3355,11 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
     assert(file);
     assert(buf);
 	
+    if (g_format_num == FORMAT_ONE_SIX) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2t, "B-tree 'K' Values Message:Unsupported message", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
     if ((mesg = calloc(1, sizeof(OBJ_btreek_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	    "B-tree 'K' Values Message:Internal allocation error", -1, NULL);
@@ -3329,6 +3418,11 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf,
     /* check arguments */
     assert(file);
     assert(buf);
+
+    if (g_format_num == FORMAT_ONE_SIX) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2u, "Driver Info Message:Unsupported message", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
 
     if ((mesg = calloc(1, sizeof(OBJ_drvinfo_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
@@ -3393,6 +3487,11 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     /* check args */
     assert(file);
     assert(p);
+
+    if (g_format_num == FORMAT_ONE_SIX) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message:Unsupported message", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
 
     /* Allocate space for message */
     if (NULL == (ainfo = calloc(1, sizeof(OBJ_ainfo_t)))) {
@@ -3466,6 +3565,11 @@ OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, 
     assert(file);
     assert(p);
 
+    if (g_format_num == FORMAT_ONE_SIX) {
+	error_push(ERR_LEV_2, ERR_LEV_2A2w, "Object Reference Count Message:Unsupported message", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
     /* Allocate space for message */
     if(NULL == (refcount = malloc(sizeof(OBJ_refcount_t)))) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
@@ -3477,7 +3581,7 @@ OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, 
     version = *p++;
     if(version != OBJ_REFCOUNT_VERSION) {
 	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Object Reference Count Message: Bad version number", -1, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2w, "Object Reference Count Message: Bad version number", -1, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
@@ -3645,6 +3749,10 @@ addr_decode(global_shared_t *shared, const uint8_t **pp/*in,out*/, ck_addr_t *ad
 	    tmp <<= (i * 8);    /*use tmp to get casting right */
 	    *addr_p |= tmp;
         } else if (!all_zero) {
+	    if (**pp != 0) {
+		*addr_p = CK_ADDR_UNDEF;
+		break;
+	    }
 	    assert(0 == **pp);  /*overflow */
         }
     }
@@ -3839,12 +3947,24 @@ check_superblock(driver_t *file)
 
     logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
     super_vers = *p++;
-    if(super_vers > SUPERBLOCK_VERSION_LATEST) {
-	badinfo = super_vers;
-	error_push(ERR_LEV_0, ERR_LEV_0A, 
-	    "Superblock:Version number should be 0, 1 or 2", logical, &badinfo);
-	CK_SET_ERR(FAIL)
-    }
+
+    /* if super_vers is wrong, it would be adjusted accordingly for validation to continue */
+    if (g_format_num == FORMAT_ONE_SIX) {
+	if ((super_vers != SUPERBLOCK_VERSION_0) && (super_vers != SUPERBLOCK_VERSION_1)) {
+	    badinfo = super_vers;
+	    super_vers = SUPERBLOCK_VERSION_1;
+	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:Version number should be 0 or 1", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+    } else if (g_format_num == DEFAULT_FORMAT) {
+	if (super_vers > SUPERBLOCK_VERSION_LATEST) {
+	    badinfo = super_vers;
+	    super_vers = SUPERBLOCK_VERSION_LATEST;
+	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:Version number should be 0, 1 or 2", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+    } else
+	printf("Invalid library version...shouldn't happen\n");
 
     logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
 
@@ -3869,7 +3989,7 @@ check_superblock(driver_t *file)
     /* Check for older version of superblock format */
     if (super_vers == SUPERBLOCK_VERSION_0 || super_vers == SUPERBLOCK_VERSION_1) {
 	if (debug_verbose())
-	    printf("Version 0/1 superblock is found\n");
+	    printf("Validating version 0/1 superblock...\n");
      	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
 	freespace_vers = *p++;
 
@@ -4081,7 +4201,7 @@ check_superblock(driver_t *file)
 	uint32_t	read_chksum;
 
 	if (debug_verbose())
-	    printf("Version 2 superblock is found\n");
+	    printf("Validating version 2 superblock...\n");
 	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
 	lshared->size_offsets = *p++;
 	if (lshared->size_offsets != 2 && lshared->size_offsets != 4 &&
@@ -4162,12 +4282,18 @@ check_superblock(driver_t *file)
 
 /* should I return mesg ptr instead of idx from find_in_ohdr()? */
     lshared->sohm_tbl = NULL;
-    if(addr_defined(lshared->extension_addr)) {
+    
+    if (addr_defined(lshared->extension_addr) && g_format_num != FORMAT_ONE_EIGHT) {
+	error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:extension should not exist for this library version", logical, &badinfo);
+	CK_SET_ERR(FAIL)
+    }
+
+    if (addr_defined(lshared->extension_addr)) {
 	OBJ_t	*oh;
 	int	idx;
 
 	if (debug_verbose()) {
-	    printf("Superblock extension is found\n");
+	    printf("VALIDATING Superblock extension...\n");
 #ifdef DEBUG
 	    printf("GOING to validate the object header for the superblock extension at %llu...\n", lshared->extension_addr);
 #endif
@@ -4219,33 +4345,6 @@ check_superblock(driver_t *file)
 done:
     return(ret_value);
 } /* end check_superblock */
-
-#ifdef DEBUG
-	printf("base_addr=%llu, super_addr=%llu, stored_eoa=%llu, driver_addr=%llu\n",
-		lshared->base_addr, lshared->super_addr, lshared->stored_eoa, 
-		lshared->driver_addr==CK_ADDR_UNDEF?9999:lshared->driver_addr);
-	printf("name0ffset=%d, header_address=%llu\n", 
-		lshared->root_grp->name_off, lshared->root_grp->header);
-	printf("btree_addr=%llu, heap_addr=%llu\n", 
-		lshared->root_grp->cache.stab.btree_addr, 
-		lshared->root_grp->cache.stab.heap_addr);
-	printf("super_addr = %llu\n", lshared->super_addr);
-	printf("super_vers=%d, freespace_vers=%d, root_sym_vers=%d\n",	
-		super_vers, freespace_vers, root_sym_vers);
-	printf("size_offsets=%d, size_lengths=%d\n",	
-		lshared->size_offsets, lshared->size_lengths);
-	printf("gr_leaf_node_k=%d, gr_int_node_k=%d, file_consist_flg=%d\n",	
-		lshared->gr_leaf_node_k, lshared->gr_int_node_k, lshared->file_consist_flg);
-	printf("base_addr=%llu, freespace_addr=%llu, stored_eoa=%llu, driver_addr=%llu\n",
-		lshared->base_addr, lshared->freespace_addr, lshared->stored_eoa, lshared->driver_addr);
-
-	/* print root group table entry */
-	printf("name0ffset=%d, header_address=%llu\n", 
-		lshared->root_grp->name_off, lshared->root_grp->header);
-	printf("btree_addr=%llu, heap_addr=%llu\n", 
-		lshared->root_grp->cache.stab.btree_addr, 
-		lshared->root_grp->cache.stab.heap_addr);
-#endif
 
 /*
  * Validate  SNOD
@@ -4485,7 +4584,7 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims)
     logical = get_logical_addr(p, start_buf, btree_addr);
     addr_decode(file->shared, (const uint8_t **)&p, &right_sib/*out*/);
 
-#if 0
+#ifdef DEBUG
 	printf("nodeytpe=%d, nodelev=%d, entries=%u, btree_k0=%u, btree_k1=%u, leaf_k=%u\n",
 		nodetype, nodelev, entries, file->shared->btree_k[0], file->shared->btree_k[1], 
 		file->shared->gr_leaf_node_k);
@@ -4495,13 +4594,18 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims)
     /* the remaining node size: key + child pointer */
     key_size = node_key_g[nodetype]->get_sizeof_rkey(file->shared, ndims);
 
+    key_ptr_size = (entries)*SIZEOF_ADDR(file->shared) + (entries+1)*key_size;
+#ifdef BUG_CHECK
     key_ptr_size = (2*file->shared->btree_k[nodetype])*SIZEOF_ADDR(file->shared) +
 	(2*(file->shared->btree_k[nodetype]+1))*key_size;
-#if 0
+#endif
+
+#ifdef DEBUG
 	printf("btree_k[SNODE]=%u, btree_k[ISTORE]=%u\n", file->shared->btree_k[BT_SNODE_ID], 
 		file->shared->btree_k[BT_ISTORE_ID]);
 	printf("key_size=%d, key_ptr_size=%d\n", key_size, key_ptr_size);
 #endif
+
     buffer = malloc(key_ptr_size);
     if (buffer == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
@@ -4509,6 +4613,9 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims)
 	CK_GOTO_DONE(FAIL)
     }
 
+#ifdef DEBUG
+printf("btree_addr+hdr_size=%llu; key_ptr_size=%u\n", btree_addr+hdr_size, key_ptr_size);
+#endif
     if (FD_read(file, btree_addr+hdr_size, key_ptr_size, buffer) == FAIL) {
 	error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree:Unable to read key+child", btree_addr, NULL);
 	CK_GOTO_DONE(FAIL)
@@ -4949,10 +5056,6 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
     unsigned	ndims = 0, local_ndims = 0;
     ck_addr_t	btree_addr;
 
-#ifdef DEBUG
-printf("Entering decode_validate_message()\n");
-#endif
-
     for (i = 0; i < oh->nmesgs; i++) {	
 	start_buf = oh->chunk[oh->mesg[i].chunkno].image;
 	p = oh->mesg[i].raw;
@@ -4995,7 +5098,7 @@ printf("OBJ_FLAG_SHARED is on for message id =%u\n", id);
 	oh->mesg[i].native = mesg;
 
 	if (mesg == NULL) {
-#if 0
+#ifdef DEBUG
 printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n", 
 	logi_base, oh->mesg[i].type->id, logical, oh->mesg[i].raw_size);
 #endif
@@ -5097,9 +5200,8 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 
 
 	    case OBJ_LINFO_ID:
-#ifdef DEBUG
-		printf("Decoded an OBJ_LINFO_ID...going to validate version 2 btree/fractal heap\n");
-#endif
+		if (g_format_num == FORMAT_ONE_SIX)
+		    break;
 		if (addr_defined(((OBJ_linfo_t *)mesg)->corder_bt2_addr)) {
 		    if (check_btree2(file, ((OBJ_linfo_t *)mesg)->corder_bt2_addr, G_BT2_CORDER) != SUCCEED) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2c, 
@@ -5111,10 +5213,6 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 			CK_SET_ERR(SUCCEED)
 		    }
 		} 
-#ifdef DEBUG
-		else 
-		    printf("not defined corder_bt2_addr for OBJ_LINFO_ID\n");
-#endif
 
 		if (addr_defined(((OBJ_linfo_t *)mesg)->name_bt2_addr)) {
 		    if (check_btree2(file, ((OBJ_linfo_t *)mesg)->name_bt2_addr, G_BT2_NAME) != SUCCEED) {
@@ -5127,10 +5225,6 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 			CK_SET_ERR(SUCCEED)
 		    }
 		} 
-#ifdef DEBUG
-		else 
-		    printf("not defined name_bt2_addr for OBJ_LINFO_ID\n");
-#endif
 
 		if (addr_defined(((OBJ_linfo_t *)mesg)->fheap_addr)) {
 		    if (check_fheap(file, ((OBJ_linfo_t *)mesg)->fheap_addr) != SUCCEED) {
@@ -5143,22 +5237,16 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 			CK_SET_ERR(SUCCEED)
 		    }
 		} 
-#ifdef DEBUG
-		else 
-		    printf("not defined fheap_addr for OBJ_LINFO_ID\n");
-#endif
+
 		break;
 
 	    case OBJ_GINFO_ID:
-#ifdef DEBUG
-		printf("Decoded an OBJ_GINFO_ID...nothing more to be done\n");
-#endif
 		break;
 
 	    case OBJ_SHMESG_ID:
-#ifdef DEBUG
-		printf("Got a OBJ_SHMESG_ID...validating version 2 btree/fheap in SOHM table\n");
-#endif
+		if (g_format_num == FORMAT_ONE_SIX)
+		    break;
+
 		if (addr_defined(((OBJ_shmesg_table_t *)mesg)->addr)) {
 #ifdef DEBUG
 		    printf("The SOHM table address from message is %llu; num of indices=%u\n",
@@ -5179,20 +5267,15 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 		break;
 
 	    case OBJ_BTREEK_ID:
-#ifdef DEBUG
-		printf("Got a OBJ_BTREEK_ID...something is done in check_super()\n");
-#endif
 		break;
+
 	    case OBJ_DRVINFO_ID:
-#ifdef DEBUG
-		printf("Got a OBJ_DRVINFO_ID...something is done in check_super()\n");
-#endif
 		break;
 
 	    case OBJ_AINFO_ID:
-#ifdef DEBUG
-		printf("Decoded an OBJ_AINFO_ID...going to validate version 2 btree/fractal heap\n");
-#endif
+		if (g_format_num == FORMAT_ONE_SIX)
+		    break;
+
 		if (addr_defined(((OBJ_ainfo_t *)mesg)->corder_bt2_addr)) {
 		    if (check_btree2(file, ((OBJ_ainfo_t *)mesg)->corder_bt2_addr, A_BT2_CORDER) != SUCCEED) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2v, 
@@ -5231,28 +5314,17 @@ printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n",
 		break;
 
 	    case OBJ_REFCOUNT_ID:
-#ifdef DEBUG
-		printf("Got a OBJ_REFCOUNT_ID...\n");
-#endif
 		break;
 
 	    case OBJ_LINK_ID:
-#ifdef DEBUG
-		printf("Got a OBJ_LINK_ID...\n");
-#endif
 		break;
 
 	    case OBJ_UNKNOWN_ID:
-#ifdef DEBUG
-		printf("Got a OBJ_UNKNOWN_ID...\n");
-#endif
 		break;
 		
 	    default:
-#ifdef DEBUG
-		printf("Done with decode/validate for a TO-BE-HANDLED message id=%d.\n", id);
-#endif
 		break;
+
 	}  /* end switch on id */
     }  /* end for nmesgs */
 
@@ -5332,11 +5404,21 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
 
     /* Version */
     version = *buf++;
-    if (version < OBJ_SHARED_VERSION_1 || version > OBJ_SHARED_VERSION_LATEST) {
-	badinfo = version;
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	  "Internal Shared Message:Bad version number", -1, &badinfo);
-	CK_SET_ERR(FAIL)
+    /* version is adjusted if error for further continuation */
+    if (g_format_num == FORMAT_ONE_SIX) {
+	if (version != OBJ_SHARED_VERSION_1 && version != OBJ_SHARED_VERSION_2) {
+	    badinfo = version;
+	    version = OBJ_SHARED_VERSION_2;
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shared Message:Bad version number", -1, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+    } else {
+	if (version < OBJ_SHARED_VERSION_1 || version > OBJ_SHARED_VERSION_LATEST) {
+	    badinfo = version;
+	    version = OBJ_SHARED_VERSION_LATEST;
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shared Message:Bad version number", -1, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
     }
 
     /* 
@@ -5362,7 +5444,7 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
         if(mesg->type == OBJ_SHARE_TYPE_SOHM) {
 	    if (version < OBJ_SHARED_VERSION_3) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-		    "Internal Shared Message:Inconsistent message type and version", -1, &badinfo);
+		    "Shared Message:Inconsistent message type and version", -1, &badinfo);
 		CK_SET_ERR(FAIL)
 	    }
             memcpy(&mesg->u.heap_id, buf, sizeof(mesg->u.heap_id));
@@ -5378,7 +5460,7 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
 
     if (mesg->type != OBJ_SHARE_TYPE_SOHM) {
 	if (mesg->u.loc.oh_addr == CK_ADDR_UNDEF) {
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal Shared Message:Invalid object header address", 
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shared Message:Invalid object header address", 
 		-1, NULL);
 	    CK_GOTO_DONE(FAIL)
 	}
@@ -5514,6 +5596,432 @@ done:
 /*
  *  Checking object header for both version 1 & 2
  */
+ck_err_t
+check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
+{
+    size_t		chunk_size;
+    size_t      	spec_read_size;
+    size_t		prefix_size;
+    uint8_t		*p, flags, *start_buf;
+    uint8_t		buf[OBJ_SPEC_READ_SIZE];
+    unsigned		nmesgs;
+    unsigned    	curmesg = 0;
+
+    ck_addr_t		chunk_addr;
+    ck_addr_t		logical, logi_base;
+    ck_addr_t   	rel_eoa, abs_eoa;
+
+    int			version, nlink, idx, badinfo;
+    int			ret_value=SUCCEED;
+
+    OBJ_t		*oh=NULL;
+    OBJ_cont_t 		*cont;
+    global_shared_t	*lshared;
+
+
+    /* FORMAT_ONE_EIGHT && object header version 2 SIGNATURE */
+    int			format_objvers_two=FALSE;
+
+    if (debug_verbose())
+	printf("VALIDATING the object header at logical address %llu...\n", obj_head_addr);
+
+    assert(addr_defined(obj_head_addr));
+    idx = table_search(obj_head_addr);
+    if (idx >= 0) { /* FOUND the object */
+	if (obj_table->objs[idx].nlink > 0) {
+	    obj_table->objs[idx].nlink--;
+	    if (!(ret_oh))
+		CK_GOTO_DONE(SUCCEED)
+	} else {
+	    error_push(ERR_LEV_2, ERR_LEV_2A, 
+		"Object Header:Inconsistent reference count", obj_head_addr, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+    }
+
+    lshared = file->shared;
+    start_buf = buf;
+	
+    p = buf;
+    if (CK_ADDR_UNDEF == (abs_eoa = FD_get_eof(file))) {
+	error_push(ERR_FILE, ERR_NONE_SEC, 
+	    "Object Header:Unable to determine file size", obj_head_addr, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+    rel_eoa = abs_eoa - lshared->base_addr;
+    spec_read_size = MIN(rel_eoa-obj_head_addr, OBJ_SPEC_READ_SIZE);
+
+    if (FD_read(file, obj_head_addr, spec_read_size, buf) == FAIL) {
+	error_push(ERR_FILE, ERR_NONE_SEC, 
+	    "Object Header:Unable to read object header", obj_head_addr, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    oh = calloc(1, sizeof(OBJ_t));
+    if (oh == NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+	    "Object Header:Internal allocation error", obj_head_addr, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    if ((g_format_num == FORMAT_ONE_EIGHT) && (!memcmp(p, OBJ_HDR_MAGIC, (size_t)OBJ_SIZEOF_MAGIC)))
+	format_objvers_two = TRUE;
+
+    if (format_objvers_two) {
+	if (debug_verbose()) {
+	    printf("VALIDATING version 2 object header for library version %3.1f...\n", g_format_num);	
+	    printf("FOUND Version 2 object header signature\n");	
+	}
+
+	start_buf = buf;
+	p = buf;
+	logical = get_logical_addr(p, start_buf, obj_head_addr);
+
+	p += OBJ_SIZEOF_MAGIC;
+        oh->version = *p++;
+        if(OBJ_VERSION_2 != oh->version) {
+    	    badinfo = oh->version;
+	    error_push(ERR_LEV_2, ERR_LEV_2A1b, "version 2 Object Header:Bad version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+
+	logical = get_logical_addr(p, start_buf, obj_head_addr);
+	oh->flags = *p++;
+	if(oh->flags & ~OBJ_HDR_ALL_FLAGS) {
+	    error_push(ERR_LEV_2, ERR_LEV_2A1b, 
+		"version 2 Object Header:Unknown object header status flags", logical, NULL);
+	    CK_SET_ERR(FAIL)
+	}
+
+        /* Number of messages (to allocate initially) */
+        nmesgs = 1;
+	oh->nlink = 1;
+
+        /* Time fields */
+        if(oh->flags & OBJ_HDR_STORE_TIMES) {
+            UINT32DECODE(p, oh->atime);
+            UINT32DECODE(p, oh->mtime);
+            UINT32DECODE(p, oh->ctime);
+            UINT32DECODE(p, oh->btime);
+        } /* end if */
+        else
+            oh->atime = oh->mtime = oh->ctime = oh->btime = 0;
+
+        /* Attribute fields */
+        if(oh->flags & OBJ_HDR_ATTR_STORE_PHASE_CHANGE) {
+	    logical = get_logical_addr(p, start_buf, obj_head_addr);
+            UINT16DECODE(p, oh->max_compact);
+            UINT16DECODE(p, oh->min_dense);
+            if(oh->max_compact < oh->min_dense) {
+		error_push(ERR_LEV_2, ERR_LEV_2A1b, 
+		    "version 2 Object Header:Invalid attribute phase changed values", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+        } else {
+            oh->max_compact = OBJ_CRT_ATTR_MAX_COMPACT_DEF;
+            oh->min_dense = OBJ_CRT_ATTR_MIN_DENSE_DEF;
+        } /* end else */
+
+	/* First chunk size */
+	logical = get_logical_addr(p, start_buf, obj_head_addr);
+        switch(oh->flags & OBJ_HDR_CHUNK0_SIZE) {
+            case 0:     /* 1 byte size */
+                chunk_size = *p++;
+                break;
+
+            case 1:     /* 2 byte size */
+                UINT16DECODE(p, chunk_size);
+                break;
+
+            case 2:     /* 4 byte size */
+                UINT32DECODE(p, chunk_size);
+                break;
+
+            case 3:     /* 8 byte size */
+                UINT64DECODE(p, chunk_size);
+                break;
+
+            default:
+                printf("bad size for chunk 0\n");
+        } /* end switch */
+        if (chunk_size > 0 && chunk_size < OBJ_SIZEOF_MSGHDR_VERS(OBJ_VERSION_2, oh->flags & OBJ_HDR_ATTR_CRT_ORDER_TRACKED)) {
+	    error_push(ERR_LEV_2, ERR_LEV_2A1b, 
+		"version 2 Object Header:Bad object header size", logical, &badinfo);
+	    CK_GOTO_DONE(FAIL)
+	}
+    } else { /* FORMAT_ONE_SIX or version 1 object header encountered for FORMAT_ONE_EIGHT */
+	if (debug_verbose())
+	    printf("VALIDATING version 1 object header for library version %3.1f...\n", g_format_num);	
+	start_buf = buf;
+	p = buf;
+	logical = get_logical_addr(p, start_buf, obj_head_addr);
+
+	oh->version = *p++;
+	if (oh->version != OBJ_VERSION_1) {
+    	    badinfo = oh->version;
+	    error_push(ERR_LEV_2, ERR_LEV_2A1a, "Version 1 Object Header:Bad version number", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	} else {
+	    if (debug_verbose())
+		printf("Version 1 object header encountered\n");	
+	}
+	/* Flags */ 
+        oh->flags = OBJ_CRT_OHDR_FLAGS_DEF;
+
+	p++;  /* reserved */
+
+	logical = get_logical_addr(p, start_buf, obj_head_addr);
+	UINT16DECODE(p, nmesgs);
+	if ((int)nmesgs < 0) {
+	    badinfo = nmesgs;
+	    error_push(ERR_LEV_2, ERR_LEV_2A1a, 
+		"version 1 Object Header:number of header messages should not be negative", logical, &badinfo);
+	    CK_SET_ERR(FAIL)
+	}
+
+	UINT32DECODE(p, oh->nlink);
+
+	/* NEED CHECK: why nlink-1? */
+	table_insert(obj_head_addr, oh->nlink-1);
+
+	UINT32DECODE(p, chunk_size);
+	p += 4;
+    }
+
+    prefix_size = (size_t)(p - buf);
+    chunk_addr = obj_head_addr + prefix_size;
+
+    logical = get_logical_addr(p, start_buf, chunk_addr);
+
+    oh->alloc_nmesgs = (nmesgs > 0) ? nmesgs: 1;
+    if ((oh->mesg = calloc(oh->alloc_nmesgs, sizeof(OBJ_mesg_t)))==NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Object Header:Internal allocation error", logical, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+#ifdef DEBUG
+    printf("oh->version =%d, nmesgs=%d, oh->nlink=%d\n", oh->version, nmesgs, oh->nlink);
+    printf("chunk_addr=%llu, chunk_size=%u\n", chunk_addr, chunk_size);
+#endif
+
+    /* read each chunk from disk */
+    while (addr_defined(chunk_addr)) {
+	unsigned 	chunkno;	/* current chunk's index */
+	uint8_t		*eom_ptr;	/* pointer to end of messages for a chunk */
+
+	logical = get_logical_addr(p, start_buf, chunk_addr);
+
+	/* increase chunk array size */
+	if (oh->nchunks >= oh->alloc_nchunks) {
+
+	    unsigned na = MAX(OBJ_NCHUNKS, oh->alloc_nchunks * 2);
+	    OBJ_chunk_t *x = realloc(oh->chunk, (size_t)(na*sizeof(OBJ_chunk_t)));
+	    if (!x) {
+		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Object Header:Internal allocation error", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+
+	    oh->alloc_nchunks = na;
+	    oh->chunk = x;
+        }  /* end if */
+
+
+        /* read the chunk raw data */
+        chunkno = oh->nchunks++;
+	if (chunkno == 0) {
+	    oh->chunk[chunkno].addr = obj_head_addr;
+	    if (format_objvers_two)
+		oh->chunk[chunkno].size = chunk_size + OBJ_SIZEOF_HDR_VERS(OBJ_VERSION_2, oh);
+	    else
+		oh->chunk[chunkno].size = chunk_size + OBJ_SIZEOF_HDR_VERS(OBJ_VERSION_1, oh);
+	} else {
+	    oh->chunk[chunkno].addr = chunk_addr;
+	    oh->chunk[chunkno].size = chunk_size;
+	}
+
+	if ((oh->chunk[chunkno].image = calloc(1, oh->chunk[chunkno].size)) == NULL) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Object Header:Internal allocation error", logical, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+
+	/* Handle chunk 0 as special case */
+        if(chunkno == 0) {
+            /* Check for speculative read of first chunk containing all the data needed */
+            if(spec_read_size >= oh->chunk[0].size)
+                memcpy(oh->chunk[0].image, buf, oh->chunk[0].size);
+            else {
+                /* Copy the object header prefix into chunk 0's image */
+                memcpy(oh->chunk[0].image, buf, prefix_size);
+		/* read the message data */
+		if (FD_read(file, chunk_addr, (oh->chunk[0].size-prefix_size), (oh->chunk[chunkno].image+prefix_size)) == FAIL) {
+		    error_push(ERR_FILE, ERR_NONE_SEC, "Object Header:Unable to read object header data", logical, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
+            } /* end else */
+
+            /* Point into chunk image to decode */
+	    start_buf = oh->chunk[chunkno].image;
+            p = oh->chunk[0].image + prefix_size;
+        } /* end if */
+        else {
+	    if (FD_read(file, chunk_addr, chunk_size, oh->chunk[chunkno].image) == FAIL) {
+		error_push(ERR_FILE, ERR_NONE_SEC, 
+		    "Object Header:Unable to read object header data", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+            /* Point into chunk image to decode */
+	    start_buf = oh->chunk[chunkno].image;
+            p = oh->chunk[chunkno].image;
+        } /* end else */
+
+	logical = get_logical_addr(p, start_buf, chunk_addr);
+
+	/* Check for "CONT" magic # on chunks > 0 in later versions of the format */
+	if (chunkno > 0 && format_objvers_two) {
+            /* Magic number */
+            if(memcmp(p, OBJ_CHK_MAGIC, (size_t)OBJ_SIZEOF_MAGIC)) {
+		error_push(ERR_LEV_2, ERR_LEV_2A1b, 
+		    "version 2 Object Header:Couldn't find CONT signature", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+            p += OBJ_SIZEOF_MAGIC;
+        } /* end if */
+
+	/* Decode messages from this chunk */
+	if (format_objvers_two)
+	    eom_ptr = oh->chunk[chunkno].image + (oh->chunk[chunkno].size - OBJ_SIZEOF_CHKSUM_VERS(OBJ_VERSION_2));
+	else
+	    eom_ptr = oh->chunk[chunkno].image + (oh->chunk[chunkno].size - OBJ_SIZEOF_CHKSUM_VERS(OBJ_VERSION_1));
+
+	while (p < eom_ptr) {
+	    unsigned    mesgno;         /* Current message to operate on */
+            size_t      mesg_size;      /* Size of message read in */
+            unsigned    id;             /* ID (type) of current message */
+            uint8_t     flags;          /* Flags for current message */
+            OBJ_msg_crt_idx_t crt_idx = 0;  /* Creation index for current message */
+
+	    /* Decode message prefix info */
+
+	    logical = get_logical_addr(p, start_buf, chunk_addr);
+            /* Version # */
+            if(oh->version == OBJ_VERSION_1)
+                UINT16DECODE(p, id)
+            else
+                id = *p++;
+
+            if(id == OBJ_UNKNOWN_ID) {
+		error_push(ERR_LEV_2, ERR_LEV_2A, 
+		    "Object Header:unknown message ID encoded in file", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+
+	    UINT16DECODE(p, mesg_size);
+	    assert(mesg_size==OBJ_ALIGN_OH(oh, mesg_size));
+	    flags = *p++;
+
+	    /* Reserved bytes/creation index */
+	    if (!format_objvers_two)
+                p += 3; /*reserved*/
+            else {
+                /* Only encode creation index if they are being tracked */
+                if(oh->flags & OBJ_HDR_ATTR_CRT_ORDER_TRACKED)
+                    UINT16DECODE(p, crt_idx);
+            } /* end else */
+
+	    /* Try to detect invalidly formatted object header message that
+             *  extends past end of chunk.
+             */
+	    logical = get_logical_addr(p, start_buf, chunk_addr);
+            if(p + mesg_size > eom_ptr) {
+		error_push(ERR_LEV_2, ERR_LEV_2A, "Object Header:corrupt object header", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+
+#ifdef DEBUG
+	    printf("id is %u, mesg_size=%u\n", id, mesg_size);
+#endif
+
+            if(oh->nmesgs >= oh->alloc_nmesgs)
+		if (OBJ_alloc_msgs(oh, (size_t)1) < 0)
+		    CK_GOTO_DONE(FAIL)
+
+            /* Get index for message */
+	    mesgno = oh->nmesgs++;
+            oh->mesg[mesgno].flags = flags;
+	    oh->mesg[mesgno].native = NULL;
+	    oh->mesg[mesgno].raw = (uint8_t *)p;
+	    oh->mesg[mesgno].raw_size = mesg_size;
+	    oh->mesg[mesgno].chunkno = chunkno;
+
+	    if (id >= NELMTS(message_type_g) || NULL == message_type_g[id]) {
+#ifdef DEBUG
+		printf("Made this into an unknown id for id=%d\n", id);
+#endif
+		oh->mesg[mesgno].type = message_type_g[OBJ_UNKNOWN_ID];
+	    } else
+		oh->mesg[mesgno].type = message_type_g[id];
+
+	    p+= mesg_size;
+
+	    logical = get_logical_addr(p, start_buf, chunk_addr);
+	    /* Check for 'gap' at end of chunk */
+	    if((eom_ptr - p) > 0 && 
+	       (eom_ptr - p) < OBJ_SIZEOF_MSGHDR_VERS(OBJ_VERSION_2,oh->flags&OBJ_HDR_ATTR_CRT_ORDER_TRACKED)) {
+
+                /* Gaps can only occur in later versions of the format */
+		if (format_objvers_two)
+		    p += eom_ptr - p;
+		else {
+		    error_push(ERR_LEV_2, ERR_LEV_2A, "Object Header:corrupt object header", logical, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
+            } /* end if */
+	} /* end while */
+
+	/* Check for correct checksum on chunks, in later versions of the format */
+	if (format_objvers_two) {
+            uint32_t stored_chksum;     /* Checksum from file */
+            uint32_t computed_chksum;   /* Checksum computed in memory */
+
+            /* Metadata checksum */
+            UINT32DECODE(p, stored_chksum);
+
+            /* Compute checksum on chunk */
+            /* Verify checksum */
+        } /* end if */
+
+	assert(p == oh->chunk[chunkno].image + oh->chunk[chunkno].size);
+
+       	/* decode next object header continuation message */
+        for (chunk_addr = CK_ADDR_UNDEF; !addr_defined(chunk_addr) && curmesg < oh->nmesgs; ++curmesg) {
+	    if (oh->mesg[curmesg].type->id == OBJ_CONT_ID) {
+		start_buf = oh->chunk[oh->mesg[curmesg].chunkno].image;
+		logi_base = oh->chunk[oh->mesg[curmesg].chunkno].addr;
+		cont = (OBJ_CONT->decode) (file, oh->mesg[curmesg].raw, start_buf, logi_base);
+		logical = get_logical_addr(oh->mesg[curmesg].raw, start_buf, logi_base);
+		if (cont == NULL) {
+		    error_push(ERR_LEV_2, ERR_LEV_2A, 
+			"Object Header:Corrupt continuation message...skipped", logical, NULL);
+		    CK_CONTINUE(FAIL)
+		}
+                oh->mesg[curmesg].native = cont;
+                chunk_addr = cont->addr;
+                chunk_size = cont->size;
+                cont->chunkno = oh->nchunks;    /*the next chunk to allocate */
+	    }  /* end if */
+        }  /* end for */
+    }  /* end while(addr_defined(chunk_addr)) */
+
+    if (ret_oh)
+	*ret_oh = oh;
+    if (decode_validate_messages(file, oh) < 0)
+	CK_GOTO_DONE(FAIL)
+
+done:
+    return(ret_value);
+} /* end check_obj_header() */
+
+#ifdef TOBEREMOVED
 ck_err_t
 check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 {
@@ -5926,6 +6434,7 @@ checking for addr+file_size > EOF
 done:
     return(ret_value);
 } /* end check_obj_header() */
+#endif
 
 void
 print_version(const char *prog_name)
@@ -5945,6 +6454,9 @@ usage(char *prog_name)
     fprintf(stdout, "     		n=0	Terse--only indicates if the file is compliant or not\n");
     fprintf(stdout, "     		n=1	Default--prints its progress and all errors found\n");
     fprintf(stdout, "     		n=2	Verbose--prints everything it knows, usually for debugging\n");
+    fprintf(stdout, "     -fn, --format=n	File Format\n");
+    fprintf(stdout, "     		n=1.6	Validate according to library release version 1.6.6\n");
+    fprintf(stdout, "     		n=1.8	Default--Validate according to library release version 1.8.0\n");
     fprintf(stdout, "     -oa, --object=a	Check object header\n");
     fprintf(stdout, "     		a	Address of the object header to be validated\n");
     fprintf(stdout, "\n");
