@@ -1879,6 +1879,14 @@ typedef struct HF_parent_t {
 #define HF_SIZEOF_OFFSET_BITS(b)  (((b) + 7) / 8)
 #define HF_SIZEOF_OFFSET_LEN(l)   HF_SIZEOF_OFFSET_BITS(V_log2_of2((unsigned)(l)))
 
+/* Free space section types for fractal heap */
+#define HF_FSPACE_SECT_SINGLE         	0       /* Section is a range of actual bytes in a direct block */
+#define HF_FSPACE_SECT_FIRST_ROW      	1       /* Section is first range of blocks in an indirect block row */
+#define HF_FSPACE_SECT_NORMAL_ROW     	2       /* Section is a range of blocks in an indirect block row */
+#define HF_FSPACE_SECT_INDIRECT      	3       /* Section is a span of blocks in an indirect block */
+
+
+
 /* SOHM */
 
 /* Types of message indices */
@@ -1944,6 +1952,85 @@ typedef struct SM_master_table_t {
     assert((vartype)_tmp_overflow==_tmp_overflow2);  \
     (var)=_tmp_overflow2;                            \
 }
+
+
+/* 
+ * Free Space Manager 
+ */
+#define FS_SIZEOF_MAGIC         4
+#define FS_HDR_MAGIC            "FSHD"          /* Header */
+#define FS_SINFO_MAGIC          "FSSE"          /* Serialized sections */
+#define FS_SIZEOF_CHKSUM      	4
+#define FS_HDR_BUF_SIZE         256
+#define FS_HDR_VERSION        	0               /* Header */
+#define FS_SINFO_VERSION      	0               /* Serialized sections */
+
+typedef enum FS_client_t {
+    FS_CLIENT_FHEAP_ID = 0,   
+    FS_NUM_CLIENT_ID   
+} FS_client_t;
+
+
+#define FS_METADATA_PREFIX_SIZE (                                           	\
+    FS_SIZEOF_MAGIC   	/* Signature */                                       	\
+    + 1 		/* Version */                                      	\
+    + FS_SIZEOF_CHKSUM 	/* Metadata checksum */                              	\
+    )
+
+/* Size of the fractal heap header on disk */
+#define FS_HEADER_SIZE(f) (                                                 	\
+    FS_METADATA_PREFIX_SIZE                                                 	\
+                                                                            	\
+    /* Free space header specific fields */                                 	\
+    + 1 /* Client ID */                                                     	\
+    + SIZEOF_SIZE(f) /* Total free space tracked */                       	\
+    + SIZEOF_SIZE(f) /* Total # of sections tracked */                    	\
+    + SIZEOF_SIZE(f) /* # of serializable sections tracked */             	\
+    + SIZEOF_SIZE(f) /* # of ghost sections tracked */                    	\
+    + 2 /* Number of section classes */                                       	\
+    + 2 /* Shrink percent */                                                  	\
+    + 2 /* Expand percent */                                                  	\
+    + 2 /* Size of address space for sections (log2 of value) */              	\
+    + SIZEOF_SIZE(f) /* Max. size of section to track */                  	\
+    + SIZEOF_ADDR(f) /* Address of serialized free space sections */      	\
+    + SIZEOF_SIZE(f) /* Size of serialized free space sections used */    	\
+    + SIZEOF_SIZE(f) /* Allocated size of serialized free space sections */ 	\
+    )
+
+/* Size of the free space serialized sections on disk */
+#define FS_SINFO_PREFIX_SIZE(f) (                                           	\
+    FS_METADATA_PREFIX_SIZE                                                 	\
+                                                                              	\
+    /* Free space serialized sections specific fields */                      	\
+    + SIZEOF_ADDR(f) /* Address of free space header for these sections */ 	\
+    )
+
+typedef struct FS_section_class_t {
+    const 	unsigned type;               /* Type of free space section */
+    size_t 	serial_size;                 /* Size of serialized form of section */
+    ck_err_t 	(*init_cls)(struct FS_section_class_t *, HF_hdr_t *);        
+} FS_section_class_t;
+
+typedef struct FS_hdr_t {
+    ck_hsize_t tot_space;          /* Total amount of space tracked              */
+    ck_hsize_t tot_sect_count;     /* Total # of sections tracked                */
+    ck_hsize_t serial_sect_count;  /* # of serializable sections tracked         */
+    ck_hsize_t ghost_sect_count;   /* # of un-serializable sections tracked      */
+
+    FS_client_t client;       /* Type of user of this free space manager    */
+    unsigned nclasses;          /* Number of section classes handled          */
+    unsigned shrink_percent;    /* Percent of "normal" serialized size to shrink serialized space at */
+    unsigned expand_percent;    /* Percent of "normal" serialized size to expand serialized space at */
+    unsigned max_sect_addr;     /* Size of address space free sections are within (log2 of actual value) */
+    ck_hsize_t max_sect_size;      /* Maximum size of section to track */
+
+    ck_addr_t sect_addr;          /* Address of the section info in the file    */
+    ck_hsize_t sect_size;          /* Size of the section info in the file       */
+    ck_hsize_t alloc_sect_size;    /* Allocated size of the section info in the file */
+
+    ck_addr_t addr;               /* Address of free space header on disk       */
+    FS_section_class_t *sect_cls; /* Array of section classes for this free list */
+} FS_hdr_t;
 
 
 

@@ -139,6 +139,42 @@ static ck_err_t HF_tiny_read(driver_t *, HF_hdr_t *, const uint8_t *, void *);
 static ck_err_t SM_type_to_flag(unsigned, unsigned *);
 static ssize_t SM_get_index(const SM_master_table_t *, unsigned);
 
+static ck_err_t HF_sect_row_init_cls(FS_section_class_t *, HF_hdr_t *);
+static ck_err_t HF_sect_indirect_init_cls(FS_section_class_t *, HF_hdr_t *);
+
+FS_section_class_t HF_FSPACE_SECT_CLS_SINGLE[1] = {{
+    HF_FSPACE_SECT_SINGLE,            /* Section type                 */
+    0,                                /* Extra serialized size        */
+    NULL                              /* Initialize section class     */
+}};
+
+FS_section_class_t HF_FSPACE_SECT_CLS_FIRST_ROW[1] = {{
+    HF_FSPACE_SECT_FIRST_ROW,         /* Section type                 */
+    0,                                /* Extra serialized size        */
+    HF_sect_row_init_cls              /* Initialize section class     */
+}};
+
+FS_section_class_t HF_FSPACE_SECT_CLS_NORMAL_ROW[1] = {{
+    HF_FSPACE_SECT_NORMAL_ROW,        /* Section type                 */
+    0,                                /* Extra serialized size        */
+    HF_sect_row_init_cls              /* Initialize section class     */
+}};
+
+FS_section_class_t HF_FSPACE_SECT_CLS_INDIRECT[1] = {{
+    HF_FSPACE_SECT_INDIRECT,          /* Section type                 */
+    0,                                /* Extra serialized size        */
+    HF_sect_indirect_init_cls         /* Initialize section class     */
+}};                                   
+
+const FS_section_class_t *classes[] = {
+    HF_FSPACE_SECT_CLS_SINGLE,
+    HF_FSPACE_SECT_CLS_FIRST_ROW,
+    HF_FSPACE_SECT_CLS_NORMAL_ROW,
+    HF_FSPACE_SECT_CLS_INDIRECT
+};
+
+
+
 /*
  * End declarations
  */
@@ -939,6 +975,329 @@ done:
 /*
  * END version 2 btree Validation
  */
+
+/* 
+ * START Free Space Manager validation 
+ */
+
+/* Size of serialized indirect section information */
+#define HF_SECT_INDIRECT_SERIAL_SIZE(h) (                                     \
+    (h)->heap_off_size  /* Indirect block's offset in "heap space" */         \
+        + 2             /* Row */                                             \
+        + 2             /* Column */                                          \
+        + 2             /* # of entries */                                    \
+    )
+
+
+/* init callback */
+static ck_err_t
+HF_sect_row_init_cls(FS_section_class_t *cls, HF_hdr_t *fh_hdr)
+{
+    ck_err_t ret_value = SUCCEED;         /* Return value */
+
+    assert(cls);
+
+    if(cls->type == HF_FSPACE_SECT_FIRST_ROW)
+        cls->serial_size = HF_SECT_INDIRECT_SERIAL_SIZE(fh_hdr);
+    else
+        cls->serial_size = 0;
+
+done:
+    return(ret_value);
+}
+
+/* init callback */
+static ck_err_t
+HF_sect_indirect_init_cls(FS_section_class_t *cls, HF_hdr_t *fh_hdr)
+{
+    ck_err_t ret_value = SUCCEED;
+
+
+    assert(cls);
+    assert(fh_hdr);
+
+    cls->serial_size = HF_SECT_INDIRECT_SERIAL_SIZE(fh_hdr);
+
+done:
+    return(ret_value);
+} 
+
+
+
+/* Validate Free Space Section List */
+static ck_err_t
+check_fssection(driver_t *file, ck_addr_t fssect_addr, FS_hdr_t *fs_hdr)
+{
+
+    uint8_t             *buf = NULL;
+    ck_addr_t           fshdr_addr;
+    int                 ret_value=SUCCEED;
+    size_t              old_sect_size;  /* Old section size */
+    const uint8_t       *p;             /* Pointer into raw data buffer */
+    uint32_t            stored_chksum;  /* Stored metadata checksum value */
+    uint8_t             *start_buf = NULL;
+    ck_addr_t           logical;
+    int			version, badinfo;
+
+    assert(file);
+    assert(addr_defined(fssect_addr));
+    assert(fs_hdr);
+
+    if (debug_verbose())
+	printf("VALIDATING the Free Space Section List %llu...\n", fssect_addr);
+
+    if (fs_hdr->sect_addr != fssect_addr) {
+	error_push(ERR_FILE, ERR_NONE_SEC, 
+	    "Free Space Section List:Incorrect address for free space sections", fssect_addr, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    ASSIGN_OVERFLOW(/* To: */ old_sect_size, /* From: */ fs_hdr->sect_size, /* From: */ ck_hsize_t, /* To: */ ck_size_t);
+
+    if (NULL == (buf = malloc((size_t)fs_hdr->sect_size))) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+	    "Free Space Section List:Internal allocation error", fssect_addr, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    if (FD_read(file, fssect_addr, fs_hdr->sect_size, buf) == FAIL) {
+        error_push(ERR_FILE, ERR_NONE_SEC, 
+	    "Free Space Section List:Unable to read in free space section list", fssect_addr, NULL);
+        CK_GOTO_DONE(FAIL)
+    }
+
+    p = buf;
+    start_buf = buf;
+    logical = get_logical_addr(p, start_buf, fssect_addr);
+
+    /* Magic number */
+    if(memcmp(p, FS_SINFO_MAGIC, (ck_size_t)FS_SIZEOF_MAGIC)) {
+	error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Wrong signature", logical, NULL);
+        CK_GOTO_DONE(FAIL)
+    } else if (debug_verbose())
+        printf("FOUND Free Space Section List signature.\n");
+   
+    p += FS_SIZEOF_MAGIC;
+
+    logical = get_logical_addr(p, start_buf, fssect_addr);
+    version = *p++;
+    if(version != FS_SINFO_VERSION) {
+	error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Wrong version", logical, &badinfo);
+        CK_SET_ERR(FAIL)
+    }
+
+    /* Address of free space header for these sections */
+    logical = get_logical_addr(p, start_buf, fssect_addr);
+    addr_decode(file->shared, &p, &fshdr_addr);
+    if (fshdr_addr != fs_hdr->addr) {
+	error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Incorrect free space manager header address", logical, NULL);
+        CK_SET_ERR(FAIL)
+    }
+
+    /* Check for any serialized sections */
+    if(fs_hdr->serial_sect_count > 0) {
+        unsigned   sect_cnt_size;      
+	unsigned   sect_len_size;
+	unsigned   sect_off_size;
+
+        sect_cnt_size = MAX(1, (V_log2_gen(fs_hdr->serial_sect_count)+7)/8);
+	sect_len_size = (V_log2_gen(fs_hdr->max_sect_size)+7)/8;
+	sect_off_size = (fs_hdr->max_sect_addr+7)/8;
+
+        do {
+            ck_hsize_t sect_size;      /* Current section size */
+            ck_size_t node_count;      /* # of sections of this size */
+            ck_size_t u;               /* Local index variable */
+
+            /* The number of sections of this node's size */
+	    logical = get_logical_addr(p, start_buf, fssect_addr);
+            UINT64DECODE_VAR(p, node_count, sect_cnt_size);
+	    if (node_count <= 0) {
+		error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Incorrect # of sections", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+
+	    logical = get_logical_addr(p, start_buf, fssect_addr);
+            UINT64DECODE_VAR(p, sect_size, sect_len_size);
+	    if (sect_size <= 0) {
+		error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Incorrect size of the sections", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+
+            /* Loop over nodes of this size */
+            for(u = 0; u < node_count; u++) {
+                ck_addr_t sect_addr;    
+                unsigned sect_type;    
+                unsigned des_flags;   
+
+                /* The address of the section */
+                UINT64DECODE_VAR(p, sect_addr, sect_off_size);
+
+                /* The type of this section */
+		logical = get_logical_addr(p, start_buf, fssect_addr);
+                sect_type = *p++;
+		if (sect_type > fs_hdr->nclasses) {
+		    sect_type = HF_FSPACE_SECT_SINGLE;
+		    error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Incorrect section type", logical, NULL);
+		    CK_SET_ERR(FAIL)
+		}
+
+                p += fs_hdr->sect_cls[sect_type].serial_size;
+            } /* end for */
+        } while(p < ((buf + old_sect_size) - FS_SIZEOF_CHKSUM));
+    } /* end if */
+
+    /* NEED??CHECK Metadata checksum */
+    UINT32DECODE(p, stored_chksum);
+
+done:
+    return(ret_value);
+} /* end check_fssection() */
+
+/* validate free space manager header */
+static ck_err_t
+check_fshdr(driver_t *file, ck_addr_t fs_addr, HF_hdr_t *fh_hdr)
+{
+    FS_hdr_t            *fs_hdr = NULL;   
+    uint8_t             hdr_buf[FS_HDR_BUF_SIZE];
+    ck_size_t           size;           
+    const uint8_t       *p;           
+    uint32_t            stored_chksum; 
+    int                 ret_value=SUCCEED;
+    uint8_t             *start_buf = NULL;
+    ck_addr_t           logical;
+    ck_size_t		u, nclasses;
+    int			version, badinfo;
+
+    /* Check arguments */
+    assert(file);
+    assert(addr_defined(fs_addr));
+    assert(fh_hdr);
+
+    if (debug_verbose())
+	printf("VALIDATING the free space manager header at %llu...\n", fs_addr);
+
+
+    if (NULL == (fs_hdr = calloc(1, sizeof(FS_hdr_t)))) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+	    "Free Space Manager Header:Internal allocation error", fs_addr, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+
+    nclasses = NELMTS(classes);
+    fs_hdr->nclasses = nclasses;
+    if (nclasses > 0) {
+	if ((fs_hdr->sect_cls = calloc(nclasses, sizeof(FS_section_class_t))) == NULL) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+		"Free Space Manager Header:Internal allocation error", fs_addr, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+	for(u = 0; u < nclasses; u++) {
+            if (u != classes[u]->type) {
+		error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+		    "Free Space Manager Header:Internal class type error", fs_addr, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+            memcpy(&fs_hdr->sect_cls[u], classes[u], sizeof(FS_section_class_t));
+            if (fs_hdr->sect_cls[u].init_cls)
+                if ((fs_hdr->sect_cls[u].init_cls)(&fs_hdr->sect_cls[u], fh_hdr) < 0) {
+		    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+			"Free Space Manager Header:Internal initialization error of section class", fs_addr, NULL);
+		    CK_GOTO_DONE(FAIL)
+		}
+        } 
+    }
+    fs_hdr->addr = CK_ADDR_UNDEF;
+    fs_hdr->sect_addr = CK_ADDR_UNDEF;
+
+
+    fs_hdr->addr = fs_addr;
+    size = FS_HEADER_SIZE(file->shared);
+
+    if (FD_read(file, fs_addr, size, hdr_buf) == FAIL) {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Free Space Manager Header:Unable to read in header", fs_addr, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    p = hdr_buf;
+    start_buf = hdr_buf;
+    logical = get_logical_addr(p, start_buf, fs_addr);
+    
+    /* Magic number */
+    if(memcmp(p, FS_HDR_MAGIC, (size_t)FS_SIZEOF_MAGIC)) {
+        error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Wrong header signature", logical, NULL);
+        CK_GOTO_DONE(FAIL)
+    } else if (debug_verbose())
+        printf("FOUND Free Space Manager Header signature.\n");
+    
+    p += FS_SIZEOF_MAGIC;
+    logical = get_logical_addr(p, start_buf, fs_addr);
+
+    /* Version */
+    version = *p++;
+    if(version != FS_HDR_VERSION) {
+	badinfo = version;
+        error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Wrong header version", logical, &badinfo);
+        CK_SET_ERR(FAIL)
+    }
+
+    /* Client ID */
+    logical = get_logical_addr(p, start_buf, fs_addr);
+    fs_hdr->client = *p++;
+    if(fs_hdr->client >= FS_NUM_CLIENT_ID) {
+        error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Unknown client ID", logical, NULL);
+        CK_SET_ERR(FAIL)
+    }
+
+    DECODE_LENGTH(file->shared, p, fs_hdr->tot_space);
+    DECODE_LENGTH(file->shared, p, fs_hdr->tot_sect_count);
+    DECODE_LENGTH(file->shared, p, fs_hdr->serial_sect_count);
+    DECODE_LENGTH(file->shared, p, fs_hdr->ghost_sect_count);
+
+    logical = get_logical_addr(p, start_buf, fs_addr);
+    UINT16DECODE(p, nclasses);
+
+    if (fs_hdr->nclasses > 0 && fs_hdr->nclasses != nclasses) {
+        error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Section class count mismatch", logical, NULL);
+        CK_SET_ERR(FAIL)
+    }
+printf("nclasses=%u, fs_hdr->nclasses=%u\n", nclasses, fs_hdr->nclasses);
+
+    UINT16DECODE(p, fs_hdr->shrink_percent);
+    UINT16DECODE(p, fs_hdr->expand_percent);
+    UINT16DECODE(p, fs_hdr->max_sect_addr);
+
+    DECODE_LENGTH(file->shared, p, fs_hdr->max_sect_size);
+    addr_decode(file->shared, &p, &fs_hdr->sect_addr);
+
+    logical = get_logical_addr(p, start_buf, fs_addr);
+    DECODE_LENGTH(file->shared, p, fs_hdr->sect_size);
+    DECODE_LENGTH(file->shared, p, fs_hdr->alloc_sect_size);
+
+    if (fs_hdr->sect_size > fs_hdr->alloc_sect_size) {
+        error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Invalid section size", logical, NULL);
+        CK_SET_ERR(FAIL)
+    }
+
+    /* Metadata checksum */
+    UINT32DECODE(p, stored_chksum);
+
+    /* check free space section list */
+    if (addr_defined(fs_hdr->sect_addr)) {
+	if (check_fssection(file, fs_hdr->sect_addr, fs_hdr) < 0) {
+	    error_push(ERR_LEV_1, ERR_LEV_1F, 
+		"Free Space Manager Header:Errors found when validating free space section list\n", 
+		-1, NULL);
+	    CK_SET_ERR(FAIL)
+	}
+    }
+
+done:
+    if(ret_value != SUCCEED && (fs_hdr))
+        free(fs_hdr);
+    return(ret_value);
+} /* end check_fshdr() */
 
 /* 
  * START fractal heap validation
@@ -1793,6 +2152,7 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
     DECODE_LENGTH(file->shared, p, hdr->total_man_free); 
     addr_decode(file->shared, &p, &hdr->fs_addr);      /* Address of free section header */
 
+
     /* Heap statistics */
     DECODE_LENGTH(file->shared, p, hdr->man_size);
     DECODE_LENGTH(file->shared, p, hdr->man_alloc_size);
@@ -1891,6 +2251,15 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
 
     HF_tiny_init(hdr);
     HF_huge_init(file, hdr);
+
+    /* check free space manager */
+    if (addr_defined(hdr->fs_addr)) {
+	if (check_fshdr(file, hdr->fs_addr, hdr) < 0) {
+	    error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Header:Errors found when validating free space manager\n", 
+		-1, NULL);
+	    CK_SET_ERR(FAIL)
+	}
+    }
 
 #ifdef DEBUG
     printf("hdr->heap_size=%u;hdr->heap_off_size=%u\n", hdr->heap_size, hdr->heap_off_size);
