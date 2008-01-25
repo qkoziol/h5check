@@ -11,8 +11,10 @@
 
 #include <math.h>
 
-/* NEED TO: take care of asserts */
 
+/*
+ * The filter code is ported mainly from the library
+ */
 
 static ck_size_t           Z_table_alloc_g = 0;
 static ck_size_t           Z_table_used_g = 0;

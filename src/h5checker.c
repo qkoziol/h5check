@@ -4199,6 +4199,7 @@ check_superblock(driver_t *file)
 	}  /* DONE with driver information block */
     } else if (super_vers == SUPERBLOCK_VERSION_2) { /* version 2 format */
 	uint32_t	read_chksum;
+	uint32_t	computed_chksum;
 
 	if (debug_verbose())
 	    printf("Validating version 2 superblock...\n");
@@ -4262,8 +4263,12 @@ check_superblock(driver_t *file)
     	addr_decode(lshared, (const uint8_t **)&p, &lshared->root_grp->header);
 	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
 
-	/* NEED CHECK: validate checksum ?? */
+	computed_chksum = checksum_metadata(buf, (ck_size_t)(p - buf), 0);
         UINT32DECODE(p, read_chksum);
+	if (computed_chksum != read_chksum) {
+	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.2:Bad checksum", logical, NULL);
+	    CK_SET_ERR(FAIL)
+	}
 
 #ifdef DEBUG
 	printf("base_addr=%llu, super_addr=%llu, stored_eoa=%llu, extension_addr=%llu\n",
@@ -5978,16 +5983,18 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
             } /* end if */
 	} /* end while */
 
-	/* Check for correct checksum on chunks, in later versions of the format */
 	if (format_objvers_two) {
             uint32_t stored_chksum;     /* Checksum from file */
             uint32_t computed_chksum;   /* Checksum computed in memory */
 
-            /* Metadata checksum */
+	    computed_chksum = checksum_metadata(oh->chunk[chunkno].image, (oh->chunk[chunkno].size-OBJ_SIZEOF_CHKSUM), 0);
+	    logical = get_logical_addr(p, start_buf, chunk_addr);
             UINT32DECODE(p, stored_chksum);
 
-            /* Compute checksum on chunk */
-            /* Verify checksum */
+	    if (computed_chksum != stored_chksum) {
+		error_push(ERR_LEV_2, ERR_LEV_2A1b, "version 2 Object Header:Bad checksum", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
         } /* end if */
 
 	assert(p == oh->chunk[chunkno].image + oh->chunk[chunkno].size);
@@ -6021,420 +6028,101 @@ done:
     return(ret_value);
 } /* end check_obj_header() */
 
-#ifdef TOBEREMOVED
-ck_err_t
-check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
+
+/* 
+ * Checksum: copy from the library, see description there
+ */
+#define lookup3_rot(x,k) (((x)<<(k)) ^ ((x)>>(32-(k))))
+
+#define lookup3_mix(a,b,c) \
+{ \
+  a -= c;  a ^= lookup3_rot(c, 4);  c += b; \
+  b -= a;  b ^= lookup3_rot(a, 6);  a += c; \
+  c -= b;  c ^= lookup3_rot(b, 8);  b += a; \
+  a -= c;  a ^= lookup3_rot(c,16);  c += b; \
+  b -= a;  b ^= lookup3_rot(a,19);  a += c; \
+  c -= b;  c ^= lookup3_rot(b, 4);  b += a; \
+}
+
+#define lookup3_final(a,b,c) \
+{ \
+  c ^= b; c -= lookup3_rot(b,14); \
+  a ^= c; a -= lookup3_rot(c,11); \
+  b ^= a; b -= lookup3_rot(a,25); \
+  c ^= b; c -= lookup3_rot(b,16); \
+  a ^= c; a -= lookup3_rot(c,4);  \
+  b ^= a; b -= lookup3_rot(a,14); \
+  c ^= b; c -= lookup3_rot(b,24); \
+}
+
+uint32_t
+checksum_lookup3(const void *key, ck_size_t length, uint32_t initval)
 {
-    size_t		chunk_size;
-    size_t      	spec_read_size;
-    size_t		prefix_size;
-    uint8_t		*p, flags, *start_buf;
-    uint8_t		buf[OBJ_SPEC_READ_SIZE];
-    unsigned		nmesgs;
-    unsigned    	curmesg = 0;
+    const uint8_t *k = (const uint8_t *)key;
+    uint32_t a, b, c;           /* internal state */
 
-    ck_addr_t		chunk_addr;
-    ck_addr_t		logical, logi_base;
-    ck_addr_t   	rel_eoa;        /* Relative end of file address */
+    assert(key);
+    assert(length > 0);
 
-    int			version, nlink, idx, badinfo;
-    int			ret_value=SUCCEED;
+    /* Set up the internal state */
+    a = b = c = 0xdeadbeef + ((uint32_t)length) + initval;
 
-    OBJ_t		*oh=NULL;
-    OBJ_cont_t 		*cont;
-    global_shared_t	*lshared;
-
-#ifdef TOBEFIXED
-/* Make certain we don't speculatively read off the end of the file */
-    if(HADDR_UNDEF == (abs_eoa = H5F_get_eoa(f)))
-        HGOTO_ERROR(H5E_OHDR, H5E_CANTGET, NULL, "unable to determine file size")
-
-need to check for size see H5O_load at beginning check
-#endif
-
-    if (debug_verbose())
-	printf("VALIDATING the object header at logical address %llu...\n", obj_head_addr);
-
-    assert(addr_defined(obj_head_addr));
-    idx = table_search(obj_head_addr);
-    if (idx >= 0) { /* FOUND the object */
-	if (obj_table->objs[idx].nlink > 0) {
-	    obj_table->objs[idx].nlink--;
-	    if (!(ret_oh))
-		CK_GOTO_DONE(SUCCEED)
-	} else {
-	    error_push(ERR_LEV_2, ERR_LEV_2A, 
-		"Object Header:Inconsistent reference count", obj_head_addr, NULL);
-	    CK_GOTO_DONE(FAIL)
-	}
+    /*--------------- all but the last block: affect some 32 bits of (a,b,c) */
+    while (length > 12)
+    {
+      a += k[0];
+      a += ((uint32_t)k[1])<<8;
+      a += ((uint32_t)k[2])<<16;
+      a += ((uint32_t)k[3])<<24;
+      b += k[4];
+      b += ((uint32_t)k[5])<<8;
+      b += ((uint32_t)k[6])<<16;
+      b += ((uint32_t)k[7])<<24;
+      c += k[8];
+      c += ((uint32_t)k[9])<<8;
+      c += ((uint32_t)k[10])<<16;
+      c += ((uint32_t)k[11])<<24;
+      lookup3_mix(a, b, c);
+      length -= 12;
+      k += 12;
     }
 
-    lshared = file->shared;
-    start_buf = buf;
-
-
-    p = buf;
-    rel_eoa = FD_get_eof(file) - lshared->base_addr;
-    spec_read_size = MIN(rel_eoa-obj_head_addr, OBJ_SPEC_READ_SIZE);
-
-    if (FD_read(file, obj_head_addr, spec_read_size, buf) == FAIL) {
-	error_push(ERR_FILE, ERR_NONE_SEC, 
-	    "Object Header:Unable to read object header", obj_head_addr, NULL);
-	CK_GOTO_DONE(FAIL)
+    /*-------------------------------- last block: affect all 32 bits of (c) */
+    switch(length)                   /* all the case statements fall through */
+    {
+        case 12: c+=((uint32_t)k[11])<<24;
+        case 11: c+=((uint32_t)k[10])<<16;
+        case 10: c+=((uint32_t)k[9])<<8;
+        case 9 : c+=k[8];
+        case 8 : b+=((uint32_t)k[7])<<24;
+        case 7 : b+=((uint32_t)k[6])<<16;
+        case 6 : b+=((uint32_t)k[5])<<8;
+        case 5 : b+=k[4];
+        case 4 : a+=((uint32_t)k[3])<<24;
+        case 3 : a+=((uint32_t)k[2])<<16;
+        case 2 : a+=((uint32_t)k[1])<<8;
+        case 1 : a+=k[0];
+                 break;
+        case 0 : goto done;
     }
 
-    oh = calloc(1, sizeof(OBJ_t));
-    if (oh == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	    "Object Header:Internal allocation error", obj_head_addr, NULL);
-	CK_GOTO_DONE(FAIL)
-    }
-
-    /* version 2 or later */
-    if(!memcmp(p, OBJ_HDR_MAGIC, (size_t)OBJ_SIZEOF_MAGIC)) {
-	if (debug_verbose())
-	    printf("Version 2 object header encountered\n");	
-
-	start_buf = buf;
-	p = buf;
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
-
-	p += OBJ_SIZEOF_MAGIC;
-        oh->version = *p++;
-        if(OBJ_VERSION_2 != oh->version) {
-    	    badinfo = oh->version;
-	    error_push(ERR_LEV_2, ERR_LEV_2A1b, "version 2 Object Header:Bad version number", logical, &badinfo);
-	    CK_SET_ERR(FAIL)
-	}
-
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
-	oh->flags = *p++;
-	if(oh->flags & ~OBJ_HDR_ALL_FLAGS) {
-	    error_push(ERR_LEV_2, ERR_LEV_2A1b, 
-		"version 2 Object Header:Unknown object header status flags", logical, NULL);
-	    CK_SET_ERR(FAIL)
-	}
-
-        /* Number of messages (to allocate initially) */
-        nmesgs = 1;
-	oh->nlink = 1;
-
-        /* Time fields */
-        if(oh->flags & OBJ_HDR_STORE_TIMES) {
-            UINT32DECODE(p, oh->atime);
-            UINT32DECODE(p, oh->mtime);
-            UINT32DECODE(p, oh->ctime);
-            UINT32DECODE(p, oh->btime);
-        } /* end if */
-        else
-            oh->atime = oh->mtime = oh->ctime = oh->btime = 0;
-
-        /* Attribute fields */
-        if(oh->flags & OBJ_HDR_ATTR_STORE_PHASE_CHANGE) {
-	    logical = get_logical_addr(p, start_buf, obj_head_addr);
-            UINT16DECODE(p, oh->max_compact);
-            UINT16DECODE(p, oh->min_dense);
-            if(oh->max_compact < oh->min_dense) {
-		error_push(ERR_LEV_2, ERR_LEV_2A1b, 
-		    "version 2 Object Header:Invalid attribute phase changed values", logical, NULL);
-		CK_SET_ERR(FAIL)
-	    }
-        } else {
-            oh->max_compact = OBJ_CRT_ATTR_MAX_COMPACT_DEF;
-            oh->min_dense = OBJ_CRT_ATTR_MIN_DENSE_DEF;
-        } /* end else */
-
-	/* First chunk size */
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
-        switch(oh->flags & OBJ_HDR_CHUNK0_SIZE) {
-            case 0:     /* 1 byte size */
-                chunk_size = *p++;
-                break;
-
-            case 1:     /* 2 byte size */
-                UINT16DECODE(p, chunk_size);
-                break;
-
-            case 2:     /* 4 byte size */
-                UINT32DECODE(p, chunk_size);
-                break;
-
-            case 3:     /* 8 byte size */
-                UINT64DECODE(p, chunk_size);
-                break;
-
-            default:
-                printf("bad size for chunk 0\n");
-        } /* end switch */
-        if(chunk_size > 0 && chunk_size < OBJ_SIZEOF_MSGHDR_OH(oh)) {
-	    error_push(ERR_LEV_2, ERR_LEV_2A1b, 
-		"version 2 Object Header:Bad object header size", logical, &badinfo);
-	    CK_GOTO_DONE(FAIL)
-	}
-    } else { /* version 1 */
-	if (debug_verbose())
-	    printf("Version 1 object header encountered\n");	
-	start_buf = buf;
-	p = buf;
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
-
-	oh->version = *p++;
-	if (oh->version != OBJ_VERSION_1) {
-    	    badinfo = oh->version;
-	    error_push(ERR_LEV_2, ERR_LEV_2A1a, "version 1 Object Header:Bad version number", logical, &badinfo);
-	    CK_SET_ERR(FAIL)
-	}
-	/* Flags */ 
-        oh->flags = OBJ_CRT_OHDR_FLAGS_DEF;
-
-	p++;  /* reserved */
-
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
-	UINT16DECODE(p, nmesgs);
-	if ((int)nmesgs < 0) {
-	    badinfo = nmesgs;
-	    error_push(ERR_LEV_2, ERR_LEV_2A1a, 
-		"version 1 Object Header:number of header messages should not be negative", logical, &badinfo);
-	    CK_SET_ERR(FAIL)
-	}
-
-	UINT32DECODE(p, oh->nlink);
-
-	/* NEED CHECK: why nlink-1? */
-	table_insert(obj_head_addr, oh->nlink-1);
-
-	UINT32DECODE(p, chunk_size);
-	p += 4;
-    }
-
-	
-    prefix_size = (size_t)(p - buf);
-    chunk_addr = obj_head_addr + prefix_size;
-
-    logical = get_logical_addr(p, start_buf, chunk_addr);
-
-    oh->alloc_nmesgs = (nmesgs > 0) ? nmesgs: 1;
-    if ((oh->mesg = calloc(oh->alloc_nmesgs, sizeof(OBJ_mesg_t)))==NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Object Header:Internal allocation error", logical, NULL);
-	CK_GOTO_DONE(FAIL)
-    }
-
-#ifdef DEBUG
-    printf("oh->version =%d, nmesgs=%d, oh->nlink=%d\n", oh->version, nmesgs, oh->nlink);
-    printf("chunk_addr=%llu, chunk_size=%u\n", chunk_addr, chunk_size);
-#endif
-#ifdef TOBEFIXED
-SHOULD i check for chunk_size bigger than file size as error and also if there are errors
-already so far, should NOT proceed any further, otherwise migth be in infinite loop...
-if that does not stop it, then what....should have some check inside the while loop
-OK: should have caught the chunk_size too big in sec2_read() which is updated to include
-checking for addr+file_size > EOF
-#endif
-
-
-    /* read each chunk from disk */
-    while (addr_defined(chunk_addr)) {
-	unsigned 	chunkno;	/* current chunk's index */
-	uint8_t		*eom_ptr;	/* pointer to end of messages for a chunk */
-
-	logical = get_logical_addr(p, start_buf, chunk_addr);
-
-	/* increase chunk array size */
-	if (oh->nchunks >= oh->alloc_nchunks) {
-
-	    unsigned na = MAX(OBJ_NCHUNKS, oh->alloc_nchunks * 2);
-	    OBJ_chunk_t *x = realloc(oh->chunk, (size_t)(na*sizeof(OBJ_chunk_t)));
-	    if (!x) {
-		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Object Header:Internal allocation error", logical, NULL);
-		CK_GOTO_DONE(FAIL)
-	    }
-
-	    oh->alloc_nchunks = na;
-	    oh->chunk = x;
-        }  /* end if */
-
-
-        /* read the chunk raw data */
-        chunkno = oh->nchunks++;
-	if (chunkno == 0) {
-	    oh->chunk[chunkno].addr = obj_head_addr;
-	    oh->chunk[chunkno].size = chunk_size + OBJ_SIZEOF_HDR(oh);
-	} else {
-	    oh->chunk[chunkno].addr = chunk_addr;
-	    oh->chunk[chunkno].size = chunk_size;
-	}
-
-	if ((oh->chunk[chunkno].image = calloc(1, oh->chunk[chunkno].size)) == NULL) {
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Object Header:Internal allocation error", logical, NULL);
-	    CK_GOTO_DONE(FAIL)
-	}
-
-	/* Handle chunk 0 as special case */
-        if(chunkno == 0) {
-            /* Check for speculative read of first chunk containing all the data needed */
-            if(spec_read_size >= oh->chunk[0].size)
-                memcpy(oh->chunk[0].image, buf, oh->chunk[0].size);
-            else {
-                /* Copy the object header prefix into chunk 0's image */
-                memcpy(oh->chunk[0].image, buf, prefix_size);
-		/* read the message data */
-		if (FD_read(file, chunk_addr, (oh->chunk[0].size-prefix_size), (oh->chunk[chunkno].image+prefix_size)) == FAIL) {
-		    error_push(ERR_FILE, ERR_NONE_SEC, "Object Header:Unable to read object header data", logical, NULL);
-		    CK_GOTO_DONE(FAIL)
-		}
-            } /* end else */
-
-            /* Point into chunk image to decode */
-	    start_buf = oh->chunk[chunkno].image;
-            p = oh->chunk[0].image + prefix_size;
-        } /* end if */
-        else {
-	    if (FD_read(file, chunk_addr, chunk_size, oh->chunk[chunkno].image) == FAIL) {
-		error_push(ERR_FILE, ERR_NONE_SEC, 
-		    "Object Header:Unable to read object header data", logical, NULL);
-		CK_GOTO_DONE(FAIL)
-	    }
-            /* Point into chunk image to decode */
-	    start_buf = oh->chunk[chunkno].image;
-            p = oh->chunk[chunkno].image;
-        } /* end else */
-
-	logical = get_logical_addr(p, start_buf, chunk_addr);
-	/* Check for "CONT" magic # on chunks > 0 in later versions of the format */
-        if(chunkno > 0 && oh->version > OBJ_VERSION_1) {
-            /* Magic number */
-            if(memcmp(p, OBJ_CHK_MAGIC, (size_t)OBJ_SIZEOF_MAGIC)) {
-		error_push(ERR_LEV_2, ERR_LEV_2A1b, 
-		    "version 2 Object Header:Couldn't find CONT signature", logical, NULL);
-		CK_GOTO_DONE(FAIL)
-	    }
-            p += OBJ_SIZEOF_MAGIC;
-        } /* end if */
-
-	/* Decode messages from this chunk */
-        eom_ptr = oh->chunk[chunkno].image + (oh->chunk[chunkno].size - OBJ_SIZEOF_CHKSUM_OH(oh));
-
-	while (p < eom_ptr) {
-	    unsigned    mesgno;         /* Current message to operate on */
-            size_t      mesg_size;      /* Size of message read in */
-            unsigned    id;             /* ID (type) of current message */
-            uint8_t     flags;          /* Flags for current message */
-            OBJ_msg_crt_idx_t crt_idx = 0;  /* Creation index for current message */
-
-	    /* Decode message prefix info */
-
-	    logical = get_logical_addr(p, start_buf, chunk_addr);
-            /* Version # */
-            if(oh->version == OBJ_VERSION_1)
-                UINT16DECODE(p, id)
-            else
-                id = *p++;
-
-            if(id == OBJ_UNKNOWN_ID) {
-		error_push(ERR_LEV_2, ERR_LEV_2A, 
-		    "Object Header:unknown message ID encoded in file", logical, NULL);
-		CK_SET_ERR(FAIL)
-	    }
-
-
-	    UINT16DECODE(p, mesg_size);
-	    assert(mesg_size==OBJ_ALIGN_OH(oh, mesg_size));
-	    flags = *p++;
-
-	    /* Reserved bytes/creation index */
-            if(oh->version == OBJ_VERSION_1)
-                p += 3; /*reserved*/
-            else {
-                /* Only encode creation index if they are being tracked */
-                if(oh->flags & OBJ_HDR_ATTR_CRT_ORDER_TRACKED)
-                    UINT16DECODE(p, crt_idx);
-            } /* end else */
-	    /* Try to detect invalidly formatted object header message that
-             *  extends past end of chunk.
-             */
-	    logical = get_logical_addr(p, start_buf, chunk_addr);
-            if(p + mesg_size > eom_ptr) {
-		error_push(ERR_LEV_2, ERR_LEV_2A, "Object Header:corrupt object header", logical, NULL);
-		CK_GOTO_DONE(FAIL)
-	    }
-
-#ifdef DEBUG
-	    printf("id is %u, mesg_size=%u\n", id, mesg_size);
-#endif
-
-            if(oh->nmesgs >= oh->alloc_nmesgs)
-		if (OBJ_alloc_msgs(oh, (size_t)1) < 0)
-		    CK_GOTO_DONE(FAIL)
-
-            /* Get index for message */
-	    mesgno = oh->nmesgs++;
-            oh->mesg[mesgno].flags = flags;
-	    oh->mesg[mesgno].native = NULL;
-	    oh->mesg[mesgno].raw = (uint8_t *)p;
-	    oh->mesg[mesgno].raw_size = mesg_size;
-	    oh->mesg[mesgno].chunkno = chunkno;
-
-	    if (id >= NELMTS(message_type_g) || NULL == message_type_g[id]) {
-#ifdef DEBUG
-		printf("Made this into an unknown id for id=%d\n", id);
-#endif
-		oh->mesg[mesgno].type = message_type_g[OBJ_UNKNOWN_ID];
-	    } else
-		oh->mesg[mesgno].type = message_type_g[id];
-
-	    p+= mesg_size;
-
-	    /* Check for 'gap' at end of chunk */
-            if((eom_ptr - p) > 0 && (eom_ptr - p) < OBJ_SIZEOF_MSGHDR_OH(oh)) {
-                /* Gaps can only occur in later versions of the format */
-                assert(oh->version > OBJ_VERSION_1);
-                p += eom_ptr - p;
-            } /* end if */
-	} /* end while */
-
-	/* Check for correct checksum on chunks, in later versions of the format */
-        if(oh->version > OBJ_VERSION_1) {
-            uint32_t stored_chksum;     /* Checksum from file */
-            uint32_t computed_chksum;   /* Checksum computed in memory */
-
-            /* Metadata checksum */
-            UINT32DECODE(p, stored_chksum);
-
-            /* Compute checksum on chunk */
-            /* Verify checksum */
-        } /* end if */
-
-	assert(p == oh->chunk[chunkno].image + oh->chunk[chunkno].size);
-
-       	/* decode next object header continuation message */
-        for (chunk_addr = CK_ADDR_UNDEF; !addr_defined(chunk_addr) && curmesg < oh->nmesgs; ++curmesg) {
-	    if (oh->mesg[curmesg].type->id == OBJ_CONT_ID) {
-		start_buf = oh->chunk[oh->mesg[curmesg].chunkno].image;
-		logi_base = oh->chunk[oh->mesg[curmesg].chunkno].addr;
-		cont = (OBJ_CONT->decode) (file, oh->mesg[curmesg].raw, start_buf, logi_base);
-		logical = get_logical_addr(oh->mesg[curmesg].raw, start_buf, logi_base);
-		if (cont == NULL) {
-		    error_push(ERR_LEV_2, ERR_LEV_2A, 
-			"Object Header:Corrupt continuation message...skipped", logical, NULL);
-		    CK_CONTINUE(FAIL)
-		}
-                oh->mesg[curmesg].native = cont;
-                chunk_addr = cont->addr;
-                chunk_size = cont->size;
-                cont->chunkno = oh->nchunks;    /*the next chunk to allocate */
-	    }  /* end if */
-        }  /* end for */
-    }  /* end while(addr_defined(chunk_addr)) */
-
-    if (ret_oh)
-	*ret_oh = oh;
-    if (decode_validate_messages(file, oh) < 0)
-	CK_GOTO_DONE(FAIL)
+    lookup3_final(a, b, c);
 
 done:
-    return(ret_value);
-} /* end check_obj_header() */
-#endif
+    return(c);
+} 
+
+uint32_t
+checksum_metadata(const void *data, ck_size_t len, uint32_t initval)
+{
+    assert(data);
+    assert(len > 0);
+
+    return(checksum_lookup3(data, len, initval));
+}
+
+/* end checksum routines from the library */
+
 
 void
 print_version(const char *prog_name)

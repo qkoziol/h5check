@@ -138,6 +138,8 @@ static ck_err_t HF_man_read(driver_t *, HF_hdr_t *, void *, obj_info_t *);
 static ck_err_t HF_tiny_read(driver_t *, HF_hdr_t *, const uint8_t *, void *);
 static ck_err_t SM_type_to_flag(unsigned, unsigned *);
 static ssize_t SM_get_index(const SM_master_table_t *, unsigned);
+static ck_err_t check_fshdr(driver_t *, ck_addr_t, HF_hdr_t *);
+static ck_err_t check_fssection(driver_t *, ck_addr_t, FS_hdr_t *);
 
 static ck_err_t HF_sect_row_init_cls(FS_section_class_t *, HF_hdr_t *);
 static ck_err_t HF_sect_indirect_init_cls(FS_section_class_t *, HF_hdr_t *);
@@ -437,8 +439,8 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     int		ret_value=SUCCEED;
     int		version, badinfo, u;
     uint8_t	*buf = NULL, *p;
-    size_t	hdr_size;
-    uint32_t	stored_chksum;
+    ck_size_t	hdr_size;
+    uint32_t	stored_chksum, computed_chksum;
     uint8_t 	split_percent, merge_percent;   
     ck_hsize_t	all_nrec;
     B2_t	*hdr;
@@ -504,7 +506,15 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     UINT16DECODE(p, hdr->root.node_nrec/*out*/);
 
     DECODE_LENGTH(file->shared, p, all_nrec);
+
+    logical = get_logical_addr(p, start_buf, bt_hdr_addr);
     UINT32DECODE(p, stored_chksum);
+
+    computed_chksum = checksum_metadata(buf, (hdr_size - B2_SIZEOF_CHKSUM), 0);
+    if (computed_chksum != stored_chksum) {
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Incorrect checksum for header", logical, NULL);
+	CK_SET_ERR(FAIL)
+    }
 
 #ifdef DEBUG
     printf("hdr->root.addr=%llu, hdr->root.node_nrec=%u\n", hdr->root.addr, hdr->root.node_nrec);
@@ -570,7 +580,7 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     int		ret_value=SUCCEED;
     int		u;
     uint8_t	*buf=NULL, *p;
-    uint32_t	stored_chksum;
+    uint32_t	stored_chksum, computed_chksum;
     uint8_t    	*native;
     B2_leaf_t	*leaf=NULL;
     uint8_t     *start_buf=NULL;
@@ -638,8 +648,16 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
 	native += bt2_shared->type->nrec_size;
     }
 
-    /* NEED CHECK: need to validate checksum */
+    /* Compute checksum on internal node */
+    computed_chksum = checksum_metadata(buf, (size_t)(p - buf), 0);
+
+    logical = get_logical_addr(p, start_buf, addr);
     UINT32DECODE(p, stored_chksum);
+
+    if (computed_chksum != stored_chksum) {
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Incorrect checksum for leaf node", logical, NULL);
+	CK_SET_ERR(FAIL)
+    }
 
     *ret_leaf = leaf;
 done:
@@ -658,7 +676,7 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     int			ret_value=SUCCEED;
     int			version, badinfo;
     B2_subid_t 		type_id;
-    uint32_t		stored_chksum;
+    uint32_t		stored_chksum, computed_chksum;
     unsigned		u;
     uint8_t		*buf = NULL, *p;
     B2_internal_t	*internal=NULL;
@@ -756,8 +774,14 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
         int_node_ptr++;
     }
 
-    /* NEED CHECK: to validate this? */
+    computed_chksum = checksum_metadata(buf, (size_t)(p - buf), 0);
+
+    logical = get_logical_addr(p, start_buf, addr);
     UINT32DECODE(p, stored_chksum);
+    if (computed_chksum != stored_chksum) {
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Incorrect checksum for internal node", logical, NULL);
+	CK_SET_ERR(FAIL)
+    }
 
     *ret_internal = internal;
 done:
@@ -1032,9 +1056,9 @@ check_fssection(driver_t *file, ck_addr_t fssect_addr, FS_hdr_t *fs_hdr)
     uint8_t             *buf = NULL;
     ck_addr_t           fshdr_addr;
     int                 ret_value=SUCCEED;
-    size_t              old_sect_size;  /* Old section size */
-    const uint8_t       *p;             /* Pointer into raw data buffer */
-    uint32_t            stored_chksum;  /* Stored metadata checksum value */
+    size_t              old_sect_size; 
+    const uint8_t       *p;           
+    uint32_t            stored_chksum, computed_chksum; 
     uint8_t             *start_buf = NULL;
     ck_addr_t           logical;
     int			version, badinfo;
@@ -1147,8 +1171,14 @@ check_fssection(driver_t *file, ck_addr_t fssect_addr, FS_hdr_t *fs_hdr)
         } while(p < ((buf + old_sect_size) - FS_SIZEOF_CHKSUM));
     } /* end if */
 
-    /* NEED??CHECK Metadata checksum */
+    logical = get_logical_addr(p, start_buf, fssect_addr);
+    computed_chksum = checksum_metadata(buf, (size_t)(p - buf), 0);
     UINT32DECODE(p, stored_chksum);
+
+    if (computed_chksum != stored_chksum) {
+	error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Incorrect checksum", logical, NULL);
+	CK_SET_ERR(FAIL)
+    }
 
 done:
     return(ret_value);
@@ -1162,7 +1192,7 @@ check_fshdr(driver_t *file, ck_addr_t fs_addr, HF_hdr_t *fh_hdr)
     uint8_t             hdr_buf[FS_HDR_BUF_SIZE];
     ck_size_t           size;           
     const uint8_t       *p;           
-    uint32_t            stored_chksum; 
+    uint32_t            stored_chksum, computed_chksum; 
     int                 ret_value=SUCCEED;
     uint8_t             *start_buf = NULL;
     ck_addr_t           logical;
@@ -1262,7 +1292,6 @@ check_fshdr(driver_t *file, ck_addr_t fs_addr, HF_hdr_t *fh_hdr)
         error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Section class count mismatch", logical, NULL);
         CK_SET_ERR(FAIL)
     }
-printf("nclasses=%u, fs_hdr->nclasses=%u\n", nclasses, fs_hdr->nclasses);
 
     UINT16DECODE(p, fs_hdr->shrink_percent);
     UINT16DECODE(p, fs_hdr->expand_percent);
@@ -1281,7 +1310,13 @@ printf("nclasses=%u, fs_hdr->nclasses=%u\n", nclasses, fs_hdr->nclasses);
     }
 
     /* Metadata checksum */
+    logical = get_logical_addr(p, start_buf, fs_addr);
+    computed_chksum = checksum_metadata(hdr_buf, (size_t)(p - hdr_buf), 0);
     UINT32DECODE(p, stored_chksum);
+    if (computed_chksum != stored_chksum) {
+        error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Incorrect checksum", logical, NULL);
+        CK_SET_ERR(FAIL)
+    }
 
     /* check free space section list */
     if (addr_defined(fs_hdr->sect_addr)) {
@@ -1298,6 +1333,10 @@ done:
         free(fs_hdr);
     return(ret_value);
 } /* end check_fshdr() */
+
+/*
+ *  END Free Space Manager validation
+ */
 
 /* 
  * START fractal heap validation
@@ -1406,12 +1445,12 @@ HF_dtable_size_to_rows(const HF_dtable_t *dtable, ck_hsize_t size)
 static ck_err_t
 check_iblock_real(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned nrows, HF_indirect_t **ret_iblock)
 {
-    HF_indirect_t       *iblock = NULL; 	/* Indirect block info */
-    uint8_t             iblock_buf[HF_IBLOCK_BUF_SIZE]; /* Buffer for indirect block */
-    const uint8_t       *p;             	/* Pointer into raw data buffer */
-    ck_addr_t           heap_addr;      	/* Address of heap header in the file */
-    uint32_t            stored_chksum;  	/* Stored metadata checksum value */
-    size_t              u;              	/* Local index variable */
+    HF_indirect_t       *iblock = NULL; 
+    uint8_t             iblock_buf[HF_IBLOCK_BUF_SIZE]; 
+    const uint8_t       *p;        
+    ck_addr_t           heap_addr;  
+    uint32_t            stored_chksum, computed_chksum;
+    size_t              u;            
     unsigned		dir_rows;
     unsigned		entry, row, col;
     int			i;
@@ -1556,10 +1595,15 @@ printf("iblock->nchildren=%u\n", iblock->nchildren);
 	CK_SET_ERR(FAIL)
     }
 
-/* NEED CHECK:to validate checksum ?? */
+    logical = get_logical_addr(p, start_buf, iblock_addr);
+    computed_chksum = checksum_metadata(iblock_buf, (size_t)(p - iblock_buf), 0);
     UINT32DECODE(p, stored_chksum);
 
-    /* Sanity check */
+    if (computed_chksum != stored_chksum) {
+	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Indirect Block:Incorrect checksum", logical, NULL);
+	CK_SET_ERR(FAIL)
+    }
+
     assert((size_t)(p - iblock_buf) == iblock->size);
 
 done:
@@ -1684,7 +1728,6 @@ check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t db
     /* Set block's internal information */
     dblock->size = dblock_size;
     dblock->blk_off_size = HF_SIZEOF_OFFSET_LEN(dblock->size);
-      /* Allocate block buffer */
     if((dblock->blk = malloc((size_t)dblock->size)) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	    "Fractal Heap Direct Block:Internal allocation error", dblock_addr, NULL);
@@ -1789,12 +1832,18 @@ check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t db
     /* Offset of heap within the heap's address space */
     UINT64DECODE_VAR(p, dblock->block_off, hdr->heap_off_size);
 
-    /* Encode checksum on direct block, if requested */
     if(hdr->checksum_dblocks) {
-        uint32_t stored_chksum; 
+        uint32_t stored_chksum, computed_chksum; 
 
-	/* NEED TO VERIFY CHECKSUM ?? */
+	logical = get_logical_addr(p, start_buf, dblock_addr);
         UINT32DECODE(p, stored_chksum);
+	memset((uint8_t *)p - HF_SIZEOF_CHKSUM, 0, (size_t)HF_SIZEOF_CHKSUM);
+	computed_chksum = checksum_metadata(dblock->blk, dblock->size, 0);
+	if (computed_chksum != stored_chksum) {
+	    error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Direct Block:Incorrect checksum", 
+		logical, NULL);
+	    CK_SET_ERR(FAIL)
+	}
 
     } /* end if */
 
@@ -2064,9 +2113,9 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
     HF_hdr_t          	*hdr = NULL;     /* Fractal heap info */
     uint8_t             hdr_buf[HF_HDR_BUF_SIZE]; /* Buffer for header */
     ck_size_t           size;           /* Header size */
-    const uint8_t       *p;             /* Pointer into raw data buffer */
+    const uint8_t       *p;          
     uint8_t             heap_flags;     /* Status flags for heap */
-    uint32_t            stored_chksum;  /* Stored metadata checksum value */
+    uint32_t            stored_chksum, computed_chksum;
     int 		ret_value=SUCCEED;
     OBJ_filter_t     	*pline = NULL;
 
@@ -2235,8 +2284,14 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
         /* Set the heap header's size */
 	hdr->heap_size = size;
 
-    /* NEED CHECK:validate checksum??? */
+    logical = get_logical_addr(p, start_buf, fhdr_addr);
+    computed_chksum = checksum_metadata(hdr_buf, (size_t)(p - hdr_buf), 0);
+
     UINT32DECODE(p, stored_chksum);
+    if (computed_chksum != stored_chksum) {
+	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Header:Incorrect checksum\n", logical, NULL);
+	CK_SET_ERR(FAIL)
+    }
 
     if (HF_dtable_init(&hdr->man_dtable) < 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Header:Errors found when initializing doubling table\n", 
@@ -2777,7 +2832,7 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 {
     SM_master_table_t	*table=NULL;
     uint8_t       	tbl_buf[SM_TBL_BUF_SIZE]; /* Buffer for table */
-    uint32_t      	stored_chksum;        	  /* Stored metadata checksum value */
+    uint32_t      	stored_chksum, computed_chksum;
     ck_size_t		size, x;
     const uint8_t 	*p;                  
     uint8_t             *start_buf = NULL;
@@ -2957,13 +3012,16 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 
     
     /* Read in checksum */
+    logical = get_logical_addr(p, start_buf, sohm_addr);
     UINT32DECODE(p, stored_chksum);
 
-    /* Sanity check */
+    computed_chksum = checksum_metadata(tbl_buf, (size - SM_SIZEOF_CHECKSUM), 0);
+    if (computed_chksum != stored_chksum) {
+	error_push(ERR_LEV_2, ERR_LEV_2A, "SOHM:Incorrect checksum", logical, NULL);
+	CK_SET_ERR(FAIL)
+    }
+
     assert((size_t)(p - tbl_buf) == size);
-
-    /* NEED CHECK:VALIDATE??? Compute checksum on entire header */
-
 
 done:
     if (ret_value == SUCCEED)

@@ -2172,4 +2172,5 @@ ck_addr_t 	get_logical_addr(const uint8_t *, const uint8_t *, ck_addr_t);
 int     	debug_verbose(void);
 int     	object_api(void);
 
-
+uint32_t 	checksum_metadata(const void *, ck_size_t, uint32_t);
+uint32_t 	checksum_lookup3(const void *, ck_size_t, uint32_t);
