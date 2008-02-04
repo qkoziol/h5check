@@ -28,8 +28,8 @@ static	ck_err_t 	decode_validate_messages(driver_t *, OBJ_t *);
 /*
  *  Virtual file drivers
  */
-static 	void 		set_driver(int *, char *);
-static 	driver_class_t 	*get_driver(int);
+static 	void 		set_driver_id(int */*out*/, char *);
+static 	driver_class_t 	*get_driver_class(int);
 static 	void 		*get_driver_info(int, global_shared_t *);
 static 	ck_err_t 	decode_driver(global_shared_t *, const uint8_t *);
 
@@ -58,9 +58,9 @@ static 	ck_addr_t 	multi_get_eof(driver_t *file);
 static 	char 		*multi_get_fname(driver_t *file, ck_addr_t logi_addr);
 
 
-static void set_multi_driver_properties(driver_multi_fapl_t **, driver_mem_t *, const char **, ck_addr_t *);
-static int compute_next(driver_multi_t *file);
-static int open_members(driver_multi_t *file, global_shared_t *);
+static void 	set_multi_driver_properties(driver_multi_fapl_t **, driver_mem_t *, const char **, ck_addr_t *);
+static ck_err_t	compute_next(driver_multi_t *file);
+static ck_err_t open_members(driver_multi_t *file, global_shared_t *);
 
 static const driver_class_t multi_g = {
     "multi",                               /* name                 */
@@ -71,6 +71,26 @@ static const driver_class_t multi_g = {
     multi_get_eof,                         /* get_eof               */
     multi_get_fname,			   /* get file name 	    */
 };
+
+static 	ck_err_t 	family_decode_driver(global_shared_t *, const unsigned char *);
+static 	driver_t 	*family_open(const char *, global_shared_t *, int);
+static 	ck_err_t 	family_close(driver_t *);
+static 	ck_err_t 	family_read(driver_t *, ck_addr_t, size_t, void */*out*/);
+static 	ck_addr_t 	family_get_eof(driver_t *file);
+static 	char 		*family_get_fname(driver_t *file, ck_addr_t logi_addr);
+
+static void set_fami_driver_properties(driver_fami_fapl_t **, driver_mem_t *, const char **, ck_addr_t *);
+
+static const driver_class_t family_g = {
+    "family",                                   /* name                  */
+    family_decode_driver,                       /* decode_driver         */
+    family_open,                           	/* open                  */
+    family_close,                          	/* close                 */
+    family_read,                           	/* read                  */
+    family_get_eof,                        	/* get_eof               */
+    family_get_fname,				/* get file name */
+};
+
 
 
 /*
@@ -409,37 +429,47 @@ table_insert(ck_addr_t objno, int nlink)
 /*
  *  Virtual drivers
  */
+/* 
+ * Set the given driver id based on the given driver name 
+ */
 static void
-set_driver(int *driverid, char *driver_name) 
+set_driver_id(int *driverid/*out*/, char *driver_name) 
 {
     if (strcmp(driver_name, "NCSAmult") == 0)
 	*driverid = MULTI_DRIVER;
     else if (strcmp(driver_name, "NCSAfami") == 0)
-	*driverid = FAMI_DRIVER;
+	*driverid = FAMILY_DRIVER;
     else
 	/* default driver */
 	*driverid = SEC2_DRIVER;
 }
 
+/* 
+ * get driver class specific methods based on the given driver id 
+ */
 static driver_class_t *
-get_driver(int driver_id)
+get_driver_class(int driver_id)
 {
     driver_class_t	*driver=NULL;
-    size_t		size;
+    ck_size_t		size;
 
     size = sizeof(driver_class_t);
 
     switch (driver_id) {
     case SEC2_DRIVER:
-	driver = malloc(size);
+	driver = calloc(1, size);
 	memcpy(driver, &sec2_g, size);
 	break;
     case MULTI_DRIVER:
-	driver = malloc(size);
+	driver = calloc(1, size);
 	memcpy(driver, &multi_g, size);
 	break;
+    case FAMILY_DRIVER:
+	driver = calloc(1, size);
+	memcpy(driver, &family_g, size);
+	break;
     default:
-	printf("Unsupported file driver\n");
+	error_push(ERR_LEV_0, ERR_LEV_0B, "Unsupported file driver", -1, NULL);
 	break;
     }  /* end switch */
 
@@ -447,33 +477,49 @@ get_driver(int driver_id)
 }
 
 
+/* 
+ * Get the driver specific info from shared.
+ * It should only be called by multi or family driver.
+ */
 static void *
 get_driver_info(int driver_id, global_shared_t *shared)
 {
-    driver_multi_fapl_t 	*driverinfo=NULL;
-    size_t			size;
+    void	*driverinfo=NULL;
+    ck_size_t	size;
 
-    switch (driver_id) {
-    case SEC2_DRIVER:
-	break;
-    case MULTI_DRIVER:
+    if (driver_id == MULTI_DRIVER) {
 	size = sizeof(driver_multi_fapl_t);
-	driverinfo = malloc(size);
+	driverinfo = calloc(1, size);
 	memcpy(driverinfo, shared->fa, size);
-	break;
-    default:
-	printf("get_driver_info():Something is wrong\n");
-	break;
-    }  /* end switch */
+    } else if (driver_id == FAMILY_DRIVER) {
+	size = sizeof(driver_fami_fapl_t);
+	driverinfo = calloc(1, size);
+	memcpy(driverinfo, shared->fa, size);
+    } else
+	error_push(ERR_LEV_0, ERR_LEV_0B, "Unsupported file driver", -1, NULL);
+
     return(driverinfo);
 }
 
 
+/*
+ * Decode the Driver Information field of the Driver Information Block or Driver Info Message
+ */
 static ck_err_t
 decode_driver(global_shared_t *shared, const uint8_t *buf)
 {
+    ck_err_t	ret_value;
+
     if (shared->driverid == MULTI_DRIVER)
-	multi_decode_driver(shared, buf);
+	ret_value = multi_decode_driver(shared, buf);
+    else if ((shared->driverid == FAMILY_DRIVER) && (g_format_num == FORMAT_ONE_EIGHT))
+	ret_value = family_decode_driver(shared, buf);
+    else {
+	error_push(ERR_LEV_0, ERR_LEV_0B, "Unsupported file driver", -1, NULL);
+	CK_SET_ERR(FAIL)
+    }
+
+    return(ret_value);
 }
 
 driver_t *
@@ -482,7 +528,7 @@ FD_open(const char *name, global_shared_t *shared, int driver_id)
     driver_t		*file= NULL;
     driver_class_t 	*driver;
 
-    driver = get_driver(driver_id);
+    driver = get_driver_class(driver_id);
     if (driver != NULL) {
     	file = driver->open(name, shared, driver_id);
 	if (file != NULL) {
@@ -498,11 +544,12 @@ FD_open(const char *name, global_shared_t *shared, int driver_id)
 ck_err_t
 FD_close(driver_t *file)
 {
-    int	ret = SUCCEED;
+    ck_err_t	ret_value=SUCCEED;
 
     if(file->cls->close(file) == FAIL)
-	ret = FAIL;
-    return(ret);
+	ret_value = FAIL;
+
+    return(ret_value);
 }
 
 ck_err_t
@@ -630,6 +677,12 @@ check for number of bytes returned from read??
 
 /*
  *  multi file driver
+ *  1. User needs to give the 1st file "multi-s.h5" so that h5check will get 
+ *     superblock information for validation of all the multi files.
+ *  2. (driver_multi_t *)file->name is the original file name supplied by the user
+ *  3. (driver_multi_t *)file->fa.memb_name is the sprintf generated name 
+ *     e.g. %s-s.h5, %s-b.h5, %s-r.h5 ....
+ *  4. Problem: need to solve H5Tconvert(H5T_STD_U64LE, H5T_NATIVE_HADDR, nseen*2, x, NULL, H5P_DEFAULT)
  */
 
 #define UNIQUE_MEMBERS(MAP,LOOPVAR) {                                         \
@@ -655,8 +708,8 @@ check for number of bytes returned from read??
 static void
 set_multi_driver_properties(driver_multi_fapl_t **fa, driver_mem_t map[], const char *memb_name[], ck_addr_t memb_addr[])
 {
-    *fa = malloc(sizeof(driver_multi_fapl_t));
-    /* Commit map */
+    *fa = calloc(1, sizeof(driver_multi_fapl_t));
+
     ALL_MEMBERS(mt) {
 	(*fa)->memb_map[mt] = map[mt];
    	(*fa)->memb_addr[mt] = memb_addr[mt];
@@ -674,14 +727,11 @@ multi_decode_driver(global_shared_t *shared, const unsigned char *buf)
     char                x[2*FD_MEM_NTYPES*8];
     driver_mem_t        map[FD_MEM_NTYPES];
     int                 i;
-    size_t              nseen=0;
     const char          *memb_name[FD_MEM_NTYPES];
     ck_addr_t           memb_addr[FD_MEM_NTYPES];
     ck_addr_t           memb_eoa[FD_MEM_NTYPES];
-    ck_addr_t	    xx;
-/* handle memb_eoa[]?? */
-/* handle mt_in use??? */
-
+    ck_addr_t	    	xx;
+    ck_err_t		ret_value=SUCCEED;
 
     /* Set default values */
     ALL_MEMBERS(mt) {
@@ -690,43 +740,32 @@ multi_decode_driver(global_shared_t *shared, const unsigned char *buf)
        	memb_name[mt] = NULL;
     } END_MEMBERS;
 
-    /*
-     * Read the map and count the unique members.
-     */
     memset(map, 0, sizeof map);
     for (i=0; i<6; i++) {
        	map[i+1] = (driver_mem_t)buf[i];
     }
-    UNIQUE_MEMBERS(map, mt) {
-       	nseen++;
-    } END_MEMBERS;
+
     buf += 8;
 
     /* Decode Address and EOA values */
+    /* NOT SURE: the library does a H5Tconvert(...H5T_STD_U64LE, H5T_NATIVE_HADDR...)?? */
     assert(sizeof(ck_addr_t)<=8);
     UNIQUE_MEMBERS(map, mt) {
        	UINT64DECODE(buf, xx);
        	memb_addr[_unmapped] = xx;
        	UINT64DECODE(buf, xx);
        	memb_eoa[_unmapped] = xx;
-#ifdef DEBUG
-	printf("memb_addr[]=%llu;memb_eoa[]=%llu\n", 
-		memb_addr[_unmapped], memb_eoa[_unmapped]);
-#endif
     } END_MEMBERS;
 
     /* Decode name templates */
     UNIQUE_MEMBERS(map, mt) {
-       	size_t n = strlen((const char *)buf)+1;
+       	ck_size_t n = strlen((const char *)buf)+1;
        	memb_name[_unmapped] = (const char *)buf;
-#ifdef DEBUG
-	printf("memb_name=%s\n", memb_name[_unmapped]);
-#endif
        	buf += (n+7) & ~((unsigned)0x0007);
     } END_MEMBERS;
 
     set_multi_driver_properties((driver_multi_fapl_t **)&(shared->fa), map, memb_name, memb_addr);
-    return 0;
+    return(ret_value);
 }
 
 static driver_t *
@@ -735,111 +774,106 @@ multi_open(const char *name, global_shared_t *shared, int driver_id)
     driver_multi_t      *file=NULL;
     driver_multi_fapl_t *fa;
     driver_mem_t        m;
-    driver_t		*ret_value;
-    int			len, ret;
+    driver_t		*ret_ptr=NULL;
+    int			ret_value=SUCCEED;
+    int			len;
 
-
-    ret = SUCCEED;
-
-   /* Check arguments */
    if (!name || !*name) {
 	error_push(ERR_FILE, ERR_NONE_SEC, "Invalid file name", -1, NULL);
-	goto error;
+	CK_GOTO_DONE(FAIL)
     }
 
-    /*
-     * Initialize the file from the file access properties, using default
-     * values if necessary.
-     */
-    if (NULL==(file=calloc(1, sizeof(driver_multi_t)))) {
+    if ((file=calloc(1, sizeof(driver_multi_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal allocation error", -1, NULL);
-	goto error;
+	CK_GOTO_DONE(FAIL)
     }
 
     fa = get_driver_info(driver_id, shared);
-    assert(fa);
+    if (fa == NULL) {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Unable to get driver information", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
     ALL_MEMBERS(mt) {
 	file->fa.memb_map[mt] = fa->memb_map[mt];
 	file->fa.memb_addr[mt] = fa->memb_addr[mt];
 	if (fa->memb_name[mt]) {
-		file->fa.memb_name[mt] = malloc(strlen(fa->memb_name[mt]));
-            	strcpy(file->fa.memb_name[mt], fa->memb_name[mt]);
+	    file->fa.memb_name[mt] = malloc(strlen(fa->memb_name[mt]));
+	    strcpy(file->fa.memb_name[mt], fa->memb_name[mt]);
 	} else
-            	file->fa.memb_name[mt] = NULL;
+	    file->fa.memb_name[mt] = NULL;
     } END_MEMBERS;
 
+    /* name of the file supplied by the user */
     file->name = malloc(strlen(name)+1);
     strcpy(file->name, name);
 
-    if (compute_next(file) <0 )
-       	printf("compute_next() failed\n");
+    if (compute_next(file) != SUCCEED) {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Unable to compute member addresses", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
     if (open_members(file, shared) != SUCCEED) {
 	error_push(ERR_FILE, ERR_NONE_SEC, "Unable to open member files", -1, NULL);
-	goto error;
+	CK_GOTO_DONE(FAIL)
     }
 
-/* NEED To checkon this also, make shared_info to be _shared_info for pointer */
-/* need to check on return values for driver routines */
-/* error check at the end of each driver routine, also, free malloc space */
-#if 0
-    if (FD_MEM_DEFAULT==(m=file->fa.memb_map[FD_MEM_SUPER]))
-        m = FD_MEM_SUPER;
-    if (NULL==file->memb[m])
-        goto error;
-#endif
-
-    ret_value = (driver_t *)file;
-    return(ret_value);
-
-error:
-    if (file) {
-	ALL_MEMBERS(mt) {
-	    if (file->memb[mt]) (void)FD_close(file->memb[mt]);
+    if (ret_value == SUCCEED)
+	ret_ptr = (driver_t *)file;
+done:
+    if (ret_value == FAIL) {
+	if (file) {
+	    ALL_MEMBERS(mt) {
+	    if (file->memb[mt]) 
+		(void)FD_close(file->memb[mt]);
 	    if (file->fa.memb_name[mt]) free(file->fa.memb_name[mt]);
-	} END_MEMBERS;
-	if (file->name) free(file->name);
-	free(file);
+	    } END_MEMBERS;
+	    if (file->name) free(file->name);
+	    free(file);
+	}
     }
-    return NULL;
+    return(ret_ptr);
 }
 
 static ck_err_t 
-multi_close(driver_t *file)
+multi_close(driver_t *_file)
 {
-    driver_multi_t   	*multi_file = (driver_multi_t*)file;
-    int		errs = 0;
+    driver_multi_t   	*file=(driver_multi_t*)_file;
+    int			errs=0;
+    ck_err_t		ret_value=SUCCEED;
 
     /* Close as many members as possible */
     ALL_MEMBERS(mt) {
-        if (multi_file->memb[mt]) {
-	    if (FD_close(multi_file->memb[mt])<0)
+	if (file->memb[mt]) {
+	    if (FD_close(file->memb[mt])<0)
 		errs++;
 	    else
-		multi_file->memb[mt] = NULL;
+		file->memb[mt] = NULL;
 	}
     } END_MEMBERS;
 
     if (errs) {
 	error_push(ERR_FILE, ERR_NONE_SEC, "Error closing member file(s)", -1, NULL);
-	return(FAIL);
+	CK_GOTO_DONE(FAIL)
     }
 
-    /* Clean up other stuff */
-    ALL_MEMBERS(mt) {
-	if (multi_file->fa.memb_name[mt]) 
-	free(multi_file->fa.memb_name[mt]);
-    } END_MEMBERS;
+done:
+    if (ret_value == FAIL) {
+	ALL_MEMBERS(mt) {
+	    if (file->fa.memb_name[mt]) 
+		free(file->fa.memb_name[mt]);
+	} END_MEMBERS;
 
-    free(multi_file->name);
-    free(multi_file);
+	free(file->name);
+	free(file);
+    }
 
-    return 0;
+    return(ret_value);
 }
 
-static int
+static ck_err_t
 compute_next(driver_multi_t *file)
 {
-
     ALL_MEMBERS(mt) {
         file->memb_next[mt] = CK_ADDR_UNDEF;
     } END_MEMBERS;
@@ -847,65 +881,64 @@ compute_next(driver_multi_t *file)
     UNIQUE_MEMBERS(file->fa.memb_map, mt1) {
         UNIQUE_MEMBERS(file->fa.memb_map, mt2) {
             if (file->fa.memb_addr[mt1]<file->fa.memb_addr[mt2] &&
-                (CK_ADDR_UNDEF==file->memb_next[mt1] ||
-                 file->memb_next[mt1]>file->fa.memb_addr[mt2])) {
+		(CK_ADDR_UNDEF==file->memb_next[mt1] ||
+		file->memb_next[mt1]>file->fa.memb_addr[mt2])) {
+
                 file->memb_next[mt1] = file->fa.memb_addr[mt2];
             }
         } END_MEMBERS;
+
         if (CK_ADDR_UNDEF==file->memb_next[mt1]) {
             file->memb_next[mt1] = CK_ADDR_MAX; /*last member*/
         }
+
     } END_MEMBERS;
 
-    return 0;
+    return(SUCCEED);
 }
 
 
-static int
+static ck_err_t 
 open_members(driver_multi_t *file, global_shared_t *shared)
 {
-    	char    tmp[1024], newname[1024];
-	char	*ptr;
-	int	ret;
+    char    	tmp[1024], newname[1024];
+    char	*ptr;
+    int		ret_value=SUCCEED;
 
+    /* fix the name */
+    strcpy(newname, file->name);
+    ptr = strrchr(newname, '-');
+    *ptr = '\0';
 
-	/* fix the name */
-	strcpy(newname, file->name);
-	ptr = strrchr(newname, '-');
-	*ptr = '\0';
+    UNIQUE_MEMBERS(file->fa.memb_map, mt) {
+	assert(file->fa.memb_name[mt]);
+	sprintf(tmp, file->fa.memb_name[mt], newname);
+        file->memb[mt] = FD_open(tmp, shared, SEC2_DRIVER);
+	if (file->memb[mt] == NULL)
+	    ret_value = FAIL;
+    } END_MEMBERS;
 
-	ret = SUCCEED;
-
-    	UNIQUE_MEMBERS(file->fa.memb_map, mt) {
-        	assert(file->fa.memb_name[mt]);
-        	sprintf(tmp, file->fa.memb_name[mt], newname);
-            	file->memb[mt] = FD_open(tmp, shared, SEC2_DRIVER);
-		if (file->memb[mt] == NULL)
-			ret = FAIL;
-    	} END_MEMBERS;
-
-    	return(ret);
+    return(ret_value);
 }
 
 
 static ck_err_t
 multi_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/)
 {
-    driver_multi_t        *ff = (driver_multi_t*)file;
-    driver_mem_t          mt, mmt, hi=FD_MEM_DEFAULT;
-    ck_addr_t             start_addr=0;
-
-#ifdef TEMP
-    /* adjust logical "addr" to be the physical address */
-    addr = addr + shared_info.super_addr;
-#endif
+    driver_multi_t      *ff = (driver_multi_t*)file;
+    driver_mem_t        mt, mmt, hi=FD_MEM_DEFAULT;
+    ck_addr_t           start_addr=0;
+    ck_err_t		ret_value=SUCCEED;
 
     /* Find the file to which this address belongs */
     for (mt=FD_MEM_SUPER; mt<FD_MEM_NTYPES; mt=(driver_mem_t)(mt+1)) {
 	mmt = ff->fa.memb_map[mt];
 	if (FD_MEM_DEFAULT==mmt) 
 	    mmt = mt;
-        assert(mmt>0 && mmt<FD_MEM_NTYPES);
+	if ((mmt <= 0) || (mmt >= FD_MEM_NTYPES)) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, "Invalid member mapping type", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
 
         if (ff->fa.memb_addr[mmt]>addr) 
 	    continue;
@@ -917,7 +950,12 @@ multi_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/)
     assert(hi>0);
 
     /* Read from that member */
-    return FD_read(ff->memb[hi], addr-start_addr, size, buf);
+    if (FD_read(ff->memb[hi], addr-start_addr, size, buf) == FAIL) {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Error reading member file", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+done:
+    return(ret_value);
 }
 
 
@@ -949,39 +987,286 @@ multi_get_eof(driver_t *file)
 }
 
 static char *
-multi_get_fname(driver_t *file, ck_addr_t logi_addr)
+multi_get_fname(driver_t *_file, ck_addr_t logi_addr)
 {
-    char 	*tmp, *newname;
-    char	*ptr;
-    driver_multi_t        *ff = (driver_multi_t*)file;
-    driver_mem_t          mt, mmt, hi=FD_MEM_DEFAULT;
-    ck_addr_t             start_addr=0;
-    ck_addr_t	addr;
-
-#ifdef TEMP
-    /* adjust logical "addr" to be the physical address */
-    addr = logi_addr + shared_info.super_addr;
-#endif
+    char 		*tmp, *newname, *ptr;
+    driver_multi_t      *file = (driver_multi_t*)_file;
+    driver_mem_t        mt, mmt, hi=FD_MEM_DEFAULT;
+    ck_addr_t           start_addr=0;
 
     /* Find the file to which this address belongs */
-    for (mt=FD_MEM_SUPER; mt<FD_MEM_NTYPES; mt=(driver_mem_t)(mt+1)) {
-	mmt = ff->fa.memb_map[mt];
+    for (mt = FD_MEM_SUPER; mt < FD_MEM_NTYPES; mt = (driver_mem_t)(mt+1)) {
+	mmt = file->fa.memb_map[mt];
 	if (FD_MEM_DEFAULT==mmt) 
 	    mmt = mt;
         assert(mmt>0 && mmt<FD_MEM_NTYPES);
 
-        if (ff->fa.memb_addr[mmt]>addr) 
+        if (file->fa.memb_addr[mmt] > logi_addr) 
 	    continue;
-        if (ff->fa.memb_addr[mmt]>=start_addr)
+        if (file->fa.memb_addr[mmt] >= start_addr) {
+	    start_addr = file->fa.memb_addr[mmt];
 	    hi = mmt;
+	}
     }
     assert(hi>0);
 
-    tmp = strdup(ff->name);
+    /* tmp is the 1st part of the name before "-" */
+    tmp = strdup(file->name);
     ptr = strrchr(tmp, '-');
     *ptr = '\0';
-    newname = malloc(strlen(tmp)+10);
-    sprintf(newname, ff->fa.memb_name[hi], tmp);
+    newname = malloc(strlen(tmp)+5); 
+    sprintf(newname, file->fa.memb_name[hi], tmp);
+    return(newname);
+}
+
+/*
+ *  Family driver
+ *
+ *  1. User needs to give the 1st file "family00000.h5" so that h5check will get 
+ *     superblock information for validation of all the family files.
+ *  2. (driver_fami_t *)file->name is the original file name supplied by the user
+ *  3. To generate family file names, the format follows the convention:
+ *	family%05d.h5
+ *  4. Problem: IA32 Architecture whose size_t's size is 4 bytes....for SIZET_MAX in family_read()
+ * 	      : family_open() at the end of closing files when nerrors...goto done again??
+ */
+static void
+set_family_driver_properties(driver_fami_fapl_t **fa, ck_hsize_t msize)
+{
+    *fa = calloc(1, sizeof(driver_fami_fapl_t));
+
+    (*fa)->memb_size = msize;
+}
+
+static ck_err_t
+family_decode_driver(global_shared_t *shared, const unsigned char *buf)
+{
+    uint64_t            msize;
+    ck_err_t		ret_value=SUCCEED;
+
+    UINT64DECODE(buf, msize);
+    set_family_driver_properties((driver_fami_fapl_t **)&(shared->fa), msize);	    
+    return(ret_value);
+}
+
+static driver_t *
+family_open(const char *name, global_shared_t *shared, int driver_id)
+{
+    driver_fami_t      *file=NULL;
+    driver_fami_fapl_t *fa;
+    driver_mem_t        m;
+    ck_hsize_t        	eof=CK_ADDR_UNDEF;
+    driver_t		*ret_ptr=NULL;
+    ck_err_t		ret_value=SUCCEED;
+    char                memb_name[4096], temp[4096];
+    int			len, ret;
+    char		*ptr;
+
+    if (!name || !*name) {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Invalid file name", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    if ((file=calloc(1, sizeof(driver_fami_t)))==NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal allocation error", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    fa = get_driver_info(driver_id, shared);
+    if (fa == NULL) {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Unable to get driver information", -1, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
+
+    file->fa.memb_size = fa->memb_size;
+
+    /* name of the file supplied by the user */
+    file->name = malloc(strlen(name)+1);
+    strcpy(file->name, name);
+
+    /* fix up the name to be "name%05d.h5" */
+    /* convention:family file's name contains 5 digits after "name" */
+    strcpy(temp, name);
+    ptr = strrchr(temp, '.');
+    ptr = ptr - 5;
+    *ptr = '\0';
+    strcat(temp, "%05d.h5");
+
+    while (1) {
+	sprintf(memb_name, temp, file->nmembs);
+        if (file->nmembs >= file->amembs) {
+            unsigned n 	= MAX(64, 2*file->amembs);
+            driver_t 	**x = realloc(file->memb, n*sizeof(driver_t *));
+
+            if (!x) {
+		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal allocation error", -1, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+            file->amembs = n;
+            file->memb = x;
+	}
+	file->memb[file->nmembs] = FD_open(memb_name, shared, SEC2_DRIVER);
+	if (!file->memb[file->nmembs]) {
+	    /* if failure in opening the very first file, error */
+	    /* otherwise, done with opening all member files */
+	    if (file->nmembs == 0) {
+		error_push(ERR_FILE, ERR_NONE_SEC, "Unable to open member file", -1, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
+	    /* clear the errors in opening the last file */
+	    error_clear();
+	    break;
+	}
+	file->nmembs++;
+    }
+
+    /* update member file size in case there is only one file */
+    if (eof=FD_get_eof(file->memb[0])) 
+	file->fa.memb_size = eof;
+
+    if (ret_value == SUCCEED)
+	ret_ptr = (driver_t *)file;
+done:
+    if (ret_value == FAIL) {
+	if (file != NULL) {
+	    unsigned 	nerrors=0;
+	    unsigned 	u;     
+
+	    for (u = 0; u < file->nmembs; u++)
+		if (file->memb[u])
+		    if (FD_close(file->memb[u]) < 0)
+			nerrors++;
+	    /* NEED check on this */
+	    if (nerrors)
+		error_push(ERR_FILE, ERR_NONE_SEC, "Unable to close member file(s)", -1, NULL);
+	    if (file->memb)
+		free(file->memb);
+	    if (file->name)
+		free(file->name);
+	    free(file);
+	}
+    }
+    return(ret_ptr);
+}
+
+static ck_err_t 
+family_close(driver_t *_file)
+{
+    driver_fami_t   	*file=(driver_fami_t*)_file;
+    unsigned            nerrors=0;   
+    unsigned		u;
+    ck_err_t		ret_value=SUCCEED;
+
+    for (u = 0; u < file->nmembs; u++) {
+        if (file->memb[u]) {
+            if (FD_close(file->memb[u]) < 0)
+                nerrors++;
+            else
+                file->memb[u] = NULL;
+        }
+    }
+    if (nerrors)
+	CK_GOTO_DONE(FAIL)
+done:
+    return(ret_value);
+}
+
+static ck_err_t
+family_read(driver_t *_file, ck_addr_t addr, size_t size, void *buf/*out*/)
+{
+    driver_fami_t       *file=(driver_fami_t*)_file;
+    ck_err_t            ret_value=SUCCEED; 
+    ck_addr_t          	sub;
+    ck_size_t   	req;
+    ck_size_t          	tempreq;
+    unsigned            u; 
+
+    while (size > 0) {
+	ASSIGN_OVERFLOW(u,addr/file->fa.memb_size,ck_hsize_t,unsigned);
+        sub = addr % file->fa.memb_size;
+
+#ifdef OUT
+        /* This check is for mainly for IA32 architecture whose size_t's size
+         * is 4 bytes, to prevent overflow when user application is trying to
+         * write files bigger than 4GB. */
+        tempreq = file->memb_size-sub;
+        if(tempreq > SIZET_MAX)
+            tempreq = SIZET_MAX;
+        req = MIN(size, (size_t)tempreq);
+#endif
+        tempreq = file->fa.memb_size - sub;
+        req = MIN(size, (ck_size_t)tempreq);
+
+	if (u >= file->nmembs) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, "Error reading member file", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+
+        if (FD_read(file->memb[u], sub, req, buf) == FAIL) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, "Error reading member file", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
+        addr += req;
+        buf += req;
+        size -= req;
+    }
+done:
+    return(ret_value);
+}
+
+static ck_addr_t
+family_get_eof(driver_t *_file)
+{
+    driver_fami_t    	*file = (driver_fami_t *)_file;
+    ck_addr_t        	eof=0, tmp;
+    ck_addr_t 		ret_value; 
+    int			i;
+
+    assert(file->nmembs>0);
+    /*
+     * Find the last member that has a non-zero EOF and break out of the loop
+     * with `i' equal to that member. If all members have zero EOF then exit
+     * loop with i==0.
+     */
+    for (i=(int)file->nmembs-1; i>=0; --i) {
+        if ((eof = FD_get_eof(file->memb[i]))!=0)
+            break;
+        if (0==i)
+            break;
+    }
+
+    /*
+     * The file size is the number of members before the i'th member plus the
+     * size of the i'th member.
+     */
+    eof += ((unsigned)i)*file->fa.memb_size;
+    ret_value=MAX(eof, file->eoa);
+
+done:
+    return(ret_value);
+}
+
+static char *
+family_get_fname(driver_t *_file, ck_addr_t logi_addr)
+{
+    char 	*temp, *newname;
+    char	*ptr;
+    unsigned    u; 
+    driver_fami_t        *file = (driver_fami_t *)_file;
+
+    /* u is the family file member # */
+    ASSIGN_OVERFLOW(u, logi_addr/file->fa.memb_size, ck_hsize_t, unsigned);
+
+    /* fix up the name to be "name%05d.h5" */
+    /* convention:family file's name contains 5 digits after "name" */
+    temp = strdup(file->name);
+    ptr = strrchr(temp, '.');
+    ptr = ptr - 5;
+    *ptr = '\0';
+    strcat(temp, "%05d.h5");
+    newname = malloc(strlen(temp)+10);
+    sprintf(newname, temp, u);
+
     return(newname);
 }
 /*
@@ -1511,141 +1796,6 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 	}
 	    break;
 
-#ifdef TEMP /* I don't think I need all these but what if after recurseive need the array?? */
-                /* Go create the array datatype now, for older versions of the datatype message */
-                if(version == DT_VERSION_1) {
-                    /* Check if this member is an array field */
-		    if(ndims > 0) {
-			/* Create the array datatype for the field */
-			if((array_dt = type_array_create(temp_type, ndims, dim)) == NULL) {
-                                for(j = 0; j <= i; j++)
-                                    free(dt->shared->u.compnd.memb[j].name);
-                                free(dt->shared->u.compnd.memb);
-                                "unable to create array datatype")
-			}
-
-			/* Close the base type for the array */
-                        type_close(temp_type);
-
-                        /* Make the array type the type that is set for the field */
-                        temp_type = array_dt;
-		    }
-		} 
-
-		dt->shared->u.compnd.memb[i].size = temp_type->shared->size;
-                dt->shared->u.compnd.memb[i].type = temp_type;
-
-                /* Check if the datatype stayed packed */
-                if(dt->shared->u.compnd.packed) {
-		    /* Check if the member type is packed */
-		    if(type_is_packed(temp_type) > 0) {
-			    if(i == 0) {
-                                /* If the is the first member, the datatype is not packed
-                                 * if the first member isn't at offset 0
-                                 */
-                                if(dt->shared->u.compnd.memb[i].offset > 0)
-                                    dt->shared->u.compnd.packed = FALSE;
-                            } /* end if */
-                            else {
-                                /* If the is not the first member, the datatype is not
-                                 * packed if the new member isn't adjoining the previous member
-                                 */
-                                if(dt->shared->u.compnd.memb[i].offset != (dt->shared->u.compnd.memb[i - 1].offset + dt->shared->u.compnd.memb[i-1].size))
-                                    dt->shared->u.compnd.packed = FALSE;
-                            } /* end else */
-		    } else
-			dt->shared->u.compnd.packed = FALSE;
-                } 
-#endif
-
-#ifdef OLD 
-	    dt->shared->u.compnd.nmembs = flags & 0xffff;
-            assert(dt->shared->u.compnd.nmembs > 0);
-	    if ((flags>>16) != 0) {  /* should be reserved(zero) */
-		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
-		  "Datatype Message:Compound:Bits 16-23 should be 0 for class bit field", logical, NULL);
-		CK_SET_ERR(FAIL)
-	    }
-            dt->shared->u.compnd.packed = TRUE; /* Start off packed */
-            dt->shared->u.compnd.nalloc = dt->shared->u.compnd.nmembs;
-            dt->shared->u.compnd.memb = calloc(dt->shared->u.compnd.nalloc,
-                            sizeof(DT_cmemb_t));
-            if ((dt->shared->u.compnd.memb==NULL)) {
-		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Datatype Message:Internal allocation error for compound type", 
-		  logical, NULL);
-		CK_GOTO_DONE(FAIL)
-	    }
-            for (i = 0; i < dt->shared->u.compnd.nmembs; i++) {
-                unsigned ndims=0;     /* Number of dimensions of the array field */
-		ck_size_t dim[OBJ_LAYOUT_NDIMS];  /* Dimensions of the array */
-                unsigned perm_word=0;    /* Dimension permutation information */
-                type_t *temp_type;   /* Temporary pointer to the field's datatype */
-		size_t	tmp_len;
-
-                dt->shared->u.compnd.memb[i].name = strdup((const char *)*pp);
-                /* Decode the field name */
-		if (!((const char *)*pp)) {
-		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
-			"Datatype Message:Invalid string pointer for compound type", logical, NULL);
-		    CK_GOTO_DONE(FAIL)
-		}
-		tmp_len = strlen((const char *)*pp) + 1;
-                if ((dt->shared->u.compnd.memb[i].name=malloc(tmp_len))==NULL) {
-		    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-			"Datatype Message:Internal allocation error for compound type", logical, NULL);
-		    CK_GOTO_DONE(FAIL)
-		}
-		strcpy(dt->shared->u.compnd.memb[i].name, (const char *)*pp);
-
-                /*multiple of 8 w/ null terminator */
-                *pp += ((strlen((const char *)*pp) + 8) / 8) * 8;
-
-                /* Decode the field offset */
-                UINT32DECODE(*pp, dt->shared->u.compnd.memb[i].offset);
-
-                /* Older versions of the library allowed a field to have
-                 * intrinsic 'arrayness'.  Newer versions of the library
-                 * use the separate array datatypes. */
-	        if(version==DT_VERSION_COMPAT) {
-                    /* Decode the number of dimensions */
-                    ndims = *(*pp)++;
-                    assert(ndims <= 4);
-                    *pp += 3;           /*reserved bytes */
-
-                    /* Decode dimension permutation (unused currently) */
-                    UINT32DECODE(*pp, perm_word);
-
-                    /* Skip reserved bytes */
-                    *pp += 4;
-
-                    /* Decode array dimension sizes */
-                    for (j=0; j<4; j++)
-                        UINT32DECODE(*pp, dim[j]);
-                } /* end if */
-
-		if ((temp_type = type_alloc(logical)) == NULL) {
-		    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
-			"Datatype Message:Internal allocation for compound type", logical, NULL);
-		    CK_GOTO_DONE(FAIL)
-		}
-
-                /* Decode the field's datatype information */
-                if (OBJ_dt_decode_helper(file, pp, temp_type, start_buf, logi_base) != SUCCEED) {
-                    for (j = 0; j <= i; j++)
-                        free(temp_type->shared->u.compnd.memb[j].name);
-                    free(temp_type->shared->u.compnd.memb);
-                    error_push(ERR_LEV_2, ERR_LEV_2A2d,
-		      "Datatype Message:Unable to decode Compound member type", logical, NULL);
-		    CK_GOTO_DONE(FAIL)
-                }
-
-                /* Member size */
-                dt->shared->u.compnd.memb[i].size = temp_type->shared->size;
-                dt->shared->u.compnd.memb[i].type = temp_type;
-
-            }
-            break;
-#endif
 
 	case DT_REFERENCE: /* Reference datatypes...  */
             dt->shared->u.atomic.order = DT_ORDER_NONE;
@@ -1827,8 +1977,6 @@ done:
 }
 
 
-/* NEED To check on some parts not completely done yet (in decode_helper)*/
-/* NEED: not all the malloc() done in decode_helper()were cleared up, need to check further */
 /* Datatype */
 static void *
 OBJ_dt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
@@ -2681,7 +2829,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
     ck_addr_t		logical;
     int			badinfo;
 
-    /* check args */
+    assert(file);
     assert(p);
 
     logical = get_logical_addr(p, start_buf, logi_base);
@@ -2759,7 +2907,10 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 
             /* Determine actual name length (without padding, but with null terminator) */
             actual_name_length = strlen((const char *)p) + 1;
-            assert(actual_name_length <= name_length);
+	    if (actual_name_length > name_length) {
+		error_push(ERR_LEV_2, ERR_LEV_2A2l, "Filter Pipeline Message:Inconsistent name length", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
 
             /* Allocate space for the filter name, or use the internal buffer */
             if(actual_name_length > Z_COMMON_NAME_LEN) {
@@ -3203,6 +3354,7 @@ OBJ_cont_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     int		ret_value=SUCCEED;
     ck_addr_t	logical;
 
+    assert(file);
     assert(p);
 
     logical = get_logical_addr(p, start_buf, logi_base);
@@ -3444,7 +3596,7 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf,
     mesg->name[8] = '\0';
     buf += 8;
 
-    /* Decode driver information size */
+    /* Decode Driver Information Size */
     logical = get_logical_addr(buf, start_buf, logi_base);
     UINT16DECODE(buf, mesg->len);
     if (mesg->len <=0) {
@@ -3984,7 +4136,7 @@ check_superblock(driver_t *file)
 
     /* set default driver to SEC2 unless changed later */
     driver_name[0] = '\0';
-    set_driver(&(lshared->driverid), driver_name);
+    set_driver_id(&(lshared->driverid)/*out*/, driver_name);
 
     /* Check for older version of superblock format */
     if (super_vers == SUPERBLOCK_VERSION_0 || super_vers == SUPERBLOCK_VERSION_1) {
@@ -4062,7 +4214,10 @@ check_superblock(driver_t *file)
 
 	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
     	UINT32DECODE(p, lshared->file_consist_flg);
-/* ?? library: HDassert(status_flags <= 255); */
+	if (lshared->file_consist_flg > 255) { /* 2 to the power 8 */
+	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Invalid value for file consistency flags.", logical, NULL);
+	    CK_SET_ERR(FAIL)
+	}
 	if (lshared->file_consist_flg & ~SUPER_ALL_FLAGS) {
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Invalid file consistency flags.", logical, NULL);
 	    CK_SET_ERR(FAIL)
@@ -4160,7 +4315,7 @@ check_superblock(driver_t *file)
 	    /* read in the first 16 bytes of the driver information block */
 	    if (FD_read(file, lshared->driver_addr, 16, dbuf) == FAIL) {
 		error_push(ERR_FILE, ERR_NONE_SEC, 
-		    "Superblock v.0/1:Unable to read in the 16 bytes of the driver information block.", 
+		    "Superblock v.0/1:Unable to read in the first 16 bytes of Driver Information Block.", 
 		    LOGI_SUPER_BASE+lshared->driver_addr, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
@@ -4171,31 +4326,37 @@ check_superblock(driver_t *file)
 	    drv_version = *p++;
 	    if (drv_version != DRIVERINFO_VERSION) {
 		badinfo = drv_version;
-		error_push(ERR_LEV_0, ERR_LEV_0B, "Superblock v.0/1:Driver information block version number should be 0", 
+		error_push(ERR_LEV_0, ERR_LEV_0B, "Superblock v.0/1:Driver Information Block version number should be 0", 
 		    logical, &badinfo);
 		CK_SET_ERR(FAIL)
 	    }
 	    p += 3; /* reserved */
 
-	    /* Driver info size */
+	    /* Driver information size */
 	    UINT32DECODE(p, driver_size);
 
 	    /* Driver name and/or version */
 	    strncpy(driver_name, (const char *)p, (size_t)8);
 	    driver_name[8] = '\0';
-	    set_driver(&(lshared->driverid), driver_name);
+	    set_driver_id(&(lshared->driverid)/*out*/, driver_name);
 	    p += 8; /* advance past driver identification */
 
 	    logical = get_logical_addr(p, drv_start, lshared->driver_addr);
 
-	    /* Read driver information and decode */
-	    assert((driver_size + 16) <= sizeof(dbuf));
+	    if ((driver_size+DRVINFOBLOCK_HDR_SIZE) > sizeof(dbuf)) {
+		error_push(ERR_LEV_0, ERR_LEV_0B, "Superblock v.0/1:Invalid size for Driver Information Block", 
+		    logical, &badinfo);
+		CK_SET_ERR(FAIL)
+	    }
 
 	    if (FD_read(file, lshared->driver_addr+16, driver_size, p) == FAIL) {
-		error_push(ERR_FILE, ERR_NONE_SEC, "Superblock v.0/1:Unable to read in the driver information part", logical, NULL);
+		error_push(ERR_FILE, ERR_NONE_SEC, "Superblock v.0/1:Unable to read Driver Information", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
-	    decode_driver(lshared, p);
+	    if (decode_driver(lshared, p) != SUCCEED) {
+		error_push(ERR_FILE, ERR_NONE_SEC, "Superblock v.0/1:Unable to decode Driver Information", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
 	}  /* DONE with driver information block */
     } else if (super_vers == SUPERBLOCK_VERSION_2) { /* version 2 format */
 	uint32_t	read_chksum;
@@ -4343,7 +4504,14 @@ check_superblock(driver_t *file)
 	    printf("Found OBJ_DRVINFO_ID in superblock extension...set_driver()\n");
 #endif
 	    assert(oh->mesg[idx].native); 
-	    set_driver(&(lshared->driverid), ((OBJ_drvinfo_t *)(oh->mesg[idx].native))->name);
+	    set_driver_id(&(lshared->driverid)/*out*/, ((OBJ_drvinfo_t *)(oh->mesg[idx].native))->name);
+
+	    p = ((OBJ_drvinfo_t *)(oh->mesg[idx].native))->buf;
+
+	    if (decode_driver(lshared, p) != SUCCEED) {
+		error_push(ERR_FILE, ERR_NONE_SEC, "Superblock v.0/1:Unable to decode Driver Information", logical, NULL);
+		CK_GOTO_DONE(FAIL)
+	    }
 	}
     }
 
@@ -4726,11 +4894,14 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
     assert(addr_defined(lheap_addr));
 
     hdr_size = HL_SIZEOF_HDR(file->shared);
-    assert(hdr_size<=sizeof(hdr));
 
     if (debug_verbose())
 	printf("VALIDATING the local heap at logical address %llu...\n", lheap_addr);
 
+    if (hdr_size > sizeof(hdr)) {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Local Heap:Internal:Invalid header size", lheap_addr, NULL);
+	CK_GOTO_DONE(FAIL)
+    }
     if (FD_read(file, lheap_addr, hdr_size, hdr) == FAIL) {
 	error_push(ERR_FILE, ERR_NONE_SEC, 
 	    "Local Heap:Unable to read local heap header", lheap_addr, NULL);
@@ -5061,6 +5232,9 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
     unsigned	ndims = 0, local_ndims = 0;
     ck_addr_t	btree_addr;
 
+    assert(file);
+    assert(oh);
+
     for (i = 0; i < oh->nmesgs; i++) {	
 	start_buf = oh->chunk[oh->mesg[i].chunkno].image;
 	p = oh->mesg[i].raw;
@@ -5350,7 +5524,6 @@ find_in_ohdr(driver_t *file, OBJ_t *oh, int type_id)
     const uint8_t	*start_buf;
     ck_addr_t		logi_base;
 
-    /* Check args */
     assert(file);
     assert(oh);
 
@@ -5399,8 +5572,9 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
     int			ret_value=SUCCEED;
     int			badinfo;
 
-    /* Check args */
-    assert (buf);
+    assert(file);
+    assert(buf);
+    assert(type);
 
     if ((mesg = calloc(1, sizeof(OBJ_shared_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal Shared Message: Internal allocation error", -1, NULL);
@@ -5502,8 +5676,7 @@ OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *typ
 
     obj_info_t	objinfo;
 
-
-    /* check args */
+    assert(file);
     assert(obj_shared);
     assert(type);
 
@@ -5533,8 +5706,7 @@ OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *typ
 	}
 
 	ret_value = type->decode(file, mesg_ptr, start_buf, logi_base);
-    } else {
-	assert(obj_shared->type == OBJ_SHARE_TYPE_COMMITTED);
+    } else if (obj_shared->type == OBJ_SHARE_TYPE_COMMITTED) {
 	if (check_obj_header(file, obj_shared->u.loc.oh_addr, &oh) < 0) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 		"Internal Shared Read:Error found when checking object header", -1, NULL);
@@ -5555,6 +5727,9 @@ OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *typ
 	    ret_value = OBJ_shared_read(file, sh_shared, type);
 	} else 
 	    ret_value = oh->mesg[idx].native;
+    } else {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal Shared Read:Invalid type", -1, NULL);
+	    CK_GOTO_DONE(NULL)
     }
 	
 done:
@@ -5626,6 +5801,9 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 
     /* FORMAT_ONE_EIGHT && object header version 2 SIGNATURE */
     int			format_objvers_two=FALSE;
+
+    assert(file);
+    assert(addr_defined(obj_head_addr));
 
     if (debug_verbose())
 	printf("VALIDATING the object header at logical address %llu...\n", obj_head_addr);

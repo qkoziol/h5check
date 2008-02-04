@@ -138,6 +138,7 @@ typedef struct table_t {
     + (v == 2 ? SUPERBLOCK_REMAIN_SIZE_V2(fs) : 0))
 
 #define DRVINFOBLOCK_SIZE  	1024
+#define DRVINFOBLOCK_HDR_SIZE	16
 
 #define SUPER_WRITE_ACCESS          0x01
 #define SUPER_FILE_OK               0x02
@@ -329,9 +330,7 @@ typedef struct 	global_shared_t {
 #define OBJ_DT_ID    	 0x0003          /* Datatype   				  */
 #define OBJ_FILL_OLD_ID  0x0004          /* Data Storage - Fill Value (Old)  	  */
 #define OBJ_FILL_ID 	 0x0005          /* Data Storage - Fill Value 		  */
-
 #define OBJ_LINK_ID      0x0006          /* Link Message. */
-
 #define OBJ_EDF_ID       0x0007          /* Data Storage - External Data Files 	  */
 #define OBJ_LAYOUT_ID    0x0008          /* Data Storage - Layout 		  */
 #define OBJ_BOGUS_ID     0x0009          /* Bogus Message.  			  */
@@ -1036,8 +1035,8 @@ typedef struct OBJ_btreek_t {
 #define OBJ_DRVINFO_VERSION  	0
 typedef struct OBJ_drvinfo_t {
     char    	name[9];     /* Driver name */
-    size_t     	len;         /* Length of encoded buffer */
-    uint8_t    	*buf;        /* Buffer for encoded info */
+    size_t     	len;         /* Driver Information Size */
+    uint8_t    	*buf;        /* Buffer for Driver Information */
 } OBJ_drvinfo_t;
 
 /* end Driver info message */
@@ -2054,7 +2053,7 @@ typedef struct RAW_node_key_t {
 
 #define SEC2_DRIVER	1
 #define MULTI_DRIVER	2
-#define FAMI_DRIVER	3
+#define FAMILY_DRIVER	3
 
 struct driver_class_t { 
     const char 	*name;
@@ -2112,6 +2111,20 @@ typedef struct driver_multi_t {
     char        *name;          /* name passed to H5Fopen or H5Fcreate   */
 } driver_multi_t;
 
+typedef struct driver_fami_fapl_t {
+    ck_hsize_t	memb_size;	/* size of each member 	*/
+} driver_fami_fapl_t;
+
+
+typedef struct driver_fami_t {
+    driver_t    pub;            /* public stuff, must be first            */
+    driver_fami_fapl_t fa;      /* driver-specific file access properties */
+    unsigned	nmembs;		/* number of family members */
+    unsigned	amembs;		/* number of member slots allocated */
+    driver_t	**memb;		/* array of member pointers */
+    ck_addr_t	eoa;
+    char	*name;		/* name generator printf format */
+} driver_fami_t;
 
 
 /* virtual file drivers */

@@ -448,6 +448,9 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     uint8_t     *start_buf = NULL;
     ck_addr_t   logical;
 
+    assert(file);
+    assert(addr_defined(bt_hdr_addr));
+    assert(type);
 
     if (debug_verbose())
 	printf("VALIDATING version 2 btree header at logical address %llu...\n", bt_hdr_addr);
@@ -534,15 +537,19 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     bt2_shared->max_nrec_size = (V_log2_gen((uint64_t)bt2_shared->node_info[0].max_nrec) + 7) / 8;
     bt2_shared->type = type;
 
-    /* NEED CHECK: should this be turned into validation */
-    assert(bt2_shared->max_nrec_size <= B2_SIZEOF_RECORDS_PER_NODE);
+    if (bt2_shared->max_nrec_size > B2_SIZEOF_RECORDS_PER_NODE) {
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Internal:Incorrect maximum possible # of records", logical, NULL);
+	CK_SET_ERR(FAIL)
+    }
 
     /* Initialize internal node's node_info */
     if(bt2_shared->depth > 0) {
         for(u = 1; u < (bt2_shared->depth + 1); u++) {
             bt2_shared->node_info[u].max_nrec = B2_NUM_INT_REC(file->shared, bt2_shared, u);
-	    /* NEED CHECK: should this be turned into validation ?? */
-            assert(bt2_shared->node_info[u].max_nrec <= bt2_shared->node_info[u - 1].max_nrec);
+            if (bt2_shared->node_info[u].max_nrec <= bt2_shared->node_info[u - 1].max_nrec) {
+		error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Internal:Incorrect maximum # of records for this depth", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
 
             bt2_shared->node_info[u].cum_max_nrec = ((bt2_shared->node_info[u].max_nrec + 1) *
                 bt2_shared->node_info[u - 1].cum_max_nrec) + bt2_shared->node_info[u].max_nrec;
@@ -641,7 +648,7 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     for (u = 0; u < leaf->nrec; u++) { 
 	logical = get_logical_addr(p, start_buf, addr);
 	if (bt2_shared->type->decode(file, p, native) < 0) {
-	    error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Errros found in decoding B-tree record", logical, NULL);
+	    error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Errors found in decoding B-tree record", logical, NULL);
 	    CK_SET_ERR(FAIL)
 	}
 	p += bt2_shared->rrec_size;
@@ -1020,6 +1027,7 @@ HF_sect_row_init_cls(FS_section_class_t *cls, HF_hdr_t *fh_hdr)
     ck_err_t ret_value = SUCCEED;         /* Return value */
 
     assert(cls);
+    assert(fh_hdr);
 
     if(cls->type == HF_FSPACE_SECT_FIRST_ROW)
         cls->serial_size = HF_SECT_INDIRECT_SERIAL_SIZE(fh_hdr);
@@ -1367,6 +1375,7 @@ HF_dtable_init(HF_dtable_t *dtable)
     ck_err_t ret_value = SUCCEED;          /* Return value */
 
     assert(dtable);
+
     if (debug_verbose())
 	printf("INITIALIZING the fractal heap doubling table ...\n");
 
@@ -1662,7 +1671,11 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
 
         /* Compute # of rows in child indirect block */
         nrows = (V_log2_gen(fhdr->man_dtable.row_block_size[row]) - fhdr->man_dtable.first_row_bits) + 1;
-        assert(nrows < iblock->nrows);        /* child must be smaller than parent */
+	if (nrows >= iblock->nrows) {
+	    error_push(ERR_LEV_1, ERR_LEV_1F,
+		"HF_man_dblock_locate():# of rows in child indirect block must be smaller than parent's", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
 
         /* Compute indirect block's entry */
         entry = (row * fhdr->man_dtable.cparam.width) + col;
@@ -1685,8 +1698,11 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
 		"HF_man_dblock_locate():Can't compute row & column of object", -1, NULL);
 	    CK_GOTO_DONE(FAIL)
 	}
-/* NEED: should this be a valiation */
-        assert(row < iblock->nrows);        /* child must be smaller than parent */
+	if (row >= iblock->nrows) {
+	    error_push(ERR_LEV_1, ERR_LEV_1F,
+		"HF_man_dblock_locate():Internal:Invalid # of rows", -1, NULL);
+	    CK_GOTO_DONE(FAIL)
+	}
     } 
 
     /* Set return parameters */
