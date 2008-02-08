@@ -246,7 +246,7 @@ done:
 	}
     }
 	
-/* NEED TO free shared after FD_close() */
+    if (shared) free(shared);
     if (found_error()){
 	printf("Non-compliance errors found\n");
 	leave(EXIT_FORMAT_FAILURE);

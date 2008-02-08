@@ -504,6 +504,8 @@ get_driver_info(int driver_id, global_shared_t *shared)
 
 /*
  * Decode the Driver Information field of the Driver Information Block or Driver Info Message
+     *	Family driver is encoded in the super block's Driver Information block for
+ *	library version 1.8 and after.
  */
 static ck_err_t
 decode_driver(global_shared_t *shared, const uint8_t *buf)
@@ -545,7 +547,8 @@ ck_err_t
 FD_close(driver_t *file)
 {
     ck_err_t	ret_value=SUCCEED;
-
+    
+    assert(file);
     if(file->cls->close(file) == FAIL)
 	ret_value = FAIL;
 
@@ -558,6 +561,10 @@ FD_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/)
     int		ret = SUCCEED;
     ck_addr_t	new_addr;
 
+
+    assert(file);
+    assert(file->shared);
+    assert(file->cls);
 
     /* adjust logical "addr" to be the physical address */
     new_addr = addr + file->shared->super_addr;
@@ -583,6 +590,9 @@ char *
 FD_get_fname(driver_t *file, ck_addr_t logi_addr)
 {
     ck_addr_t	new_logi_addr;
+
+    assert(file);
+    assert(file->cls);
 
     /* adjust logical "addr" to be the physical address */
     new_logi_addr = logi_addr + file->shared->super_addr;
@@ -636,11 +646,13 @@ sec2_get_fname(driver_t *file, ck_addr_t UNUSED logi_addr)
 }
 
 static ck_err_t
-sec2_close(driver_t *file)
+sec2_close(driver_t *_file)
 {
     int	ret;
-
-    ret = close(((driver_sec2_t *)file)->fd);
+    driver_sec2_t   	*file=(driver_sec2_t*)_file;
+ 
+    ret = close(file->fd);
+    if (file->name) free(file->name);
     free(file);
     return(ret);
 }
@@ -858,15 +870,13 @@ multi_close(driver_t *_file)
     }
 
 done:
-    if (ret_value == FAIL) {
-	ALL_MEMBERS(mt) {
-	    if (file->fa.memb_name[mt]) 
-		free(file->fa.memb_name[mt]);
-	} END_MEMBERS;
+    ALL_MEMBERS(mt) {
+	if (file->fa.memb_name[mt]) 
+	    free(file->fa.memb_name[mt]);
+    } END_MEMBERS;
 
-	free(file->name);
-	free(file);
-    }
+    if (file->name) free(file->name);
+    free(file);
 
     return(ret_value);
 }
@@ -1168,6 +1178,8 @@ family_close(driver_t *_file)
     if (nerrors)
 	CK_GOTO_DONE(FAIL)
 done:
+    if (file->memb) free(file->memb);
+    if (file->name) free(file->name);
     return(ret_value);
 }
 
@@ -1450,10 +1462,6 @@ OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     mesg->track_corder = (index_flags & OBJ_LINFO_TRACK_CORDER) ? TRUE : FALSE;
     mesg->index_corder = (index_flags & OBJ_LINFO_INDEX_CORDER) ? TRUE : FALSE;
 
-/* NEED CHECK:DO I NEED THIS ?? 
-    mesg->nlinks = HSIZET_MAX;
-*/
-
     if(mesg->track_corder)
         UINT64DECODE(p, mesg->max_corder)
     else
@@ -1527,7 +1535,6 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, type_t *dt, const uint8
 
     flags >>= 8;
     UINT32DECODE(*pp, dt->shared->size);
-/* NEED:Do i need to check for size < 0??? */
 
     switch (dt->shared->type) {
 	case DT_INTEGER:  /* Fixed-Point datatypes */
@@ -2242,12 +2249,14 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     unsigned        	version;
     void                *ret_ptr=NULL;
     int			ret_value=SUCCEED;
+    ck_addr_t		logical;
 
     assert(file);
     assert(p);
 
+    logical = get_logical_addr(p, start_buf, logi_base);
     if (g_format_num == FORMAT_ONE_SIX) {
-	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Unsupported message", -1, NULL);
+	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Unsupported message", logical, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
@@ -2258,33 +2267,37 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     }
 
     /* decode */
+    logical = get_logical_addr(p, start_buf, logi_base);
     version = *p++;
     if(version != OBJ_LINK_VERSION) {
 	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad version number", -1, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
     /* Get the encoding flags for the link */
+    logical = get_logical_addr(p, start_buf, logi_base);
     link_flags = *p++;
     if(link_flags & ~OBJ_LINK_ALL_FLAGS) {
-	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad Flag Value", -1, NULL);
+	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad Flag Value", logical, NULL);
 	CK_SET_ERR(FAIL)
     }
 
     /* Check for non-default link type */
+    logical = get_logical_addr(p, start_buf, logi_base);
     if(link_flags & OBJ_LINK_STORE_LINK_TYPE) {
         /* Get the type of the link */
         lnk->type = *p++;
         if (lnk->type < L_TYPE_HARD || lnk->type > L_TYPE_MAX) {
 	    badinfo = lnk->type;
-	    error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad Link Type", -1, &badinfo);
+	    error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad Link Type", logical, &badinfo);
 	    CK_GOTO_DONE(FAIL)
 	}
     } else
         lnk->type = L_TYPE_HARD;
 
     /* Get the link creation time from the file */
+    logical = get_logical_addr(p, start_buf, logi_base);
     if(link_flags & OBJ_LINK_STORE_CORDER) {
         INT64DECODE(p, lnk->corder);
         lnk->corder_valid = TRUE;
@@ -2295,11 +2308,12 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     } /* end else */
 
     /* Check for non-default name character set */ 
+    logical = get_logical_addr(p, start_buf, logi_base);
     if(link_flags & OBJ_LINK_STORE_NAME_CSET) {
         /* Get the link name's character set */
         lnk->cset = (DT_cset_t)*p++;   
         if(lnk->cset < DT_CSET_ASCII || lnk->cset > DT_CSET_UTF8) {
-	    error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid character set for link name", -1, &badinfo);
+	    error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid character set for link name", logical, &badinfo);
 	    CK_SET_ERR(FAIL)
 	}
     } /* end if */
@@ -2307,6 +2321,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         lnk->cset = DT_CSET_ASCII;
     
     /* Get the length of the link's name */
+    logical = get_logical_addr(p, start_buf, logi_base);
     switch(link_flags & OBJ_LINK_NAME_SIZE) {
         case 0:     /* 1 byte size */
             len = *p++;
@@ -2329,7 +2344,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     } /* end switch */
 
     if(len == 0) {
-	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid name length for link", -1, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid name length for link", logical, &badinfo);
 	CK_GOTO_DONE(FAIL)
     }
 
@@ -2339,11 +2354,13 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	CK_GOTO_DONE(FAIL)
     }
 
+    logical = get_logical_addr(p, start_buf, logi_base);
     memcpy(lnk->name, p, len);
     lnk->name[len] = '\0';
     p += len;
 
     /* Get the appropriate information for each type of link */
+    logical = get_logical_addr(p, start_buf, logi_base);
     switch(lnk->type) {
         case L_TYPE_HARD:
             /* Get the address of the object the link points to */
@@ -2354,7 +2371,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
             /* Get the link value */
             UINT16DECODE(p, len)
             if(len == 0) {
-		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid name length for link", -1, &badinfo);
+		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid name length for link", logical, &badinfo);
 		CK_GOTO_DONE(FAIL)
 	    }
             if(NULL == (lnk->u.soft.name = malloc((ck_size_t)len + 1))) {
@@ -2369,11 +2386,12 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         /* External & User-defined links */
         default: /* user-defined link */
             if(lnk->type < L_TYPE_UD_MIN || lnk->type > L_TYPE_MAX) {
-		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid user-defined link type", -1, &badinfo);
+		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid user-defined link type", logical, &badinfo);
 		CK_SET_ERR(FAIL)
 	    }
 
             /* A UD link.  Get the user-supplied data */
+	    logical = get_logical_addr(p, start_buf, logi_base);
             UINT16DECODE(p, len)
             lnk->u.ud.size = len;
             if (len > 0) {
@@ -2381,6 +2399,8 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 		    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Link Message:Internal allocation error", -1, NULL);
 		    CK_GOTO_DONE(FAIL)
 		}
+
+		logical = get_logical_addr(p, start_buf, logi_base);
                 memcpy(lnk->u.ud.udata, p, len);
 		if (lnk->type == L_TYPE_EXTERNAL) { /* external link */
 		    uint8_t    	*s; 
@@ -2391,12 +2411,12 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 		    /* Check external link version & flags */
 		    if(((*s >> 4) & 0x0F) > L_EXT_VERSION) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad version # for external link type", 
-			    -1, &badinfo);
+			    logical, &badinfo);
 			CK_SET_ERR(FAIL)
 		    }
 		    if ((*s & 0x0F) & ~L_EXT_FLAGS_ALL) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad flags for external link type", 
-			    -1, &badinfo);
+			    logical, &badinfo);
 			CK_SET_ERR(FAIL)
 		    }
 		    s++;
@@ -2404,7 +2424,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 		    fname_len = strlen((const char *)file_name) + 1;
 		    if (1 + fname_len > len) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid file length for external link type", 
-			    -1, &badinfo);
+			    logical, &badinfo);
 			CK_SET_ERR(FAIL)
 		    }
 		    obj_name = (char *)s + fname_len;
@@ -2412,7 +2432,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 
 		    if ((1 + fname_len + obj_len) > len) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid object length for external link type", 
-			    -1, &badinfo);
+			    logical, &badinfo);
 			CK_SET_ERR(FAIL)
 		    }
 		} else
@@ -2592,6 +2612,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 	}
 
         /* Layout class */
+	logical = get_logical_addr(p, start_buf, logi_base);
         mesg->type = (DATA_layout_t)*p++;
 
         if ((DATA_CONTIGUOUS != mesg->type) && (DATA_CHUNKED != mesg->type) && (DATA_COMPACT != mesg->type)) {
@@ -2631,7 +2652,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 	    if(mesg->u.compact.size > 0) {
 		if(NULL==(mesg->u.compact.buf=malloc(mesg->u.compact.size))) {
 		    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-			"Layout Message:Internal allocation error", logical, NULL);
+			"Layout Message:Internal allocation error", -1, NULL);
 		    CK_GOTO_DONE(FAIL)
 		}
                 memcpy(mesg->u.compact.buf, p, mesg->u.compact.size);
@@ -2675,12 +2696,11 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
                 break;
 
 	    case DATA_COMPACT:
-		logical = get_logical_addr(p, start_buf, logi_base);
                 UINT16DECODE(p, mesg->u.compact.size);
                 if(mesg->u.compact.size > 0) {
 		    if(NULL==(mesg->u.compact.buf=malloc(mesg->u.compact.size))) {
 			error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-			    "Layout Message:Compact layout:Internal allocation error", logical, NULL);
+			    "Layout Message:Compact layout:Internal allocation error", -1, NULL);
 			CK_GOTO_DONE(FAIL)
 		    }
 		    memcpy(mesg->u.compact.buf, p, mesg->u.compact.size);
@@ -2715,23 +2735,23 @@ OBJ_bogus_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     OBJ_bogus_t 	*mesg = NULL;
     int                 ret_value=SUCCEED;
     void                *ret_ptr=NULL;
+    ck_addr_t		logical;
 
     assert(file);
     assert(p);
 
     if ((mesg = calloc(1, sizeof(OBJ_bogus_t)))==NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	    "Bogus Message:Internal allocation error", -1, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Bogus Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
     /* decode */
+    logical = get_logical_addr(p, start_buf, logi_base);
     UINT32DECODE(p, mesg->u);
 
     /* Validate the bogus info */
     if(mesg->u != OBJ_BOGUS_VALUE) {
-	error_push(ERR_LEV_2, ERR_LEV_2A2k, 
-	    "Bogus Message:Invalid bogus value", -1, NULL);
+	error_push(ERR_LEV_2, ERR_LEV_2A2k, "Bogus Message:Invalid bogus value", logical, NULL);
 	CK_SET_ERR(FAIL)
     }
 
@@ -2766,7 +2786,7 @@ OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
 
     if ((mesg = calloc(1, sizeof(OBJ_ginfo_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	    "Group Info Message:Internal allocation error", logical, NULL);
+	    "Group Info Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
@@ -2781,6 +2801,7 @@ OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
 
 
     /* Get the flags for the group */
+    logical = get_logical_addr(p, start_buf, logi_base);
     flags = *p++;
     if(flags & ~OBJ_GINFO_ALL_FLAGS) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2k, "Group Info Message:Bad flag value", logical, NULL);
@@ -2837,7 +2858,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
    /* Decode */
    if ((pline = calloc(1, sizeof(OBJ_filter_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	  "Filter Pipeline Message:Internal allocation error", logical, NULL);
+	  "Filter Pipeline Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)	
     }
 
@@ -2878,7 +2899,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
     pline->filter = calloc(pline->nalloc, sizeof(pline->filter[0]));
     if (pline->filter == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	    "Filter Pipeline Message:Internal allocation error", logical, NULL);
+	    "Filter Pipeline Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)	
     } 
 
@@ -2927,7 +2948,6 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
             p += name_length;
         }
 
-	logical = get_logical_addr(p, start_buf, logi_base);
         if ((n=pline->filter[i].cd_nelmts)) {
 	    ck_size_t      j;
 
@@ -2935,7 +2955,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
                 pline->filter[i].cd_values = (unsigned *)malloc(n*sizeof(unsigned));
                 if (NULL == pline->filter[i].cd_values) {
 		    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-			"Filter Pipeline Message:Internal allocation error", logical, NULL);
+			"Filter Pipeline Message:Internal allocation error", -1, NULL);
 		    CK_GOTO_DONE(FAIL)
 		}
             } else
@@ -3044,9 +3064,10 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         encoding = *p++;
 
     /* Decode and store the name */
+    logical = get_logical_addr(p, start_buf, logi_base);
     attr->name = NULL;
     if ((attr->name = strdup((const char *)p)) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Attribute Message:Internal allocation error", logical, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Attribute Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
     
@@ -3093,14 +3114,14 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     else
         p += attr->dt_size;
 
-    logical = get_logical_addr(p, start_buf, logi_base);
     if ((attr->ds = calloc(1, sizeof(OBJ_space_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	  "Attribute Message:Internal allocation error", logical, NULL);
+	  "Attribute Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
     /* decode the attribute datatype */
+    logical = get_logical_addr(p, start_buf, logi_base);
     if (flags & OBJ_ATTR_FLAG_SPACE_SHARED) {
 	OBJ_shared_t *sh_shared; 
 	
@@ -3186,15 +3207,15 @@ OBJ_comm_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
     len = strlen((const char *)p);
 
     if ((mesg=calloc(1, sizeof(OBJ_comm_t))) == NULL || (mesg->s = malloc(len+1))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	  "Could not calloc() OBJ_comm_t for Object Comment Message", logical, NULL);
+	  "Could not calloc() OBJ_comm_t for Object Comment Message", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
+    logical = get_logical_addr(p, start_buf, logi_base);
     strcpy(mesg->s, (const char*)p);
     if (mesg->s[len] != '\0') {
 	error_push(ERR_LEV_2, ERR_LEV_2A2n, 
@@ -3225,6 +3246,7 @@ OBJ_mdt_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, c
     struct tm   tm;
     int		ret_value=SUCCEED;
     void        *ret_ptr=NULL;
+    ck_addr_t	logical;
 
     assert(file);
     assert(p);
@@ -3236,10 +3258,11 @@ OBJ_mdt_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, c
     } 
 
     /* decode */
+    logical = get_logical_addr(p, start_buf, logi_base);
     for (i = 0; i < 14; i++) {
 	if (!isdigit(p[i])) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2o, 
-		"Object Modification Time (old) Message:Badly formatted time", -1, NULL);
+		"Object Modification Time (old) Message:Badly formatted time", logical, NULL);
 	    CK_SET_ERR(FAIL)
 	}
     }
@@ -3255,7 +3278,7 @@ OBJ_mdt_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, c
     tm.tm_isdst = -1; /*figure it out*/
     if ((time_t)-1 == (the_time=mktime(&tm))) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2o, 
-	    "Object Modification Time (old) Message:Badly formatted time", -1, NULL);
+	    "Object Modification Time (old) Message:Badly formatted time", logical, NULL);
 	CK_SET_ERR(FAIL)
     }
 
@@ -3307,27 +3330,30 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
     }
 
     /* Retrieve version, table address, and number of indexes */
+    logical = get_logical_addr(buf, start_buf, logi_base);
     mesg->version = *buf++;
     if (mesg->version != SHAREDHEADER_VERSION) {
 	badinfo = mesg->version;
 	error_push(ERR_LEV_2, ERR_LEV_2A2p, "Shared Message Table Message:Bad version number", 
-	    -1, &badinfo);
+	    logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
+    logical = get_logical_addr(buf, start_buf, logi_base);
     addr_decode(file->shared, &buf, &(mesg->addr));
     if (mesg->addr == CK_ADDR_UNDEF) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2p, "Shared Message Table Message:Undefined address",
-	    -1, NULL);
+	    logical, NULL);
 	CK_SET_ERR(FAIL)
     }
     
+    logical = get_logical_addr(buf, start_buf, logi_base);
     mesg->nindexes = *buf++;
     /* nindexes < 256--1 byte to hold nindexes */
     if ((mesg->nindexes <= 0) && (mesg->nindexes > OBJ_SHMESG_MAX_NINDEXES)) {
 	badinfo = mesg->nindexes;
 	error_push(ERR_LEV_2, ERR_LEV_2A2p, "Shared Message Table Message:Invalid value for number of indices", 
-	    -1, NULL);
+	    logical, NULL);
 	CK_SET_ERR(FAIL)
     }
 
@@ -3357,12 +3383,11 @@ OBJ_cont_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
 
     cont = calloc(1, sizeof(OBJ_cont_t));
     if (cont == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	  "Object Header Continuation Message:Internal allocation error", logical, NULL);
+	  "Object Header Continuation Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 	
@@ -3409,21 +3434,22 @@ OBJ_group_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
 
     stab = calloc(1, sizeof(OBJ_stab_t));
     if (stab == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	  "Symbol Table Message:Internal allocation error", logical, NULL);
+	  "Symbol Table Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
+    logical = get_logical_addr(p, start_buf, logi_base);
     addr_decode(file->shared, &p, &(stab->btree_addr));
     if (stab->btree_addr == CK_ADDR_UNDEF) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2r, "Symbol Table Message:Undefined version 1 btree address", logical, NULL);
 	CK_SET_ERR(FAIL)
     }
 
+    logical = get_logical_addr(p, start_buf, logi_base);
     addr_decode(file->shared, &p, &(stab->heap_addr));
     if (stab->heap_addr == CK_ADDR_UNDEF) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2r, "Symbol Table Message:Undefined local heap address", logical, NULL);
@@ -3458,7 +3484,6 @@ OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     assert(p);
 
     logical = get_logical_addr(p, start_buf, logi_base);
-
     version = *p++;
     if (version != OBJ_MTIME_VERSION) {
 	badinfo = version;
@@ -3476,7 +3501,7 @@ OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
 
     if ((mesg=calloc(1, sizeof(time_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	  "Object Modification Time Message:Internal allocation error", logical, NULL);
+	  "Object Modification Time Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
     *mesg = (time_t)tmp_time;
@@ -3518,13 +3543,15 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
 	CK_GOTO_DONE(FAIL)
     }
 
+    logical = get_logical_addr(buf, start_buf, logi_base);
     version = *buf++;
     if(version != OBJ_BTREEK_VERSION) {
 	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2t, "B-tree 'K' Values Message:Bad Version number", -1, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2t, "B-tree 'K' Values Message:Bad Version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
+    logical = get_logical_addr(buf, start_buf, logi_base);
     UINT16DECODE(buf, mesg->btree_k[BT_ISTORE_ID]);
     if (mesg->btree_k[BT_ISTORE_ID] <= 0) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2t, 
@@ -3532,6 +3559,7 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
 	CK_SET_ERR(FAIL)
     }
 
+    logical = get_logical_addr(buf, start_buf, logi_base);
     UINT16DECODE(buf, mesg->btree_k[BT_SNODE_ID]);
     if (mesg->btree_k[BT_SNODE_ID] <= 0) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2t, "B-tree 'K' Values Message:Invalid value for Group Internal Node K", logical, NULL);
@@ -3578,20 +3606,20 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf,
 
     if ((mesg = calloc(1, sizeof(OBJ_drvinfo_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-	    "Driver Info Message: Internal allocation error", logical, NULL);
+	    "Driver Info Message: Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
      /* Version of message */
+    logical = get_logical_addr(buf, start_buf, logi_base);
     version = *buf++;
     if(version != OBJ_DRVINFO_VERSION) {
 	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2u, "Driver Info Message: Bad version number", -1, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2u, "Driver Info Message: Bad version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
     /* Retrieve driver name */
-    logical = get_logical_addr(buf, start_buf, logi_base);
     memcpy(mesg->name, buf, 8);
     mesg->name[8] = '\0';
     buf += 8;
@@ -3606,7 +3634,7 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf,
 
     /* Allocate space for buffer */
     if(NULL == (mesg->buf = malloc(mesg->len))) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Driver Info Message:Internal allocation error", logical, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Driver Info Message:Internal allocation error", -1, NULL);
 	CK_GOTO_DONE(FAIL)
     }
 
@@ -3635,6 +3663,7 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     int			badinfo;
     void        	*ret_ptr=NULL;
     int			ret_value=SUCCEED;
+    ck_addr_t		logical;
 
     /* check args */
     assert(file);
@@ -3652,28 +3681,25 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
 	CK_GOTO_DONE(FAIL)
     }
 
+    logical = get_logical_addr(p, start_buf, logi_base);
     version = *p++;
     if(version != OBJ_AINFO_VERSION) {
 	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad version number", -1, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
 
     /* Get the flags for the message */
+    logical = get_logical_addr(p, start_buf, logi_base);
     flags = *p++;
     if(flags & ~OBJ_AINFO_ALL_FLAGS) {
-	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad flag value", -1, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad flag value", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
     ainfo->track_corder = (flags & OBJ_AINFO_TRACK_CORDER) ? TRUE : FALSE;
     ainfo->index_corder = (flags & OBJ_AINFO_INDEX_CORDER) ? TRUE : FALSE;
-
-    /* Set the number of attributes on the object to an invalid value, so we query it later */
-    /*
-    ainfo->nattrs = HSIZET_MAX;
-    */
 
     /* Max. creation order value for the object */
     if(ainfo->track_corder)
@@ -3712,6 +3738,7 @@ OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, 
     int			badinfo;
     unsigned		version;
     int			ret_value=SUCCEED;
+    ck_addr_t		logical;
 
     /* check args */
     assert(file);
@@ -3730,10 +3757,11 @@ OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, 
     }
 
     /* Version of message */
+    logical = get_logical_addr(p, start_buf, logi_base);
     version = *p++;
     if(version != OBJ_REFCOUNT_VERSION) {
 	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2w, "Object Reference Count Message: Bad version number", -1, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2w, "Object Reference Count Message: Bad version number", logical, &badinfo);
 	CK_SET_ERR(FAIL)
     }
 
