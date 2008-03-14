@@ -22,6 +22,8 @@
 /*
  * Include required headers.
  */
+#define H5_USE_16_API		/* Use v16 API even if an v18 library is used. */
+
 #include "hdf5.h"
 #include <stdlib.h>
 #include <math.h>
@@ -29,6 +31,12 @@
 #include <string.h>
 #include <time.h>
 
+/* Determine the version of the HDF5 library I am using. */
+#if H5_VERS_MAJOR <= 1 && H5_VERS_MINOR < 8
+#define H5_LIBVERSION 16
+#else
+#define H5_LIBVERSION 18
+#endif
 
 #ifndef TRUE
 #define TRUE    1

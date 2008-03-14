@@ -13,8 +13,8 @@
 #include <unistd.h>
 
 
-#define FORMAT_ONE_SIX		1.6
-#define FORMAT_ONE_EIGHT	1.8
+#define FORMAT_ONE_SIX		16	/* library release version 1.6.6 */
+#define FORMAT_ONE_EIGHT	18	/* library release version 1.8 */
 #define DEFAULT_FORMAT		FORMAT_ONE_EIGHT
 
 /* exit status */
@@ -1936,13 +1936,13 @@ typedef struct SM_master_table_t {
         + SIZEOF_ADDR(fs)    /* Address of heap */                         \
     )
 
-#define MESG_NONE_FLAG     0x0000          /* No shared messages */
-#define MESG_SDSPACE_FLAG  0x0001          /* Simple Dataspace Message.  */
-#define MESG_DTYPE_FLAG    0x0002          /* Datatype Message.  */
-#define MESG_FILL_FLAG     0x0004          /* Fill Value Message. */
-#define MESG_PLINE_FLAG    0x0008          /* Filter pipeline message.  */
-#define MESG_ATTR_FLAG     0x0010          /* Attribute Message.  */
-#define MESG_ALL_FLAG      (MESG_SDSPACE_FLAG | MESG_DTYPE_FLAG | MESG_FILL_FLAG | MESG_PLINE_FLAG | MESG_ATTR_FLAG)
+#define SHMESG_NONE_FLAG    0x0000          		/* No shared messages */
+#define SHMESG_SDSPACE_FLAG ((unsigned)1 << 0x0001) 	/* Simple Dataspace Message.  */
+#define SHMESG_DTYPE_FLAG   ((unsigned)1 << 0x0003) 	/* Datatype Message.  */
+#define SHMESG_FILL_FLAG    ((unsigned)1 << 0x0005) 	/* Fill Value Message. */
+#define SHMESG_PLINE_FLAG   ((unsigned)1 << 0x000b) 	/* Filter pipeline message.  */
+#define SHMESG_ATTR_FLAG    ((unsigned)1 << 0x000c) 	/* Attribute Message.  */
+#define SHMESG_ALL_FLAG     (SHMESG_SDSPACE_FLAG | SHMESG_DTYPE_FLAG | SHMESG_FILL_FLAG | SHMESG_PLINE_FLAG | SHMESG_ATTR_FLAG)
 
 #define ASSIGN_OVERFLOW(var,expr,exprtype,vartype)   \
 {                                                    \
@@ -2135,7 +2135,7 @@ char     	*FD_get_fname(driver_t *, ck_addr_t);
 
 /* command line option */
 int     	g_verbose_num;
-double		g_format_num;
+int		g_format_num;
 ck_addr_t 	g_obj_addr;
 void            print_version(const char *);
 void            usage(char *);

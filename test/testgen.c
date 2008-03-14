@@ -21,10 +21,8 @@
 
 /* Definitions for test generator functions */
 
-#define NUM_GROUPS 512 /* number of groups and recursion levels for linear
-                        structure */
-
-#define HEIGHT 5 /* height of group trees (recursion levels) */
+#define NUM_GROUPS 512 	/* number of groups and recursion levels for linear structure */
+#define HEIGHT 5 	/* height of group trees (recursion levels) */
 
 /* types of group structures */
 #define HIERARCHICAL 0
@@ -154,6 +152,21 @@ static size_t filter_bogus(unsigned int flags, size_t cd_nelmts,
 const unsigned int *cd_values, size_t nbytes, size_t *buf_size, void **buf);
 
 
+#if H5_LIBVERSION == 18 /* library release >= 1.8 */
+
+const H5Z_class_t H5Z_BOGUS[1] = {{
+    H5Z_CLASS_T_VERS,   /* H5Z_class_t version */
+    H5Z_FILTER_BOGUS,	/* Filter id number		*/
+    1,			/* encoder_present flag (set to true) */
+    1,			/* decoder_present flag (set to true) */
+    "bogus",		/* Filter name for debugging	*/
+    NULL,               /* The "can apply" callback     */
+    NULL,               /* The "set local" callback     */
+    filter_bogus,	/* The actual filter function	*/
+}};
+
+#else /* 1.6 */
+
 /* This message derives from H5Z */
 const H5Z_class_t H5Z_BOGUS[1] = {{
     H5Z_FILTER_BOGUS,		/* Filter id number		*/
@@ -162,6 +175,8 @@ const H5Z_class_t H5Z_BOGUS[1] = {{
     NULL,                       /* The "set local" callback     */
     filter_bogus,		/* The actual filter function	*/
 }};
+
+#endif
 
 
 /*
@@ -390,13 +405,30 @@ static hid_t create_file(char *name, char *driver, char *superblock)
     
     /* definition of access property list */
     if ((fapl = h5_fileaccess(driver))<0)
-        fapl = H5P_DEFAULT;\
+        fapl = H5P_DEFAULT;
+
 
     /* definition of creation property list */
     if (!strcmp(superblock, "alternate"))
         fcpl = alt_superblock();
     else
         fcpl = H5P_DEFAULT;
+
+#if H5_LIBVERSION == 18 /* library release >= 1.8 */
+
+    ret = H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
+    VRFY((ret>=0), "H5Pset_libver_bounds");
+
+    /* use the parameter "superblock" to set SOHM */
+    if (!strcmp(superblock, "sohm")) {
+	fcpl= H5Pcreate(H5P_FILE_CREATE);
+	ret = H5Pset_shared_mesg_nindexes(fcpl, 1);
+	VRFY((ret >= 0), "H5Pset_shared_mesg_nindexes");
+	ret = H5Pset_shared_mesg_index(fcpl, 0, H5O_SHMESG_ATTR_FLAG, 2);
+	VRFY((ret >= 0), "H5Pset_shared_mesg_index");
+    }
+    
+#endif
 
     /* append appropriate suffix to the file name */
     h5_fixname(fname, fapl);
@@ -408,6 +440,9 @@ static hid_t create_file(char *name, char *driver, char *superblock)
 
     /* close file */
     ret = H5Pclose(fapl);
+    VRFY((ret>=0), "H5Pclose");
+
+    ret = H5Pclose(fcpl);
     VRFY((ret>=0), "H5Pclose");
 
     return fid;
@@ -693,7 +728,7 @@ static void gen_rank_datasets(hid_t oid, int fill_dataset)
     int *buffer;    /* buffer for writing the dataset */
     int size;       /* size for all the dimensions of the current rank */
 
-    long int rank, i;
+    int rank, i;
 
     char dname[64]; /* dataset name */
 
@@ -1045,7 +1080,7 @@ static void gen_vl(hid_t oid, int fill_dataset)
 * 'fill_dataset' determines whether data is to be written into the dataset.
 */
 
-static int gen_enum(hid_t oid, int fill_dataset)
+static void gen_enum(hid_t oid, int fill_dataset)
 {
     hid_t	type, dspace_id, dset_id, ret;  /* HDF5 IDs */
     c_e1 val;
@@ -1753,7 +1788,7 @@ static void gen_time(hid_t file_id)
 * 'fill_dataset' determines whether data is to be written into the dataset.
 */
 
-static int gen_external(hid_t file, int fill_dataset)
+static void gen_external(hid_t file, int fill_dataset)
 {
     hid_t	dcpl=-1;		/*dataset creation properties	*/
     hid_t	space=-1;		/*data space			*/
@@ -1947,8 +1982,107 @@ static void gen_array(hid_t fid1, int fill_dataset)
 
 }
 
-/* main function of test generator */
+#if H5_LIBVERSION == 18 /* library release >= 1.8 */
 
+#define NEW_DATASET_NAME    "DATASET_NAME"
+#define NEW_GROUP_NAME      "GROUP"
+#define NEW_ATTR_NAME       "ATTR"
+#define NEW_NUM_GRPS        35000
+#define NEW_NUM_ATTRS       100
+
+/*
+ * This function creates 1.8 format file that consists of
+ * fractal heap direct and indirect blocks.
+ *
+ */
+static void gen_newgrat(hid_t file_id)
+{
+    int         i;
+    hid_t       gid;
+    hid_t       type_id, space_id, attr_id, dset_id;
+    char        gname[100];
+    char        attrname[100];
+    herr_t      ret;
+
+    for (i=1; i<=NEW_NUM_GRPS; i++) {
+        sprintf(gname, "%s%d", NEW_GROUP_NAME,i);
+        gid = H5Gcreate2(file_id, gname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        VRFY((gid>=0), "H5Gcreate2");
+        ret = H5Gclose(gid);
+        VRFY((ret>=0), "H5Gclose");
+    }
+
+    /* Create a datatype to commit and use */
+    type_id=H5Tcopy(H5T_NATIVE_INT);
+    VRFY((type_id>=0), "H5Tcopy");
+
+    /* Create dataspace for dataset */
+    space_id=H5Screate(H5S_SCALAR);
+    VRFY((space_id>=0), "H5Screate");
+
+    /* Create dataset */
+    dset_id = H5Dcreate2(file_id, NEW_DATASET_NAME, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((dset_id>=0), "H5Dcreate2");
+
+    for (i=1; i<=NEW_NUM_ATTRS; i++) {
+        sprintf(attrname, "%s%d", NEW_ATTR_NAME,i);
+        attr_id = H5Acreate2(dset_id, attrname, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT);
+        VRFY((attr_id>=0), "H5Acreate2");
+        ret=H5Aclose(attr_id);
+        VRFY((ret>=0), "H5Aclose");
+    }
+
+    ret = H5Dclose(dset_id);
+    VRFY((ret>=0), "H5Dclose");
+
+    ret = H5Sclose(space_id);
+    VRFY((ret>=0), "H5Sclose");
+
+    ret = H5Tclose(type_id);
+    VRFY((ret>=0), "H5Tclose");
+}
+
+/*
+ * This function creates 1.8 format file that consists of
+ * the shared message table.
+ *
+ */
+static void gen_sohm(hid_t file_id)
+{
+    hid_t	type_id, space_id, group_id, attr_id;
+    hsize_t     dims = 2;
+    int         wdata[2] = {7, 42};
+    herr_t      ret;
+
+
+    type_id = H5Tcopy(H5T_NATIVE_INT);
+    VRFY((type_id >= 0), "H5Tcopy");
+    space_id = H5Screate_simple(1, &dims, &dims);
+    VRFY((space_id >= 0), "H5Screate_simple");
+
+    group_id = H5Gcreate2(file_id, NEW_GROUP_NAME, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((group_id >= 0), "H5Gcreate2");
+    
+    attr_id = H5Acreate2(group_id, NEW_ATTR_NAME, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((attr_id >= 0), "H5Acreate2");
+    
+    ret = H5Awrite(attr_id, H5T_NATIVE_INT, wdata);
+    VRFY((ret >= 0), "H5Awrite");
+
+    ret = H5Aclose(attr_id);
+    VRFY((ret >= 0), "H5Aclose");
+
+    ret = H5Tclose(type_id);
+    VRFY((ret >= 0), "H5Tclose");
+
+    ret = H5Gclose(group_id);
+    VRFY((ret >= 0), "H5Gclose");
+}
+
+#endif /* H5_LIBVERSION == 18 */
+
+
+/* main function of test generator */
 int main(int argc, char *argv[])
 {
 
@@ -1961,7 +2095,7 @@ int main(int argc, char *argv[])
         "rank_dsets_empty","rank_dsets_full","group_dsets","basic_types",
         "compound","vl","enum","refer","array","filters","stdio","split",
         "multi","family","log","attr","time","external_empty","external_full",
-        "alternate_sb"}; /* file names */
+        "alternate_sb", "new_grat", "sohm"}; /* file names */
 
     unsigned i=0;
 
@@ -2073,6 +2207,7 @@ int main(int argc, char *argv[])
     close_file(fid, "");
 
     /* create a file using multi file driver */
+    /* this will have "NCSAmulti" in the superblock */
     fid = create_file(fname[i++], "multi", superblock);
     printf("using multi file driver\n");
     gen_group_datasets(fid, GROUP_PREFIX, HEIGHT, RIGHT);
@@ -2120,9 +2255,24 @@ int main(int argc, char *argv[])
     gen_group_datasets(fid, GROUP_PREFIX, HEIGHT, RIGHT);
     close_file(fid, "");
    
+#if H5_LIBVERSION == 18 /* for library release > 1.8 */
+
+    fid = create_file(fname[i++], driver, superblock);
+    printf("1.8 group/attribute file\n");
+    gen_newgrat(fid);
+    close_file(fid, "");
+
+    /* use the parameter "superblock" to set SOHM property list */
+    fid = create_file(fname[i++], driver, "sohm");
+    printf("1.8 SOHM file\n");
+    gen_sohm(fid);
+    close_file(fid, "");
+
+#endif
+
     /* successful completion message */
     printf("\rTest files generation for H5check successful!\n");
 
     return 0;
 
-}                               /* end main() */
+} /* end main() */

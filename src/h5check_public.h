@@ -15,4 +15,4 @@ typedef struct ck_errmsg_t {
 	errmsg_t	slot[NSLOTS];
 } ck_errmsg_t;
 
-ck_err_t	h5checker_obj(char *, ck_addr_t, ck_errmsg_t *);
+ck_err_t	h5checker_obj(char *, ck_addr_t, int, ck_errmsg_t *);

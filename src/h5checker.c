@@ -4492,9 +4492,9 @@ check_superblock(driver_t *file)
 	    printf("GOING to validate the object header for the superblock extension at %llu...\n", lshared->extension_addr);
 #endif
 	}
-	if (check_obj_header(file, lshared->extension_addr, &oh) < 0) {
+	if (check_obj_header(file, lshared->extension_addr, &oh) < 0)
 	    CK_GOTO_DONE(FAIL)
-	}
+
 	if ((idx = find_in_ohdr(file, oh, OBJ_SHMESG_ID)) < SUCCEED)
 	    ;
 #ifdef DEBUG
@@ -5269,23 +5269,15 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 	logi_base = oh->chunk[oh->mesg[i].chunkno].addr;
 	logical = get_logical_addr(p, start_buf, logi_base);
 
-#ifdef DEBUG
-printf("addr=%llu, type=%d, logical=%llu, raw_size=%llu\n", 
-	logi_base, oh->mesg[i].type->id, logical, oh->mesg[i].raw_size);
-#endif
-
 	id = oh->mesg[i].type->id;
-	if (id == OBJ_CONT_ID) {
+	if (id == OBJ_CONT_ID)
 	    continue;
-	} else if (id == OBJ_NIL_ID) {
+	else if (id == OBJ_NIL_ID)
 	    continue;
-	} else if (id == OBJ_UNKNOWN_ID) {
+	else if (id == OBJ_UNKNOWN_ID) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A, "Unsupported message encountered", logical, NULL);
 	    CK_CONTINUE(FAIL)
 	} else if (oh->mesg[i].flags & OBJ_FLAG_SHARED) {
-#ifdef DEBUG
-printf("OBJ_FLAG_SHARED is on for message id =%u\n", id);
-#endif
 	    mesg = OBJ_shared_decode(file, oh->mesg[i].raw, oh->mesg[i].type, start_buf, logi_base);
 	    if (mesg != NULL) {
 		mesg = OBJ_shared_read(file, mesg, oh->mesg[i].type);
@@ -5305,11 +5297,11 @@ printf("OBJ_FLAG_SHARED is on for message id =%u\n", id);
 	oh->mesg[i].native = mesg;
 
 	if (mesg == NULL) {
-#ifdef DEBUG
-printf("failure logi_base=%lld, type=%d, logical=%lld, raw_size=%lld\n", 
-	logi_base, oh->mesg[i].type->id, logical, oh->mesg[i].raw_size);
-#endif
 	    error_push(ERR_LEV_2, ERR_LEV_2A, "Errors found when decoding message", logical, NULL);
+	    if (!object_api()) {
+		error_print(stderr, file);
+		error_clear();
+	    }
 	    CK_CONTINUE(FAIL)
 	}
 
@@ -5880,7 +5872,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 
     if (format_objvers_two) {
 	if (debug_verbose()) {
-	    printf("VALIDATING version 2 object header for library version %3.1f...\n", g_format_num);	
+	    printf("VALIDATING version 2 object header ...\n");	
 	    printf("FOUND Version 2 object header signature\n");	
 	}
 
@@ -5962,7 +5954,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	}
     } else { /* FORMAT_ONE_SIX or version 1 object header encountered for FORMAT_ONE_EIGHT */
 	if (debug_verbose())
-	    printf("VALIDATING version 1 object header for library version %3.1f...\n", g_format_num);	
+	    printf("VALIDATING version 1 object header...\n");	
 	start_buf = buf;
 	p = buf;
 	logical = get_logical_addr(p, start_buf, obj_head_addr);
@@ -6349,8 +6341,8 @@ usage(char *prog_name)
     fprintf(stdout, "     		n=1	Default--prints its progress and all errors found\n");
     fprintf(stdout, "     		n=2	Verbose--prints everything it knows, usually for debugging\n");
     fprintf(stdout, "     -fn, --format=n	File Format\n");
-    fprintf(stdout, "     		n=1.6	Validate according to library release version 1.6.6\n");
-    fprintf(stdout, "     		n=1.8	Default--Validate according to library release version 1.8.0\n");
+    fprintf(stdout, "     		n=16	Validate according to library release version 1.6.6\n");
+    fprintf(stdout, "     		n=18	Default--Validate according to library release version 1.8.0\n");
     fprintf(stdout, "     -oa, --object=a	Check object header\n");
     fprintf(stdout, "     		a	Address of the object header to be validated\n");
     fprintf(stdout, "\n");

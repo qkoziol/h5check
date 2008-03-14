@@ -546,7 +546,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     if(bt2_shared->depth > 0) {
         for(u = 1; u < (bt2_shared->depth + 1); u++) {
             bt2_shared->node_info[u].max_nrec = B2_NUM_INT_REC(file->shared, bt2_shared, u);
-            if (bt2_shared->node_info[u].max_nrec <= bt2_shared->node_info[u - 1].max_nrec) {
+            if (bt2_shared->node_info[u].max_nrec > bt2_shared->node_info[u - 1].max_nrec) {
 		error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Internal:Incorrect maximum # of records for this depth", logical, NULL);
 		CK_SET_ERR(FAIL)
 	    }
@@ -2927,7 +2927,7 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
         /* Type of messages in the index */
 	logical = get_logical_addr(p, start_buf, sohm_addr);
         UINT16DECODE(p, table->indexes[x].mesg_types);
-	if (table->indexes[x].mesg_types & ~MESG_ALL_FLAG) {
+	if (table->indexes[x].mesg_types & ~SHMESG_ALL_FLAG) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2p, "SOHM:Unknown message type flags", logical, NULL);
 	    CK_SET_ERR(FAIL)
 	}
@@ -3064,24 +3064,24 @@ SM_type_to_flag(unsigned type_id, unsigned *type_flag)
     /* Translate the type_id into an SM type flag */
     switch(type_id) {
         case OBJ_SDS_ID:
-            *type_flag = MESG_SDSPACE_FLAG;
+            *type_flag = SHMESG_SDSPACE_FLAG;
             break;
 
         case OBJ_DT_ID:
-            *type_flag = MESG_DTYPE_FLAG;
+            *type_flag = SHMESG_DTYPE_FLAG;
             break;
 
         case OBJ_FILL_ID:
         case OBJ_FILL_OLD_ID:
-            *type_flag = MESG_FILL_FLAG;
+            *type_flag = SHMESG_FILL_FLAG;
             break;
 
         case OBJ_FILTER_ID:
-            *type_flag = MESG_PLINE_FLAG;
+            *type_flag = SHMESG_PLINE_FLAG;
             break;
 
         case OBJ_ATTR_ID:
-            *type_flag = MESG_ATTR_FLAG;
+            *type_flag = SHMESG_ATTR_FLAG;
             break;
 
         default:
@@ -3099,6 +3099,8 @@ SM_get_index(const SM_master_table_t *table, unsigned type_id)
     ssize_t 	x;
     unsigned 	type_flag;
     ssize_t 	ret_value=FAIL;
+
+    assert(table);
 
     /* Translate the type_id into a SM type flag */
     if(SM_type_to_flag(type_id, &type_flag) < SUCCEED) {
@@ -3134,7 +3136,8 @@ SM_get_fheap_addr(driver_t *f, unsigned type_id, ck_addr_t *fheap_addr)
     assert(f);
     assert(fheap_addr);
 
-    table = f->shared->sohm_tbl;
+    if ((table = f->shared->sohm_tbl) == NULL)
+        CK_GOTO_DONE(FAIL);
 
     /* Look up index for message type */
     if((index_num = SM_get_index(table, type_id)) < SUCCEED)

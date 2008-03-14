@@ -199,6 +199,14 @@ TOOLPASS stdio.h5
 TOOLPASS time.h5
 TOOLPASS vl.h5
 
+# these 2 files are generated only when 1.8 library is used
+if test -r new_grat.h5; then
+TOOLPASS new_grat.h5
+fi
+if test -r sohm.h5; then
+TOOLPASS sohm.h5
+fi
+
 # future tests for non-default VFD files
 #TOOLPASS family00000.h5
 #TOOLPASS family00001.h5
@@ -216,13 +224,14 @@ echo ========================================
 echo The following tests are expected to fail.
 echo ========================================
 TOOLFAIL invalidfiles/base_addr.h5
-# Temporary block out since this file is not really inavlid.
+# Temporary block out since this file is not really invalid.
 #TOOLFAIL invalidfiles/leaf_internal_k.h5
 TOOLFAIL invalidfiles/offsets_lengths.h5
 TOOLFAIL invalidfiles/sb_version.h5
 TOOLFAIL invalidfiles/signature.h5
-# block out this 1.8 file now that h5check understands 1.8 format
-#TOOLFAIL invalidfiles/vms_data.h5
+# this is a valid 1.8 file
+# this should fail when checked against 1.6 format
+TOOLFAIL --format=16 invalidfiles/vms_data.h5
 
 
 

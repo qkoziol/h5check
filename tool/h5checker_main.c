@@ -14,11 +14,11 @@
 
 int main(int argc, char **argv)
 {
-    int		ret;
-    ck_addr_t	ss;
-    ck_addr_t	gheap_addr;
+    int			ret;
+    ck_addr_t		ss;
+    ck_addr_t		gheap_addr;
     FILE 		*inputfd;
-    driver_t	*thefile;
+    driver_t		*thefile;
     global_shared_t	*shared;
 
 
@@ -29,9 +29,6 @@ int main(int argc, char **argv)
     char	*fname;
     char	*rest;
 	
-/* NEED TO delete this later */
-ck_addr_t     force_fheap_addr;
-
     if ((prog_name=strrchr(argv[0], '/'))) 
 	prog_name++;
     else 
@@ -66,17 +63,17 @@ ck_addr_t     force_fheap_addr;
 		leave(EXIT_COMMAND_FAILURE);
 	    }
 
-	/* --format=d.d or --format or -fd.d */
+	/* --format=n or --format or -fn */
 	} else if (!strncmp(argv[argno], "--format=", 9)) {
-	    g_format_num = strtod(argv[argno]+9, NULL);
-	    printf("FORMAT is true:format version = %3.1f\n", g_format_num);
+	    g_format_num = strtol(argv[argno]+9, NULL, 0);
+	    printf("FORMAT is true:format version = %d\n", g_format_num);
 	} else if (!strncmp(argv[argno], "--format", 8)) {
 	    g_format_num = DEFAULT_FORMAT;
 	    printf("FORMAT is true:no number provided, assume default format version.\n");
 	} else if (!strncmp(argv[argno], "-f", 2)) {
 	    if (argv[argno][2]) {
-		g_format_num = strtod(argv[argno]+2, NULL);
-		printf("FORMAT is true:format version = %3.1f\n", g_format_num);
+		g_format_num = strtol(argv[argno]+2, NULL, 0);
+		printf("FORMAT is true:format version = %d\n", g_format_num);
 	    } else {
 		usage(prog_name);
 		leave(EXIT_COMMAND_FAILURE);
@@ -138,7 +135,13 @@ ck_addr_t     force_fheap_addr;
     ret = SUCCEED;
     fname = strdup(argv[argno]);
 
-    printf("\nVALIDATING %s according to library version %3.1f", fname, g_format_num);
+    if (g_format_num == FORMAT_ONE_SIX)
+	printf("\nVALIDATING %s according to library version 1.6.6 ", fname);
+    else if (g_format_num == FORMAT_ONE_EIGHT)
+	printf("\nVALIDATING %s according to library version 1.8.0 ", fname);
+    else
+        printf("...invalid library release version...shouldn't happen.\n");
+
 
     if (g_obj_addr != CK_ADDR_UNDEF)
 	printf("at object header address %llu", g_obj_addr);
@@ -147,9 +150,7 @@ ck_addr_t     force_fheap_addr;
 	
     /* Initially, use the SEC2 driver by default */
     thefile = FD_open(fname, shared, SEC2_DRIVER);
-#if 0
-	printf("Using default file driver...\n");
-#endif
+
     if (thefile == NULL) {
 	error_push(ERR_FILE, ERR_NONE_SEC, 
 	    "Failure in opening input file using the default driver. Validation discontinued.", -1, NULL);
@@ -158,9 +159,8 @@ ck_addr_t     force_fheap_addr;
 	goto done;
     }
 
-    ret = check_superblock(thefile);
     /* superblock validation has to be all passed before proceeding further */
-    if (ret != SUCCEED) {
+    if (check_superblock(thefile) != SUCCEED) {
 	error_push(ERR_LEV_0, ERR_LEV_0A, 
 	    "Errors found when checking superblock. Validation stopped.", -1, NULL);
 	error_print(stderr, thefile);
@@ -170,9 +170,7 @@ ck_addr_t     force_fheap_addr;
 
     /* not using the default driver */
     if (thefile->shared->driverid != SEC2_DRIVER) {
-	/* still have and need info in shared */
-	ret = FD_close(thefile);
-	if (ret != SUCCEED) {
+	if (FD_close(thefile) != SUCCEED) {
 	    error_push(ERR_FILE, ERR_NONE_SEC, 
 		"Errors in closing input file using the default driver", -1, NULL);
 	    error_print(stderr, thefile);
@@ -207,16 +205,14 @@ ck_addr_t     force_fheap_addr;
 	goto done;
     }
 
-    ret = table_init(&obj_table);
-    if (ret != SUCCEED) {
+    if (table_init(&obj_table) != SUCCEED) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing hard link table", -1, NULL);
 	error_print(stderr, thefile);
 	error_clear();
 	ret = SUCCEED;
     }
  
-    ret = pline_init_interface();
-    if (ret != SUCCEED) {
+    if (pline_init_interface() != SUCCEED) {
 	error_push(ERR_LEV_0, ERR_NONE_SEC, "Problems in initializing filters...later validation may be affected", 
 	    -1, NULL);
 	error_print(stderr, thefile);
@@ -246,7 +242,8 @@ done:
 	}
     }
 	
-    if (shared) free(shared);
+    if (shared) 
+	free(shared);
     if (found_error()){
 	printf("Non-compliance errors found\n");
 	leave(EXIT_FORMAT_FAILURE);
