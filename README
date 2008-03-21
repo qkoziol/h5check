@@ -1,6 +1,6 @@
 README
 ------
-This is 1.0 release of the HDF5 format checker. 
+This is 1.0-post0 release of the HDF5 format checker. 
 
 The software is set up to work with the HDF5 File Format 
 Specification Version 1.1 and Version 2.0. 
