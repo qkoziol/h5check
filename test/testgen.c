@@ -197,6 +197,19 @@ void UNUSED **buf)
 * Returns: Success:  Set property list
 *          Failure:     -1
 */
+/*
+ * These are the letters that are appended to the file name when generating
+ * names for the split and multi drivers. They are:
+ *
+ *      m: All meta data when using the split driver.
+ *      s: The userblock, superblock, and driver info block
+ *      b: B-tree nodes
+ *      r: Dataset raw data
+ *      g: Global heap
+ *      l: local heap (object names)
+ *      o: object headers
+ */
+static const char *multi_letters = "msbrglo";
 
 hid_t h5_fileaccess(char *driver)
 {
@@ -225,6 +238,33 @@ hid_t h5_fileaccess(char *driver)
 			      "-r.h5", H5P_DEFAULT);
         VRFY((ret>=0), "H5Pset_fapl_split");
     } else if (strstr(driver, "multi")) {
+
+#ifdef NOTYET
+	/* Multi-file driver, general case of the split driver */
+        H5FD_mem_t memb_map[H5FD_MEM_NTYPES];
+        hid_t memb_fapl[H5FD_MEM_NTYPES];
+        const char *memb_name[H5FD_MEM_NTYPES];
+        char sv[H5FD_MEM_NTYPES][1024];
+        haddr_t memb_addr[H5FD_MEM_NTYPES];
+        H5FD_mem_t      mt;
+
+        memset(memb_map, 0, sizeof memb_map);
+        memset(memb_fapl, 0, sizeof memb_fapl);
+        memset(memb_name, 0, sizeof memb_name);
+        memset(memb_addr, 0, sizeof memb_addr);
+
+        for (mt=H5FD_MEM_DEFAULT; mt<H5FD_MEM_NTYPES; H5_INC_ENUM(H5FD_mem_t,mt)) {
+            memb_fapl[mt] = H5P_DEFAULT;
+            sprintf(sv[mt], "%%s-%c.h5", multi_letters[mt]);
+            memb_name[mt] = sv[mt];
+            memb_addr[mt] = MAX(mt-1,0)*(HADDR_MAX/10);
+        }
+
+        if (H5Pset_fapl_multi(fapl, memb_map, memb_fapl, memb_name,
+                              memb_addr, FALSE)<0) {
+            return -1;
+        }
+#endif
 	    /* Multi-file driver, general case of the split driver */
 	    H5FD_mem_t memb_map[H5FD_MEM_NTYPES];
 	    hid_t memb_fapl[H5FD_MEM_NTYPES];

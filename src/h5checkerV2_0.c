@@ -1132,8 +1132,8 @@ check_fssection(driver_t *file, ck_addr_t fssect_addr, FS_hdr_t *fs_hdr)
 	unsigned   sect_len_size;
 	unsigned   sect_off_size;
 
-        sect_cnt_size = MAX(1, (V_log2_gen(fs_hdr->serial_sect_count)+7)/8);
-	sect_len_size = (V_log2_gen(fs_hdr->max_sect_size)+7)/8;
+        sect_cnt_size = (V_log2_gen((uint64_t)fs_hdr->serial_sect_count)/8)+1;
+	sect_len_size = (V_log2_gen((uint64_t)fs_hdr->max_sect_size)/8)+1;
 	sect_off_size = (fs_hdr->max_sect_addr+7)/8;
 
         do {
