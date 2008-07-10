@@ -6122,6 +6122,11 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	    assert(mesg_size==OBJ_ALIGN_OH(oh, mesg_size));
 	    flags = *p++;
 
+	    if(flags & ~OBJ_MSG_FLAG_BITS) {
+		error_push(ERR_LEV_2, ERR_LEV_2A, "Object Header:invalid message flag", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
+
 	    /* Reserved bytes/creation index */
 	    if (!format_objvers_two)
                 p += 3; /*reserved*/
@@ -6139,10 +6144,11 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 		error_push(ERR_LEV_2, ERR_LEV_2A, "Object Header:corrupt object header", logical, NULL);
 		CK_GOTO_DONE(FAIL)
 	    }
-
-#ifdef DEBUG
-	    printf("id is %u, mesg_size=%u\n", id, mesg_size);
-#endif
+	    
+	    if ((!format_objvers_two) && (oh->nmesgs >= nmesgs)) {
+		error_push(ERR_LEV_2, ERR_LEV_2A, "Object Header:corrupt object header", logical, NULL);
+		CK_SET_ERR(FAIL)
+	    }
 
             if(oh->nmesgs >= oh->alloc_nmesgs)
 		if (OBJ_alloc_msgs(oh, (size_t)1) < 0)
@@ -6157,9 +6163,6 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	    oh->mesg[mesgno].chunkno = chunkno;
 
 	    if (id >= NELMTS(message_type_g) || NULL == message_type_g[id]) {
-#ifdef DEBUG
-		printf("Made this into an unknown id for id=%d\n", id);
-#endif
 		oh->mesg[mesgno].type = message_type_g[OBJ_UNKNOWN_ID];
 	    } else
 		oh->mesg[mesgno].type = message_type_g[id];

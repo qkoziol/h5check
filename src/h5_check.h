@@ -33,8 +33,6 @@
 #define 	addr_defined(X)     	(X!=CK_ADDR_UNDEF)
 #define 	addr_eq(X,Y)        	((X)!=CK_ADDR_UNDEF && (X)==(Y))
 
-
-
 /* see H5public.h for definition of ck_size_t, H5pubconf.h */
 typedef size_t                  ck_size_t;
 typedef unsigned long long      ck_hsize_t;
@@ -42,6 +40,21 @@ typedef unsigned long long      ck_hsize_t;
 /* NEED to check into this more */
 #define 	long_long   long long
 
+#define SUCCEED         0
+#define FAIL            (-1)
+#define UFAIL           (unsigned)(-1)
+#define UNUSED		/*void*/
+
+
+#define MAX(a,b)            (((a)>(b)) ? (a) : (b))
+#define MIN(a,b)            (((a)<(b)) ? (a) : (b))
+
+#ifndef FALSE
+#define 	FALSE 0
+#endif
+#ifndef TRUE
+#define 	TRUE 1
+#endif
 
 /* for handling hard links */
 typedef struct obj_t {
@@ -60,6 +73,12 @@ typedef struct table_t {
 #define CK_SET_ERR(ret_val) {ret_value = ret_val;}
 #define CK_GOTO_DONE(ret_val) {ret_value = ret_val; goto done;}
 
+#define NELMTS(X)           (sizeof(X)/sizeof(X[0]))
+#define CK_ALIGN(X)            (8*(((X)+8-1)/8))
+
+/*
+ * Super block
+ */
 #define SUPERBLOCK_VERSION_0       0   
 #define SUPERBLOCK_VERSION_1       1   /* Version with non-default B-tree 'K' value */
 #define SUPERBLOCK_VERSION_2       2   /* Revised version with superblock extension and checksum */
@@ -145,8 +164,6 @@ typedef struct table_t {
 #define SUPER_ALL_FLAGS             (SUPER_WRITE_ACCESS | SUPER_FILE_OK)
 
 
-
-
 #define UINT16DECODE(p, i) {                                                  \
    (i)  = (uint16_t) (*(p) & 0xff);       (p)++;                              \
    (i) |= (uint16_t)((*(p) & 0xff) << 8); (p)++;                              \
@@ -222,31 +239,18 @@ typedef struct table_t {
     assert((var)==(vartype)_tmp_overflow);      \
 }
 
-
-
-#define SUCCEED         0
-#define FAIL            (-1)
-#define UFAIL           (unsigned)(-1)
-#define UNUSED		/*void*/
-
-
-#define MAX(a,b)            (((a)>(b)) ? (a) : (b))
-#define MIN(a,b)            (((a)<(b)) ? (a) : (b))
-
-#ifndef FALSE
-#   define FALSE 0
-#endif
-#ifndef TRUE
-#   define TRUE 1
-#endif
-
 #define 	BT_SNODE_K	16
 #define 	BT_ISTORE_K	32	/* for older version of superblock < 1 */
 
 
-#define NELMTS(X)           (sizeof(X)/sizeof(X[0]))
+/*
+ * symbol table
+ */
+#define SNODE_MAGIC  		"SNOD"    /*symbol table node magic number     */
+#define SNODE_SIZEOF_MAGIC 	4         /*sizeof symbol node magic number    */
 
-
+#define SNODE_VERS   		1         /*symbol table node version number   */
+#define SNODE_SIZEOF_HDR(F) 	(SNODE_SIZEOF_MAGIC + 4)
 
 typedef enum GP_type_t {
     GP_CACHED_ERROR    = -1,   /*force enum to be signed       */
@@ -293,7 +297,6 @@ typedef enum BT_subid_t {
 } BT_subid_t;
 
 
-
 /*
  *  A global structure for storing the information obtained
  *  from the superblock to be shared by all routines.
@@ -316,12 +319,9 @@ typedef struct 	global_shared_t {
 	void		*fa;	    	    /* driver specific info */
 } global_shared_t;
 
-
-#define CK_ALIGN(X)            (8*(((X)+8-1)/8))
-
-
-
-
+/*
+ * Object Headers
+ */
 
 /* Object Header Message IDs */
 #define OBJ_NIL_ID       0x0000          /* NIL 				  */
@@ -349,8 +349,6 @@ typedef struct 	global_shared_t {
 #define OBJ_REFCOUNT_ID  0x0016          /* Reference count message.  		  */
 #define OBJ_UNKNOWN_ID   0x0017          /* Placeholder message ID for unknown message.  */
 
-
-
 /* 
  * Simple Dataspace 
  */
@@ -377,9 +375,6 @@ typedef struct OBJ_sds_extent_t {
     ck_hsize_t 		*size;    /* Current size of the dimensions */
     ck_hsize_t 		*max;     /* Maximum size of the dimensions */
 } OBJ_sds_extent_t;
-
-/* end Simple Dataspace */
-
 
 /*
  * Link Information Message 
@@ -628,8 +623,6 @@ typedef struct DT_cmemb_t {
     struct type_t       *type;          /*type of this member                */
 } DT_cmemb_t;
 
-/* end Datatype : TO BE PROCESSED */
-
 /* 
  * Data Storage -  Fill Value 
  */
@@ -671,7 +664,6 @@ typedef struct OBJ_fill_t {
     ck_bool_t           fill_defined;   /* whether fill value is defined     */
 } OBJ_fill_t;
 
-/* end Data Storage - Fill Value */
 
 /* 
  * Link Message 
@@ -734,8 +726,6 @@ typedef struct OBJ_link_t {
     } u;
 } OBJ_link_t;
 
-/* end Link Message */
-
 /* 
  * Data Storage - External Data Files
  */
@@ -757,7 +747,6 @@ typedef struct OBJ_edf_t {
     OBJ_edf_entry_t *slot;              /*array of external file entries     */
 } OBJ_edf_t;
 
-/* end Data Storage - External Data Files */
 
 /*
  * Group info message.
@@ -843,8 +832,6 @@ typedef struct OBJ_layout_t {
     } u;
 } OBJ_layout_t;
 
-/* end Data Storage: layout  */
-
 /* 
  * Bogus Message
  */
@@ -854,7 +841,6 @@ typedef struct OBj_bogus_t {
     unsigned 	u;	/* Hold the bogus info */
 } OBJ_bogus_t;
 
-/* end Bogus Message */
 
 /* 
  * Data Storage: Filter Pipeline
@@ -885,9 +871,6 @@ typedef struct OBJ_filter_t {
     OBJ_filter_info_t *filter;          /*array of filters                   */
 } OBJ_filter_t;
 
-/* end Data Storage: Filter Pipeline */
-
-
 /* 
  * Attribute
  */
@@ -909,7 +892,6 @@ struct OBJ_space_t {
 };
 
 
-
 typedef struct OBJ_space_t OBJ_space_t;
 
 typedef struct OBJ_attr_t OBJ_attr_t;
@@ -924,8 +906,6 @@ struct OBJ_attr_t {
     size_t      	data_size;  /* Size of data on disk */
 };
 
-/* end Attribute */
-
 /* 
  * Object Comment
  */
@@ -933,9 +913,6 @@ struct OBJ_attr_t {
 typedef struct OBJ_comm_t {
     char        *s;                     /*ptr to malloc'd memory             */
 } OBJ_comm_t;
-
-/* end Object Commnet */
-
 
 
 #define OBJ_FLAG_SHARED         0x02u
@@ -991,9 +968,8 @@ typedef struct OBJ_shmesg_table_t {
     unsigned            nindexes;       /* number of indexes in the table */
 } OBJ_shmesg_table_t;
 
-/* end Shared message table Message */
 
-/* Object Header Continuation */
+/* Object Header Continuation Message */
 typedef struct OBJ_cont_t {
     ck_addr_t     addr;                   /*address of continuation block      */
     size_t      size;                   /*size of continuation block         */
@@ -1002,8 +978,6 @@ typedef struct OBJ_cont_t {
     unsigned    chunkno;                /*chunk this mesg refers to          */
 } OBJ_cont_t;
 
-/* end Object Header Continuation */
-
 /* Group message */
 
 typedef struct OBJ_stab_t {
@@ -1011,12 +985,8 @@ typedef struct OBJ_stab_t {
     ck_addr_t     heap_addr;              /*address of name heap               */
 } OBJ_stab_t;
 
-/* end Group */
-
-/* Object Modification Date & Time */
+/* Object Modification Date & Time Message */
 #define OBJ_MTIME_VERSION       1
-
-/* end Object Modification Date & Time */
 
 /*
  * v1 B-tree 'K' value message
@@ -1027,8 +997,6 @@ typedef struct OBJ_btreek_t {
     unsigned        sym_leaf_k;                 /* Symbol table leaf node's 'K' value */
 } OBJ_btreek_t;
 
-/* end v1 B-tree 'K' value message */
-
 /*
  * Driver info message
  */
@@ -1038,8 +1006,6 @@ typedef struct OBJ_drvinfo_t {
     size_t     	len;         /* Driver Information Size */
     uint8_t    	*buf;        /* Buffer for Driver Information */
 } OBJ_drvinfo_t;
-
-/* end Driver info message */
 
 /*
  * Attribute Info Message.
@@ -1064,14 +1030,11 @@ typedef struct OBJ_ainfo_t {
     ck_addr_t      name_bt2_addr;          /* Address of v2 B-tree for indexing names of "dense" attributes */
 } OBJ_ainfo_t;
 
-/* end Attribute Info message */
 
 /* Object's Reference Count Message */
 #define OBJ_REFCOUNT_VERSION      	0
 
 typedef uint32_t OBJ_refcount_t;        /* Contains # of links to object, if >1 */
-
-/* end Reference Count Message */
 
 /*
  * Data object headers
@@ -1084,6 +1047,18 @@ typedef struct obj_class_t {
    void 	*(*decode)(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
 } obj_class_t;
 
+
+#define OBJ_MSG_FLAG_CONSTANT   0x01u
+#define OBJ_MSG_FLAG_SHARED     0x02u
+#define OBJ_MSG_FLAG_DONTSHARE  0x04u
+
+#define OBJ_MSG_FLAG_FAIL_IF_UNKNOWN 0x08u
+#define OBJ_MSG_FLAG_MARK_IF_UNKNOWN 0x10u
+
+#define OBJ_MSG_FLAG_WAS_UNKNOWN 0x20u
+#define OBJ_MSG_FLAG_SHAREABLE  0x40u
+
+#define OBJ_MSG_FLAG_BITS       (OBJ_MSG_FLAG_CONSTANT|OBJ_MSG_FLAG_SHARED|OBJ_MSG_FLAG_DONTSHARE|OBJ_MSG_FLAG_FAIL_IF_UNKNOWN|OBJ_MSG_FLAG_MARK_IF_UNKNOWN|OBJ_MSG_FLAG_WAS_UNKNOWN|OBJ_MSG_FLAG_SHAREABLE)
 
 typedef struct OBJ_mesg_t {
     const obj_class_t   *type;          /*type of message                    */
@@ -1118,7 +1093,7 @@ typedef struct OBJ_chunk_t {
 #define OBJ_NMESGS     	32      /*initial number of messages         */
 #define OBJ_NCHUNKS    	2       /*initial number of chunks           */
 
-/* Object header status flag definitions */
+/* Object header flag definitions */
 #define OBJ_HDR_CHUNK0_SIZE             0x03    /* 2-bit field indicating # of bytes to store the size of chunk 0's data */
 #define OBJ_HDR_ATTR_CRT_ORDER_TRACKED  0x04    /* Attribute creation order is tracked */
 #define OBJ_HDR_ATTR_CRT_ORDER_INDEXED  0x08    /* Attribute creation order has index */
@@ -1230,11 +1205,6 @@ typedef struct OBJ_t {
     OBJ_chunk_t *chunk;                 /*array of chunks                    */
 } OBJ_t;
 
-#define SNODE_MAGIC  		"SNOD"    /*symbol table node magic number     */
-#define SNODE_SIZEOF_MAGIC 	4         /*sizeof symbol node magic number    */
-
-#define SNODE_VERS   		1         /*symbol table node version number   */
-#define SNODE_SIZEOF_HDR(F) 	(SNODE_SIZEOF_MAGIC + 4)
 
 /*
  * 1.6 B-tree 
@@ -1253,6 +1223,16 @@ typedef struct BT_class_t {
     size_t      (*get_sizeof_rkey)(global_shared_t *, unsigned);    /*raw key size   */
     void *	(*decode)(global_shared_t *, unsigned, const uint8_t **);
 } BT_class_t;
+
+typedef struct GP_node_key_t {
+    size_t      offset;                 /*offset into heap for name          */
+} GP_node_key_t;
+
+typedef struct RAW_node_key_t {
+    size_t      nbytes;                         /*size of stored data   */
+    ck_size_t   offset[OBJ_LAYOUT_NDIMS];       /*logical offset to start*/
+    unsigned    filter_mask;                    /*excluded filters      */
+} RAW_node_key_t;
 
 /*
  * 1.8 B-tree
@@ -1413,8 +1393,9 @@ typedef struct G_dense_bt2_corder_rec_t {
     int64_t corder;                   /* 'creation order' field value */
 } G_dense_bt2_corder_rec_t;
 
-/* Specify the object header address and index needed
- *      to locate a message in another object header.
+/* 
+ * Specify the object header address and index needed
+ * to locate a message in another object header.
  */
 
 /* Typedef for a record's location if it's stored in the heap */
@@ -2033,19 +2014,6 @@ typedef struct FS_hdr_t {
 
 
 
-
-typedef struct GP_node_key_t {
-    size_t      offset;                 /*offset into heap for name          */
-} GP_node_key_t;
-
-typedef struct RAW_node_key_t {
-    size_t      nbytes;                         /*size of stored data   */
-    ck_size_t   offset[OBJ_LAYOUT_NDIMS];       /*logical offset to start*/
-    unsigned    filter_mask;                    /*excluded filters      */
-} RAW_node_key_t;
-
-
-
 /*
  *  Virtual file drivers
  */
@@ -2154,8 +2122,6 @@ int		g_obj_api;
 int		g_obj_api_err;
 void            process_err(ck_errmsg_t *);
 
-
-
 const obj_class_t *const message_type_g[MSG_TYPES];
 const B2_class_t HF_BT2_INDIR[1];
 const B2_class_t HF_BT2_FILT_INDIR[1];
@@ -2176,8 +2142,6 @@ ck_err_t HF_get_obj_info(driver_t *, HF_hdr_t *, const void *, obj_info_t *);
 ck_err_t HF_read(driver_t *, HF_hdr_t *, const void *, void */*out*/, obj_info_t *);
 ck_err_t SM_get_fheap_addr(driver_t *, unsigned, ck_addr_t *);
 unsigned V_log2_gen(uint64_t);
-
-
 
 ck_err_t        FD_read(driver_t *, ck_addr_t, size_t, void */*out*/);
 void      	addr_decode(global_shared_t *, const uint8_t **, ck_addr_t *);
