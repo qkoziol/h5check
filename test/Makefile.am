@@ -30,7 +30,7 @@ bin_PROGRAMS=testgen
 LDADD=../src/libh5check.a
 
 testgen: $(srcdir)/testgen.c
-	$(CC) $(srcdir)/testgen.c -o testgen
+	$(H5CC) $(srcdir)/testgen.c -o testgen
 
 # The testscript depends on the testgen program to generated data files
 # it uses.
