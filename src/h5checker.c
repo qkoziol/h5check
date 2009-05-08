@@ -5039,15 +5039,17 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
     } /* end while */
 
 done:
-    if ((ret_value == SUCCEED) && ret_heap_chunk) {
+    if ((ret_value == SUCCEED) && ret_heap_chunk)
 	*ret_heap_chunk = (uint8_t *)heap_chunk;
-    } else {
-	if (ret_value < 0) /* fail */
+    else {
+	if (ret_value < 0 && ret_heap_chunk) /* fail */
 	    *ret_heap_chunk = NULL;
 	if (heap_chunk)
 	    free(heap_chunk);
     }
+
     return(ret_value);
+
 } /* end check_lheap() */
 
 
