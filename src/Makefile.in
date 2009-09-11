@@ -209,14 +209,12 @@ LIBH5_HL = $(top_builddir)/hl/src/libhdf5_hl.la
 LIBH5F_HL = $(top_builddir)/hl/fortran/src/libhdf5hl_fortran.la
 LIBH5CPP_HL = $(top_builddir)/hl/c++/src/libhdf5_hl_cpp.la
 
-# Scripts used to build examples
-# If only shared libraries have been installed, have h5cc build examples with
-# shared libraries instead of static libraries
-H5CC = $(bindir)/h5cc
-H5CC_PP = $(bindir)/h5pcc
-H5FC = $(bindir)/h5fc
-H5FC_PP = $(bindir)/h5pfc
-H5CPP = $(bindir)/h5c++
+# HDF5 compile commands, assuming they are in your $PATH.
+H5CC = h5cc
+H5CC_PP = h5pcc
+H5FC = h5fc
+H5FC_PP = h5pfc
+H5CPP = h5c++
 FCFLAGS = @FCFLAGS@
 CXXFLAGS = @CXXFLAGS@
 
@@ -233,7 +231,7 @@ F9XMODFLAG = @F9XMODFLAG@
 # *.clog are from the MPE option.
 CHECK_CLEANFILES = *.chkexe *.chklog *.clog
 
-# This is our main target, the h5check library which is not installed.
+# This is our main target. The h5check library is not installed yet.
 noinst_LIBRARIES = libh5check.a
 libh5check_a_SOURCES = h5checker.c h5checker_api.c h5error.c h5checkerV2_0.c h5pline.c
 

@@ -17,9 +17,9 @@ Assuming gcc, gmake and h5cc are in your $PATH, just do
     % ./configure
     % gmake
     
-The default compiler is set to gcc.
+The default compiler and HDF5 library compiler are set to gcc and h5cc.
 If you want to use a different C compiler and/or h5cc command, do
-    % make CC=gcc H5CC=mypath/h5cc
+    % make CC=gcc H5CC=$mypath/h5cc
 
 To set different compiler flags use CFLAGS variable, e.g.
      % env CFLAGS=-O2 ./configure
@@ -50,4 +50,4 @@ Question:
 Email help@hdfgroup.org.
 
 ---------------
-Last update: March 21, 2008
+Last update: Sep 11, 2009
