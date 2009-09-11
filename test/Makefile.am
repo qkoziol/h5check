@@ -23,8 +23,8 @@ check_PROGRAMS=$(TEST_PROG)
 check_SCRIPTS=$(TEST_SCRIPT)
 SCRIPT_DEPEND=testgen$(EXEEXT)
 
-# Our main target, the h5dump tool.
-bin_PROGRAMS=testgen
+# Our main target, nothing to install.
+bin_PROGRAMS=
 
 # All the programs depend on the hdf5 and h5tools libraries
 LDADD=../src/libh5check.a

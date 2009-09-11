@@ -45,7 +45,7 @@ DIST_COMMON = README $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(top_srcdir)/config/commence.am \
 	$(top_srcdir)/config/conclude.am
 check_PROGRAMS = $(am__EXEEXT_1)
-bin_PROGRAMS = testgen$(EXEEXT)
+bin_PROGRAMS =
 TESTS = $(check_PROGRAMS) $(check_SCRIPTS)
 subdir = test
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4

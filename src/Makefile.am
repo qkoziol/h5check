@@ -11,8 +11,8 @@
 
 include $(top_srcdir)/config/commence.am
 
-# This is our main target, the h5tools library.
-lib_LIBRARIES=libh5check.a
+# This is our main target. The h5check library is not installed yet.
+noinst_LIBRARIES=libh5check.a
 
 libh5check_a_SOURCES=h5checker.c h5checker_api.c h5error.c h5checkerV2_0.c h5pline.c
 
