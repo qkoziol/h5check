@@ -28,6 +28,11 @@ AM_MAINTAINER_MODE
 AC_PROG_CC
 AC_PROG_RANLIB
 
+dnl ----------------------------------------------------------------------
+dnl Set prefix default (install directory) to a directory in the build area.
+dnl This allows multiple src-dir builds within one host.
+AC_PREFIX_DEFAULT([`pwd`/h5check])
+
 # Checks for libraries.
 
 dnl ----------------------------------------------------------------------
