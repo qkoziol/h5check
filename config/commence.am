@@ -53,11 +53,11 @@ includedir = $(exec_prefix)/include
 docdir = $(exec_prefix)/doc
 
 # HDF5 compile commands, assuming they are in your $PATH.
-H5CC=h5cc
-H5CC_PP=h5pcc
-H5FC=h5fc
-H5FC_PP=h5pfc
-H5CPP=h5c++
+H5CC=@H5CC@
+H5CC_PP=@H5CC_PP@
+H5FC=@H5FC@
+H5FC_PP=@H5FC_PP@
+H5CPP=@H5CPP@
   
 
 # H5_CFLAGS holds flags that should be used as CFLAGS when building hdf5,

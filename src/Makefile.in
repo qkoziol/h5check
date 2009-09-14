@@ -103,6 +103,13 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FILTERS = @FILTERS@
 GREP = @GREP@
+
+# HDF5 compile commands, assuming they are in your $PATH.
+H5CC = @H5CC@
+H5CC_PP = @H5CC_PP@
+H5CPP = @H5CPP@
+H5FC = @H5FC@
+H5FC_PP = @H5FC_PP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
@@ -208,13 +215,6 @@ LIBH5TOOLS = $(top_builddir)/tools/lib/libh5tools.la
 LIBH5_HL = $(top_builddir)/hl/src/libhdf5_hl.la
 LIBH5F_HL = $(top_builddir)/hl/fortran/src/libhdf5hl_fortran.la
 LIBH5CPP_HL = $(top_builddir)/hl/c++/src/libhdf5_hl_cpp.la
-
-# HDF5 compile commands, assuming they are in your $PATH.
-H5CC = h5cc
-H5CC_PP = h5pcc
-H5FC = h5fc
-H5FC_PP = h5pfc
-H5CPP = h5c++
 FCFLAGS = @FCFLAGS@
 CXXFLAGS = @CXXFLAGS@
 

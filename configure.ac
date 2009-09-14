@@ -33,6 +33,20 @@ dnl Set prefix default (install directory) to a directory in the build area.
 dnl This allows multiple src-dir builds within one host.
 AC_PREFIX_DEFAULT([`pwd`/h5check])
 
+dnl HDF5 compile commands.
+AC_SUBST([H5CC])
+AC_SUBST([H5CC_PP])
+AC_SUBST([H5FC])
+AC_SUBST([H5FC_PP])
+AC_SUBST([H5CPP])
+
+dnl Make sure they are set to something.
+H5CC="${H5CC:-h5cc}"
+H5CC_PP="${H5CC_PP:-h5pcc}"
+H5FC="${H5FC:-h5fc}"
+H5FC_PP="${H5FC_PP:-h5pfc}"
+H5CPP="${H5CPP:-h5c++}"
+
 # Checks for libraries.
 
 dnl ----------------------------------------------------------------------
