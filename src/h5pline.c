@@ -36,25 +36,25 @@ pline_register(const Z_class_t *cls)
 
     assert (cls);
 
-    if ((cls->id < 0) || (cls->id > Z_FILTER_MAX)) {
+    if((cls->id < 0) || (cls->id > Z_FILTER_MAX)) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC,
 	    "Registering filter:Invalid filter id", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
-    for (i = 0; i < Z_table_used_g; i++)
+    for(i = 0; i < Z_table_used_g; i++)
         if (Z_table_g[i].id == cls->id)
             break;
 
     /* Filter not already registered */
-    if (i >= Z_table_used_g) {
+    if(i >= Z_table_used_g) {
         if (Z_table_used_g >= Z_table_alloc_g) {
             ck_size_t n = MAX(Z_MAX_NFILTERS, 2*Z_table_alloc_g);
             Z_class_t *table = realloc(Z_table_g, n*sizeof(Z_class_t));
-            if (!table) {
+            if(!table) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC,
 		    "Registering filter:Unable to extend filter table", -1, NULL);
-		    CK_GOTO_DONE(FAIL)
+		    CK_SET_RET_DONE(FAIL)
 	    }
             Z_table_g = table;
             Z_table_alloc_g = n;
@@ -77,48 +77,48 @@ pline_init_interface(void)
 {
     ck_err_t    ret_value=SUCCEED;    
 
-    if (debug_verbose())
+    if(debug_verbose())
         printf("INITIALIZING filters ...\n");
 
 #ifdef HAVE_FILTER_DEFLATE
-    if (pline_register(Z_DEFLATE) < SUCCEED) {
+    if(pline_register(Z_DEFLATE) < SUCCEED) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register deflate filter", -1, NULL);
-	CK_SET_ERR(FAIL)
+	CK_SET_RET(FAIL)
     }
 #endif
 
 #ifdef HAVE_FILTER_SHUFFLE
-    if (pline_register(Z_SHUFFLE) < 0) {
+    if(pline_register(Z_SHUFFLE) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register shuffle filter", -1, NULL);
-	CK_SET_ERR(FAIL)
+	CK_SET_RET(FAIL)
     }
 #endif
 
 #ifdef HAVE_FILTER_FLETCHER32
-    if (pline_register(Z_FLETCHER32) < 0) {
+    if(pline_register(Z_FLETCHER32) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register fletcher32 filter", -1, NULL);
-	CK_SET_ERR(FAIL)
+	CK_SET_RET(FAIL)
     }
 #endif
 
 #ifdef HAVE_FILTER_SZIP
-    if (pline_register(Z_SZIP) < 0) {
+    if(pline_register(Z_SZIP) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register szip filter", -1, NULL);
-	CK_SET_ERR(FAIL)
+	CK_SET_RET(FAIL)
     }
 #endif
 
 #ifdef HAVE_FILTER_NBIT
-    if (pline_register(Z_NBIT) < 0) {
+    if(pline_register(Z_NBIT) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register nbit filter", -1, NULL);
-	CK_SET_ERR(FAIL)
+	CK_SET_RET(FAIL)
     }
 #endif
 
 #ifdef HAVE_FILTER_SCALEOFFSET
-    if (pline_register(Z_SCALEOFFSET) < 0) {
+    if(pline_register(Z_SCALEOFFSET) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Unable to register scaleoffset filter", -1, NULL);
-	CK_SET_ERR(FAIL)
+	CK_SET_RET(FAIL)
     };
 #endif
 
@@ -147,22 +147,22 @@ Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
     int         	status;                 /* Status from zlib operation */
     ck_size_t      	ret_value;              /* Return value */
 
-    if (debug_verbose())
+    if(debug_verbose())
         printf("Applying deflate filter ...\n");
 
-    if (cd_nelmts != 1 || cd_values[0] > 9) {
+    if(cd_nelmts != 1 || cd_values[0] > 9) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Invalid level", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
-    if (flags & Z_FLAG_REVERSE) { /* Input, uncompress */
+    if(flags & Z_FLAG_REVERSE) { /* Input, uncompress */
         z_stream        z_strm;                 /* zlib parameters */
         ck_size_t       nalloc = *buf_size;     /* Number of bytes for output (compressed) buffer */
 
         /* Allocate space for the compressed buffer */
         if (NULL == (outbuf = malloc(nalloc))) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Internal allocation error", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* Set the uncompression parameters */
@@ -173,9 +173,9 @@ Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
         ASSIGN_OVERFLOW(z_strm.avail_out,nalloc,size_t,uInt);
 
         /* Initialize the uncompression routines */
-        if (Z_OK != inflateInit(&z_strm)) {
+        if(Z_OK != inflateInit(&z_strm)) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Initialization failed", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* Loop to uncompress the buffer */
@@ -184,14 +184,14 @@ Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
             status = inflate(&z_strm, Z_SYNC_FLUSH);
 
             /* Check if we are done uncompressing data */
-            if (Z_STREAM_END==status)
+            if(Z_STREAM_END==status)
                 break;  /*done*/
 
             /* Check for error */
-            if (Z_OK != status) {
+            if(Z_OK != status) {
                 (void)inflateEnd(&z_strm);
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Inflate failed", -1, NULL);
-		CK_GOTO_DONE(FAIL)
+		CK_SET_RET_DONE(FAIL)
             }
             else {
                 /* If we're not done and just ran out of buffer space, get more */
@@ -203,7 +203,7 @@ Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
                     if(NULL == (new_outbuf = realloc(outbuf, nalloc))) {
                         (void)inflateEnd(&z_strm);
 			error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Internal allocation error", -1, NULL);
-			CK_GOTO_DONE(FAIL)
+			CK_SET_RET_DONE(FAIL)
                     } /* end if */
                     outbuf = new_outbuf;
 
@@ -227,7 +227,7 @@ Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
         (void)inflateEnd(&z_strm);
     } else {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Invalid operation", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
 
@@ -268,13 +268,13 @@ Z_filter_shuffle(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
     ck_size_t 		ret_value;           /* Return value */
 
 
-    if (debug_verbose())
+    if(debug_verbose())
         printf("Applying shuffle filter ...\n");
 
     /* Check arguments */
-    if (cd_nelmts != Z_SHUFFLE_TOTAL_NPARMS || cd_values[Z_SHUFFLE_PARM_SIZE] == 0) {
+    if(cd_nelmts != Z_SHUFFLE_TOTAL_NPARMS || cd_values[Z_SHUFFLE_PARM_SIZE] == 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shuffle filter:Invalid size", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
     /* Get the number of bytes per element from the parameter block */
@@ -289,9 +289,9 @@ Z_filter_shuffle(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
         leftover = nbytes%bytesoftype;
 
         /* Allocate the destination buffer */
-        if (NULL == (dest = malloc(nbytes))) {
+        if(NULL == (dest = malloc(nbytes))) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shuffle filter:Internal allocation error", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         if(flags & Z_FLAG_REVERSE) {
@@ -343,14 +343,14 @@ Z_filter_shuffle(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
             } /* end for */
 
             /* Add leftover to the end of data */
-            if (leftover > 0) {
+            if(leftover > 0) {
                 /* Adjust back to end of shuffled bytes */
                 _dest -= (bytesoftype - 1);     /*lint !e794 _dest is initialized */
                 memcpy((void*)_dest, (void*)_src, leftover);
             }
         } else {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shuffle filter:Invalid operation", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* Free the input buffer */
@@ -402,7 +402,7 @@ checksum_fletcher32(const void *_data, ck_size_t _len)
     /* (the magic "360" value is is the largest number of sums that can be
      *  performed without numeric overflow)
      */
-    while (len) {
+    while(len) {
         unsigned tlen = len > 360 ? 360 : len;
         len -= tlen;
         do {
@@ -447,11 +447,11 @@ Z_filter_fletcher32(unsigned flags, ck_size_t UNUSED cd_nelmts, const unsigned U
 
     assert(sizeof(uint32_t)>=4);
 
-    if (debug_verbose())
+    if(debug_verbose())
         printf("Applying fletcher32 filter ...\n");
 
-    if (flags & Z_FLAG_REVERSE) { /* Read */
-        if (!(flags & Z_FLAG_SKIP_EDC)) {
+    if(flags & Z_FLAG_REVERSE) { /* Read */
+        if(!(flags & Z_FLAG_SKIP_EDC)) {
             unsigned 	char *tmp_src;             /* Pointer to checksum in buffer */
             ck_size_t  	src_nbytes = nbytes;       /* Original number of bytes */
             uint32_t 	stored_fletcher;           /* Stored checksum value */
@@ -478,7 +478,7 @@ Z_filter_fletcher32(unsigned flags, ck_size_t UNUSED cd_nelmts, const unsigned U
             /* Verify computed checksum matches stored checksum */
             if(stored_fletcher != fletcher && stored_fletcher != reversed_fletcher) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Fletcher32 filterfilter:Data error", -1, NULL);
-		CK_GOTO_DONE(FAIL)
+		CK_SET_RET_DONE(FAIL)
 	    }
         }
 
@@ -487,7 +487,7 @@ Z_filter_fletcher32(unsigned flags, ck_size_t UNUSED cd_nelmts, const unsigned U
         ret_value = nbytes - FLETCHER_LEN;
     } else {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Fletcher32 filterfilter:Invalid operation", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
 done:
@@ -521,12 +521,12 @@ Z_filter_szip (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
     unsigned 	char *newbuf = NULL;    /* Pointer to input buffer */
     SZ_com_t 	sz_param;          /* szip parameter block */
 
-    if (debug_verbose())
+    if(debug_verbose())
         printf("Applying szip filter ...\n");
 
-    if (cd_nelmts != 4) {
+    if(cd_nelmts != 4) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Szip filter:Invalid level", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
     /* Copy the filter parameters into the szip parameter block */
@@ -536,7 +536,7 @@ Z_filter_szip (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
     ASSIGN_OVERFLOW(sz_param.pixels_per_scanline,cd_values[Z_SZIP_PARM_PPS],unsigned,int);
 
     /* Input; uncompress */
-    if (flags & Z_FLAG_REVERSE) {
+    if(flags & Z_FLAG_REVERSE) {
         uint32_t stored_nalloc;  /* Number of bytes the compressed block will expand into */
         ck_size_t nalloc;  /* Number of bytes the compressed block will expand into */
 
@@ -548,14 +548,14 @@ Z_filter_szip (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
         /* Allocate space for the uncompressed buffer */
         if(NULL==(outbuf = malloc(nalloc))) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Szip filter:Internal allocation error", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* Decompress the buffer */
         size_out = nalloc;
         if(SZ_BufftoBuffDecompress(outbuf, &size_out, newbuf, nbytes-4, &sz_param) != SZ_OK) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Szip filter:Szip failed", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
         assert(size_out==nalloc);
 
@@ -569,7 +569,7 @@ Z_filter_szip (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
         ret_value = nalloc;
     } else {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Szip filter:Invalid operation", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
 done:
@@ -677,7 +677,7 @@ Z_nbit_decompress_one_nooptype(unsigned char *data, ck_size_t data_offset,
    unsigned dat_len;  /* dat_len is the number of bits to be copied in each data byte */
    unsigned char val; /* value to be copied in each data byte */
 
-   for (i = 0; i < size; i++) {
+   for(i = 0; i < size; i++) {
       /* initialize value and bits of unsigned char to be copied */
       val = buffer[*j];
       dat_len = sizeof(unsigned char) * 8;
@@ -705,7 +705,7 @@ Z_nbit_decompress_one_atomic(unsigned char *data, ck_size_t data_offset,
 
    datatype_len = p.size * 8;
 
-   if (p.order == Z_NBIT_ORDER_LE) { /* little endian */
+   if(p.order == Z_NBIT_ORDER_LE) { /* little endian */
       /* calculate begin_i and end_i */
       if((p.precision + p.offset) % 8 != 0)
          begin_i = (p.precision + p.offset) / 8;
@@ -883,16 +883,16 @@ Z_filter_nbit(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
     /* check arguments
      * cd_values[0] stores actual number of parameters in cd_values[]
      */
-    if (cd_nelmts != cd_values[0]) {
+    if(cd_nelmts != cd_values[0]) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Nbit filter:Invalid aggression level", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
     /* check if need to do nbit compress or decompress
      * cd_values[1] stores the flag if true indicating no need to compress
      */
 /* NEED to check into this */
-    if (cd_values[1]) {
+    if(cd_values[1]) {
         ret_value = *buf_size;
         goto done;
     }
@@ -901,13 +901,13 @@ Z_filter_nbit(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[],
     d_nelmts = cd_values[2];
 
     /* input; decompress */
-    if (flags & Z_FLAG_REVERSE) {
+    if(flags & Z_FLAG_REVERSE) {
         size_out = d_nelmts * cd_values[4]; /* cd_values[4] stores datatype size */
 
         /* allocate memory space for decompressed buffer */
         if(NULL==(outbuf = malloc(size_out))) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Nbit filter:Internal allocation error", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* decompress the buffer */
@@ -986,7 +986,7 @@ static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleof
 	for(i = 0; i < d_nelmts; i++)                                               			\
 	    buf[i] = (type)((buf[i] == (((type)1 << minbits) - 1))?filval:(buf[i] + minval));		\
     } else /* fill value undefined */                                              			\
-	for (i = 0; i < d_nelmts; i++) 									\
+	for(i = 0; i < d_nelmts; i++) 									\
 	    buf[i] += (type)(minval);                     						\
 }
 
@@ -1015,7 +1015,7 @@ static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleof
 	Z_scaleoffset_get_filval_1(i, long_long, filval_buf, *(long_long *)&filval)   	\
     else {                                                                              \
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL); \
-	CK_GOTO_DONE(FAIL)											    \
+	CK_SET_RET_DONE(FAIL)											    \
     }											\
 }
 
@@ -1036,7 +1036,7 @@ static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleof
 		filval:(*(long_long *)&buf[i])/pow(10.0, D_val) + min;                  \
     else {                                                                              \
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL); \
-	CK_GOTO_DONE(FAIL)											    \
+	CK_SET_RET_DONE(FAIL)											    \
     }											\
 }
 
@@ -1054,7 +1054,7 @@ static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleof
 	    buf[i] = (*(long_long *)&buf[i])/pow(10.0, D_val) + min;                    \
     else {                                                                              \
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL); \
-	CK_GOTO_DONE(FAIL)											    \
+	CK_SET_RET_DONE(FAIL)											    \
     }											\
 }
 
@@ -1063,7 +1063,7 @@ static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleof
 /* Retrive minimum value of floating-point type */
 #define Z_scaleoffset_get_min(i, type, minval, min)                                	\
 {                                                                                     	\
-    if (sizeof(type)==sizeof(int)) {                                                    \
+    if(sizeof(type)==sizeof(int)) {                                                    \
 	int 	mask;                                                                   \
 	for (i = 0; i < sizeof(int); i++) {                                             \
 	    mask = ((unsigned char *)&minval)[i]; 					\
@@ -1086,7 +1086,7 @@ static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleof
 	}                                                                               \
     } else {                                                                    	\
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL); \
-	CK_GOTO_DONE(FAIL)											    \
+	CK_SET_RET_DONE(FAIL)											    \
     }											\
 }
 
@@ -1098,7 +1098,7 @@ static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleof
                                                                                      \
     Z_scaleoffset_get_min(i, type, minval, min)                                      \
                                                                                      \
-    if (filavail == Z_SCALEOFFSET_FILL_DEFINED) { /* fill value defined */           \
+    if(filavail == Z_SCALEOFFSET_FILL_DEFINED) { /* fill value defined */           \
 	Z_scaleoffset_get_filval_2(i, type, filval_buf, filval)                      \
 	Z_scaleoffset_modify_3(i, type, buf, d_nelmts, filval, minbits, min, D_val)  \
     } else /* fill value undefined */                                                \
@@ -1113,7 +1113,7 @@ static ck_err_t Z_scaleoffset_postdecompress_fd(void *, unsigned, enum Z_scaleof
 static void
 Z_scaleoffset_convert(void *buf, unsigned d_nelmts, ck_size_t dtype_size)
 {
-    if (dtype_size > 1) {
+    if(dtype_size > 1) {
 
 	unsigned 	i, j;
 	unsigned char 	*buffer, temp;
@@ -1147,12 +1147,12 @@ Z_scaleoffset_decompress_one_byte(unsigned char *data, ck_size_t data_offset, in
 
     /* initialize value and bits of unsigned char to be copied */
     val = buffer[*j];
-    if (k == begin_i)
+    if(k == begin_i)
 	dat_len = 8 - (dtype_len - p.minbits) % 8;
     else
 	dat_len = 8;
 
-    if (*buf_len > dat_len) {
+    if(*buf_len > dat_len) {
 	data[data_offset + k] = ((val >> (*buf_len - dat_len)) & ~(~0 << dat_len));
 	*buf_len -= dat_len;
     } else {
@@ -1179,17 +1179,17 @@ Z_scaleoffset_decompress_one_atomic(unsigned char *data, ck_size_t data_offset, 
 
     dtype_len = p.size * 8;
 
-    if (p.mem_order == Z_SCALEOFFSET_ORDER_LE) { /* little endian */
+    if(p.mem_order == Z_SCALEOFFSET_ORDER_LE) { /* little endian */
 	begin_i = p.size - 1 - (dtype_len - p.minbits) / 8;
 
-	for (k = begin_i; k >= 0; k--)
+	for(k = begin_i; k >= 0; k--)
 	    Z_scaleoffset_decompress_one_byte(data, data_offset, k, begin_i, buffer, j, buf_len, p, dtype_len);
     }
 
     if(p.mem_order == Z_SCALEOFFSET_ORDER_BE) { /* big endian */
 	begin_i = (dtype_len - p.minbits) / 8;
 
-	for (k = begin_i; k <= p.size - 1; k++)
+	for(k = begin_i; k <= p.size - 1; k++)
 	    Z_scaleoffset_decompress_one_byte(data, data_offset, k, begin_i, buffer, j, buf_len, p, dtype_len);
     }
 }
@@ -1207,7 +1207,7 @@ Z_scaleoffset_decompress(unsigned char *data, unsigned d_nelmts, unsigned char *
     int 	buf_len;
 
     /* must initialize to zeros */
-    for (i = 0; i < d_nelmts*p.size; i++) 
+    for(i = 0; i < d_nelmts*p.size; i++) 
 	data[i] = 0;
 
     /* initialization before the loop */
@@ -1215,7 +1215,7 @@ Z_scaleoffset_decompress(unsigned char *data, unsigned d_nelmts, unsigned char *
     buf_len = sizeof(unsigned char) * 8;
 
     /* decompress */
-    for (i = 0; i < d_nelmts; i++)
+    for(i = 0; i < d_nelmts; i++)
 	Z_scaleoffset_decompress_one_atomic(data, i*p.size, buffer, &j, &buf_len, p);
 }
 
@@ -1227,26 +1227,26 @@ Z_scaleoffset_get_type(unsigned dtype_class, unsigned dtype_size, unsigned dtype
     enum Z_scaleoffset_type 	type = t_bad; /* integer type */
     enum Z_scaleoffset_type 	ret_value;           
 
-    if (dtype_class == Z_SCALEOFFSET_CLS_INTEGER) {
-	if (dtype_sign == Z_SCALEOFFSET_SGN_NONE) { /* unsigned integer */
-	    if (dtype_size == sizeof(unsigned char))      
+    if(dtype_class == Z_SCALEOFFSET_CLS_INTEGER) {
+	if(dtype_sign == Z_SCALEOFFSET_SGN_NONE) { /* unsigned integer */
+	    if(dtype_size == sizeof(unsigned char))      
 		type = t_uchar;
-            else if (dtype_size == sizeof(unsigned short))     
+            else if(dtype_size == sizeof(unsigned short))     
 		type = t_ushort;
-            else if (dtype_size == sizeof(unsigned int))       
+            else if(dtype_size == sizeof(unsigned int))       
 		type = t_uint;
-            else if (dtype_size == sizeof(unsigned long))      
+            else if(dtype_size == sizeof(unsigned long))      
 		type = t_ulong;
-            else if (dtype_size == sizeof(unsigned long_long)) 
+            else if(dtype_size == sizeof(unsigned long_long)) 
 		type = t_ulong_long;
             else {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL);
-		CK_GOTO_DONE(FAIL)
+		CK_SET_RET_DONE(FAIL)
 	    }
         }
 
-        if (dtype_sign == Z_SCALEOFFSET_SGN_2) { /* signed integer */
-            if (dtype_size == sizeof(signed char)) 
+        if(dtype_sign == Z_SCALEOFFSET_SGN_2) { /* signed integer */
+            if(dtype_size == sizeof(signed char)) 
 		type = t_schar;
             else if(dtype_size == sizeof(short))       
 		type = t_short;
@@ -1258,19 +1258,19 @@ Z_scaleoffset_get_type(unsigned dtype_class, unsigned dtype_size, unsigned dtype
 		type = t_long_long;
             else {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL);
-		CK_GOTO_DONE(FAIL)
+		CK_SET_RET_DONE(FAIL)
 	    }
         }
     }
 
-    if (dtype_class == Z_SCALEOFFSET_CLS_FLOAT) {
+    if(dtype_class == Z_SCALEOFFSET_CLS_FLOAT) {
         if (dtype_size == sizeof(float))       
 	    type = t_float;
         else if(dtype_size == sizeof(double)) 
 	    type = t_double;
         else {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot find matched memory datatype", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
     }
 
@@ -1291,7 +1291,7 @@ Z_scaleoffset_postdecompress_i(void *data, unsigned d_nelmts, enum Z_scaleoffset
 {
     long_long sminval = *(long_long*)&minval; /* for signed integer types */
 
-    if (type == t_uchar)
+    if(type == t_uchar)
 	Z_scaleoffset_postdecompress_1(unsigned char, data, d_nelmts, filavail, filval_buf, minbits, minval)
     else if(type == t_ushort)
 	Z_scaleoffset_postdecompress_1(unsigned short, data, d_nelmts, filavail, filval_buf, minbits, minval)
@@ -1311,7 +1311,7 @@ Z_scaleoffset_postdecompress_i(void *data, unsigned d_nelmts, enum Z_scaleoffset
 	} else /* fill value undefined */
 	    for(i = 0; i < d_nelmts; i++) 
 		buf[i] += sminval;
-   } else if (type == t_short)
+   } else if(type == t_short)
 	Z_scaleoffset_postdecompress_2(short, data, d_nelmts, filavail, filval_buf, minbits, sminval)
    else if (type == t_int)
       Z_scaleoffset_postdecompress_2(int, data, d_nelmts, filavail, filval_buf, minbits, sminval)
@@ -1370,12 +1370,12 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
     Z_SO_scale_type_t 		scale_type = 0;	/* scale type */
     so_parms_atomic 		p;      	/* paramters needed for compress/decompress functions */
 
-    if (debug_verbose())
+    if(debug_verbose())
         printf("Applying scaleoffset filter ...\n");
 
-    if (cd_nelmts != Z_SCALEOFFSET_TOTAL_NPARMS) {
+    if(cd_nelmts != Z_SCALEOFFSET_TOTAL_NPARMS) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid # of parameters", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
 #ifdef HAVE_BIG_ENDIAN
@@ -1398,7 +1398,7 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
 
         default:
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid endianness order", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
     } /* end switch */
 
     /* copy filter parameters to local variables */
@@ -1418,17 +1418,17 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
      *                      scale factor is the fixed minimum number of bits
      * H5Z_SO_INT          : integer type, scale_factor is minimum number of bits
      */
-    if (dtype_class == Z_SCALEOFFSET_CLS_FLOAT) { /* floating-point type */
+    if(dtype_class == Z_SCALEOFFSET_CLS_FLOAT) { /* floating-point type */
         if(scale_type != Z_SO_FLOAT_DSCALE && scale_type != Z_SO_FLOAT_ESCALE) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid scale type", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
     }
 
-    if (dtype_class==Z_SCALEOFFSET_CLS_INTEGER) { /* integer type */
+    if(dtype_class==Z_SCALEOFFSET_CLS_INTEGER) { /* integer type */
         if(scale_type != Z_SO_INT) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Invalid scale type", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* 
@@ -1442,15 +1442,15 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
     /* fixed-minimum-bits method is not implemented and is forbidden */
     if(scale_type == Z_SO_FLOAT_ESCALE) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Unsupported E-scaling method", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
-    if (scale_type == Z_SO_FLOAT_DSCALE) { /* floating-point type, variable-minimum-bits */
+    if(scale_type == Z_SO_FLOAT_DSCALE) { /* floating-point type, variable-minimum-bits */
         D_val = (double)scale_factor;
     } else { /* integer type, or floating-point type with fixed-minimum-bits method */
         if (scale_factor > (int)(cd_values[Z_SCALEOFFSET_PARM_SIZE] * 8)) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Minimum # of bits exceeds maximum", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* no need to process data */
@@ -1465,7 +1465,7 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
     p.size = cd_values[Z_SCALEOFFSET_PARM_SIZE];
     p.mem_order = native_order;
     /* input; decompress */
-    if (flags & Z_FLAG_REVERSE) {
+    if(flags & Z_FLAG_REVERSE) {
         /* 
 	 * Retrieve values of minbits and minval from input compressed buffer.
          * Retrieve them corresponding to how they are stored during compression.
@@ -1504,7 +1504,7 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
         /* allocate memory space for decompressed buffer */
         if(NULL == (outbuf = malloc(size_out))) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Internal allocation error", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* special case: minbits equal to full precision */
@@ -1534,7 +1534,7 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
         /* before postprocess, get memory type */
         if((type = Z_scaleoffset_get_type(dtype_class, (unsigned)p.size, dtype_sign)) == 0) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Cannot get memory type", -1, NULL);
-	    CK_GOTO_DONE(FAIL)
+	    CK_SET_RET_DONE(FAIL)
 	}
 
         /* postprocess after decompression */
@@ -1547,7 +1547,7 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
                 if (Z_scaleoffset_postdecompress_fd(outbuf, d_nelmts, type, filavail,
 			&cd_values[Z_SCALEOFFSET_PARM_FILVAL], minbits, minval, D_val) == FAIL) {
 		    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Scaleoffset filter:Internal post-decompression failed", -1, NULL);
-		    CK_GOTO_DONE(FAIL)
+		    CK_SET_RET_DONE(FAIL)
 		}
             }
 
@@ -1566,7 +1566,7 @@ Z_filter_scaleoffset (unsigned flags, ck_size_t cd_nelmts, const unsigned cd_val
     ret_value = size_out;
 
 done:
-    if (outbuf)
+    if(outbuf)
         free(outbuf);
     return(ret_value);
 }
@@ -1579,9 +1579,9 @@ filter_find_idx(Z_filter_t id)
     ck_size_t 	i;
     int 	ret_value=FAIL;
 
-    for (i = 0; i < Z_table_used_g; i++)
-        if (Z_table_g[i].id == id)
-            CK_GOTO_DONE((int)i)
+    for(i = 0; i < Z_table_used_g; i++)
+        if(Z_table_g[i].id == id)
+            CK_SET_RET_DONE((int)i)
 done:
     return(ret_value);
 } 
@@ -1605,12 +1605,12 @@ filter_pline(const OBJ_filter_t *pline, unsigned flags, unsigned *filter_mask/*i
     assert(buf && *buf);
     assert(!pline || pline->nused<Z_MAX_NFILTERS);
 
-    if (pline && (flags & Z_FLAG_REVERSE)) { /* Read */
-	for (i = pline->nused; i > 0; --i) {
+    if(pline && (flags & Z_FLAG_REVERSE)) { /* Read */
+	for(i = pline->nused; i > 0; --i) {
             idx = i-1;
 
 #if 0
-            if (*filter_mask & ((unsigned)1<<idx)) {
+            if(*filter_mask & ((unsigned)1<<idx)) {
 printf("I am in filter exclued\n");
                 failed |= (unsigned)1 << idx;
                 continue;/*filter excluded*/
@@ -1618,10 +1618,10 @@ printf("I am in filter exclued\n");
 printf("I am done with filter mask\n");
 printf("new_nbytes=%u\n", new_nbytes);
 #endif
-            if ((fclass_idx = filter_find_idx(pline->filter[idx].id)) < 0) {
+            if((fclass_idx = filter_find_idx(pline->filter[idx].id)) < 0) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Filter pipeline:Filter not registered", 
 		    -1, NULL);
-		CK_GOTO_DONE(FAIL)
+		CK_SET_RET_DONE(FAIL)
             }
             fclass = &Z_table_g[fclass_idx];
             tmp_flags = flags|(pline->filter[idx].flags);
@@ -1629,11 +1629,11 @@ printf("new_nbytes=%u\n", new_nbytes);
             new_nbytes = (fclass->filter)(tmp_flags, pline->filter[idx].cd_nelmts,
                                         pline->filter[idx].cd_values, *nbytes, buf_size, buf);
 
-            if (new_nbytes == 0) {
+            if(new_nbytes == 0) {
                 if((cb_struct.func && (Z_CB_FAIL==cb_struct.func(pline->filter[idx].id, *buf, *buf_size, cb_struct.op_data)))
                     || !cb_struct.func) {
 			error_push(ERR_INTERNAL, ERR_NONE_SEC, "Filter pipeline:Read failed", -1, NULL);
-			CK_GOTO_DONE(FAIL)
+			CK_SET_RET_DONE(FAIL)
 		}
 
                 *nbytes = *buf_size;
@@ -1644,11 +1644,11 @@ printf("new_nbytes=%u\n", new_nbytes);
         }
     } else { /* Write */
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "pipeline:Illegal operation", -1, NULL);
-	CK_GOTO_DONE(FAIL)
+	CK_SET_RET_DONE(FAIL)
     }
 
     *filter_mask = failed;
 
 done:
     return(ret_value);
-}
+} /* filter_pline() */

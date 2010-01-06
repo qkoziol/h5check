@@ -11,6 +11,8 @@
 #include <time.h>
 #include <string.h>
 #include <unistd.h>
+#include <string.h>
+
 
 
 #define FORMAT_ONE_SIX		16	/* library release version 1.6.6 */
@@ -69,9 +71,24 @@ typedef struct table_t {
     obj_t	*objs;
 } table_t;
 
-#define CK_CONTINUE(ret_val) {ret_value = ret_val; continue;}
-#define CK_SET_ERR(ret_val) {ret_value = ret_val;}
-#define CK_GOTO_DONE(ret_val) {ret_value = ret_val; goto done;}
+/* for handling symbol table names */
+typedef struct name_t {
+    char *name;
+    struct name_t *next;
+} name_t;
+
+typedef struct name_list_t {
+    name_t *head;
+    name_t *tail;
+} name_list_t;
+
+#define CK_SET_RET_CONTINUE(ret_val) {ret_value = ret_val; continue;}
+#define CK_SET_RET(ret_val) {ret_value = ret_val;} 
+#define CK_SET_RET_DONE(ret_val) {ret_value = ret_val; goto done;}
+
+#define CK_INC_ERR_CONTINUE {++ret_err; continue;}
+#define CK_INC_ERR 	{++ret_err;}
+#define CK_INC_ERR_DONE {++ret_err; goto done;}
 
 #define NELMTS(X)           (sizeof(X)/sizeof(X[0]))
 #define CK_ALIGN(X)            (8*(((X)+8-1)/8))
@@ -275,7 +292,7 @@ typedef union GP_cache_t {
 typedef struct GP_entry_t {
     GP_type_t  	type;             /* type of information cached         */
     GP_cache_t 	cache;            /* cached data from object header     */
-    size_t      name_off;         /* offset of name within name heap    */
+    ck_size_t   name_off;         /* offset of name within name heap    */
     ck_addr_t   header;           /* file address of object header      */
 } GP_entry_t;
 
@@ -1219,18 +1236,21 @@ typedef struct OBJ_t {
 
 typedef struct BT_class_t {
     BT_subid_t 	id;                      /* id as found in file*/
-    size_t      sizeof_nkey;             /* size of native (memory) key*/
-    size_t      (*get_sizeof_rkey)(global_shared_t *, unsigned);    /*raw key size   */
-    void *	(*decode)(global_shared_t *, unsigned, const uint8_t **);
+    ck_size_t  	sizeof_nkey;             /* size of native (memory) key*/
+    ck_size_t 	(*get_sizeof_rkey)(global_shared_t *, unsigned);    	/*raw key size   */
+    ck_err_t	(*decode)(global_shared_t *, unsigned, const uint8_t **, void **); /* decode key */
+    int		(*cmp)(global_shared_t *, unsigned, uint8_t *, void *, void *);	/* compare key */
 } BT_class_t;
 
+
+
 typedef struct GP_node_key_t {
-    size_t      offset;                 /*offset into heap for name          */
+    ck_size_t      offset;                 /*offset into heap for name          */
 } GP_node_key_t;
 
 typedef struct RAW_node_key_t {
-    size_t      nbytes;                         /*size of stored data   */
-    ck_size_t   offset[OBJ_LAYOUT_NDIMS];       /*logical offset to start*/
+    ck_size_t      nbytes;                         /*size of stored data   */
+    ck_hsize_t  offset[OBJ_LAYOUT_NDIMS];       /*logical offset to start*/
     unsigned    filter_mask;                    /*excluded filters      */
 } RAW_node_key_t;
 

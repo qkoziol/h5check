@@ -64,33 +64,33 @@ void
 error_push(primary_err_t prim_err, secondary_err_t sec_err, const char *desc, ck_addr_t logical_addr, int *badinfo)
 {
 	
-    ERR_t   *estack = ERR_get_my_stack();
-    char	*new_func;
-    char 	*new_desc;
+    ERR_t *estack = ERR_get_my_stack();
+    char *new_func;
+    char *new_desc;
     int	desc_len, func_len;
 
     /*
      * Don't fail if arguments are bad.  Instead, substitute some default
      * value.
      */
-    if (!desc) 
+    if(!desc) 
 	desc = "No description given";
 
     /*
      * Push the error if there's room.  Otherwise just forget it.
      */
-    assert (estack);
-    if (estack->nused < H5E_NSLOTS) {
+    assert(estack);
+    if(estack->nused < H5E_NSLOTS) {
         estack->slot[estack->nused].prim_err = prim_err;
         estack->slot[estack->nused].sec_err = sec_err;
         estack->slot[estack->nused].desc = desc;
         estack->slot[estack->nused].logical_addr = logical_addr;
-	if (badinfo != NULL) {
-        	estack->slot[estack->nused].err_info.reported = REPORTED;
-        	estack->slot[estack->nused].err_info.badinfo = *badinfo;
+	if(badinfo != NULL) {
+	    estack->slot[estack->nused].err_info.reported = REPORTED;
+	    estack->slot[estack->nused].err_info.badinfo = *badinfo;
 	} else {
-        	estack->slot[estack->nused].err_info.reported = NOT_REP;
-        	estack->slot[estack->nused].err_info.badinfo = -1;
+	    estack->slot[estack->nused].err_info.reported = NOT_REP;
+	    estack->slot[estack->nused].err_info.badinfo = -1;
 	}
         estack->nused++;
     }
@@ -102,16 +102,16 @@ ck_err_t
 error_clear(void)
 {
     int	i;
-    ERR_t   *estack = ERR_get_my_stack();
+    ERR_t *estack = ERR_get_my_stack();
 
-    for (i = estack->nused-1; i >=0; --i) {
+    for(i = estack->nused-1; i >=0; --i) {
 /* NEED CHECK: INTO THIS LATER */
 #if 0
 	free((void *)estack->slot[i].func_name);
 	free((void *)estack->slot[i].desc);
 #endif
     }
-    if (estack) 
+    if(estack) 
 	estack->nused = 0;
     return(0);
 }
@@ -125,33 +125,37 @@ error_print(FILE *stream, driver_t *file)
     ERR_t   *estack = ERR_get_my_stack();
     char		*fname;
 
-    if (!stream) 
+    if(!stream) 
 	stream = stderr; 
     nerrors++;
-    if (g_verbose_num) {
+    if(g_verbose_num) {
 	fprintf(stream, "***Error***\n");
-	for (i = estack->nused-1; i >=0; --i) {
+	for(i = estack->nused-1; i >=0; --i) {
 	    int sec_null = 0;
 	    fprintf(stream, "%s", estack->slot[i].desc);
-	    if ((int)estack->slot[i].logical_addr != -1) {
+	    if((int)estack->slot[i].logical_addr != -1) {
+#ifdef TEMP
 		fname = FD_get_fname(file, estack->slot[i].logical_addr);
 		fprintf(stream, "\n  file=%s;", fname);
+#endif
 		fprintf(stream, " at logical addr %llu",
 		    (unsigned long long)estack->slot[i].logical_addr);
-		if (estack->slot[i].err_info.reported)
+		if(estack->slot[i].err_info.reported)
 		    fprintf(stream, "; Value decoded: %d",
 			estack->slot[i].err_info.badinfo);
 	    }
 	    fprintf(stream, "\n");
 
+#ifdef TEMP
 	    prim_str = get_prim_err(estack->slot[i].prim_err);
 	    sec_str = get_sec_err(estack->slot[i].sec_err);
-	    if (estack->slot[i].sec_err == ERR_NONE_SEC)
+	    if(estack->slot[i].sec_err == ERR_NONE_SEC)
 		sec_null = 1;
-	    if (sec_null)
+	    if(sec_null)
 		fprintf(stream, "  %s\n", prim_str);
 	    else
 		fprintf(stream, "  %s-->%s\n", prim_str, sec_str);
+#endif
 	}
 	fprintf(stream, "***End of Error messages***\n");
     }
@@ -163,8 +167,8 @@ get_prim_err(primary_err_t n)
     unsigned    i;
     const char *ret_value="Invalid primary error number";
 
-    for (i=0; i < NELMTS(primary_err_mesg_g); i++)
-	if (primary_err_mesg_g[i].err_code == n)
+    for(i=0; i < NELMTS(primary_err_mesg_g); i++)
+	if(primary_err_mesg_g[i].err_code == n)
 	    return(primary_err_mesg_g[i].str);
 
     return(ret_value);
@@ -176,8 +180,8 @@ get_sec_err(secondary_err_t n)
     unsigned    i;
     const char *ret_value="Invalid secondary error number";
 
-    for (i=0; i < NELMTS(secondary_err_mesg_g); i++)
-	if (secondary_err_mesg_g[i].err_code == n)
+    for(i=0; i < NELMTS(secondary_err_mesg_g); i++)
+	if(secondary_err_mesg_g[i].err_code == n)
 	    return(secondary_err_mesg_g[i].str);
 
     return(ret_value);
@@ -192,11 +196,11 @@ found_error(void)
 void
 process_errors(ck_errmsg_t *errbuf)
 {
-    int 	i;
-    ERR_t   *estack = ERR_get_my_stack();
+    int i;
+    ERR_t *estack = ERR_get_my_stack();
 
     errbuf->nused = estack->nused;
-    for (i = estack->nused-1; i >=0; --i) {
+    for(i = estack->nused-1; i >=0; --i) {
 	errbuf->slot[i].desc = strdup(estack->slot[i].desc);
 	errbuf->slot[i].addr = estack->slot[i].logical_addr;
     }
