@@ -5505,33 +5505,6 @@ done:
     return(ret_value);
 } /* decode_validate_messages() */
 
-#ifdef TEMP
-	id = oh->mesg[i].type->id;
-	if (id == OBJ_CONT_ID || id == OBJ_NIL_ID)
-	    continue;
-	else if (id == OBJ_UNKNOWN_ID) {
-	    error_push(ERR_LEV_2, ERR_LEV_2A, "Unsupported message encountered", logical, NULL);
-	    CK_INC_ERR_CONTINUE
-	} else if (oh->mesg[i].flags & OBJ_FLAG_SHARED) {
-	    mesg = OBJ_shared_decode(file, oh->mesg[i].raw, oh->mesg[i].type, start_buf, logi_base);
-	    if (mesg != NULL) {
-		mesg = OBJ_shared_read(file, mesg, oh->mesg[i].type);
-		if (mesg == NULL) {
-		    error_push(ERR_LEV_2, ERR_LEV_2A, "Errors from OBJ_shared_read() when decoding header message",
-			logical, NULL);
-		    CK_INC_ERR_CONTINUE
-		}
-	    }
-	} else
-	    mesg = message_type_g[id]->decode(file, oh->mesg[i].raw, start_buf, logi_base);
-
-	oh->mesg[i].native = mesg;
-
-	if (mesg == NULL) {
-	    error_push(ERR_LEV_2, ERR_LEV_2A, "Errors found when decoding message", logical, NULL);
-	    CK_INC_ERR_CONTINUE
-	}
-#endif
 
 /*
  * Find a message in the given object header with the desired type_id

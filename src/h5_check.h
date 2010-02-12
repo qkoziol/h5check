@@ -30,7 +30,7 @@
 #define DEBUG_VERBOSE   2
 
 /* release version of h5checker */
-#define		H5Check_VERSION		"1.0-post0"
+#define		H5Check_VERSION		"1.1"
 #define 	CK_ADDR_MAX            	(CK_ADDR_UNDEF-1)
 #define 	addr_defined(X)     	(X!=CK_ADDR_UNDEF)
 #define 	addr_eq(X,Y)        	((X)!=CK_ADDR_UNDEF && (X)==(Y))
