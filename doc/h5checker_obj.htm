@@ -1,255 +1,260 @@
-<html xmlns:v="urn:schemas-microsoft-com:vml"
-xmlns:o="urn:schemas-microsoft-com:office:office"
-xmlns:w="urn:schemas-microsoft-com:office:word"
-xmlns="http://www.w3.org/TR/REC-html40">
+<!-- NEW PAGE -->
+<!-- HEADER RIGHT "h5checker_obj" -->
+<hr>
+<dl>
+  <dt><div align=right><font color=999999 size=-1><i>
+      Last modified: 17 March 2010
+      </i></font></div>
 
-<head>
-<meta http-equiv=Content-Type content="text/html; charset=windows-1252">
-<meta name=ProgId content=Word.Document>
-<meta name=Generator content="Microsoft Word 11">
-<meta name=Originator content="Microsoft Word 11">
-<link rel=File-List href="h5checker_obj_files/filelist.xml">
-<title>Name: h5checker_obj</title>
-<!--[if gte mso 9]><xml>
- <o:DocumentProperties>
-  <o:Author>vchoi</o:Author>
-  <o:Template>Normal</o:Template>
-  <o:LastAuthor>Albert Cheng</o:LastAuthor>
-  <o:Revision>2</o:Revision>
-  <o:TotalTime>63</o:TotalTime>
-  <o:Created>2007-07-14T23:19:00Z</o:Created>
-  <o:LastSaved>2007-07-14T23:19:00Z</o:LastSaved>
-  <o:Pages>1</o:Pages>
-  <o:Words>310</o:Words>
-  <o:Characters>1773</o:Characters>
-  <o:Company> </o:Company>
-  <o:Lines>14</o:Lines>
-  <o:Paragraphs>4</o:Paragraphs>
-  <o:CharactersWithSpaces>2079</o:CharactersWithSpaces>
-  <o:Version>11.8122</o:Version>
- </o:DocumentProperties>
-</xml><![endif]--><!--[if gte mso 9]><xml>
- <w:WordDocument>
-  <w:GrammarState>Clean</w:GrammarState>
-  <w:PunctuationKerning/>
-  <w:ValidateAgainstSchemas/>
-  <w:SaveIfXMLInvalid>false</w:SaveIfXMLInvalid>
-  <w:IgnoreMixedContent>false</w:IgnoreMixedContent>
-  <w:AlwaysShowPlaceholderText>false</w:AlwaysShowPlaceholderText>
-  <w:Compatibility>
-   <w:BreakWrappedTables/>
-   <w:SnapToGridInCell/>
-   <w:WrapTextWithPunct/>
-   <w:UseAsianBreakRules/>
-   <w:DontGrowAutofit/>
-  </w:Compatibility>
-  <w:BrowserLevel>MicrosoftInternetExplorer4</w:BrowserLevel>
- </w:WordDocument>
-</xml><![endif]--><!--[if gte mso 9]><xml>
- <w:LatentStyles DefLockedState="false" LatentStyleCount="156">
- </w:LatentStyles>
-</xml><![endif]-->
-<style>
+  <dt><strong>Name:</strong> <a name="API-FunctionName">h5checker_obj</a>
+  <dt><strong>Signature:</strong>
+    <dd><em>ck_err_t </em><code>h5checker_obj</code>(
+            <em>char * </em><code>fname</code>,
+            <em>ck_addr_t</em> <code>obj_addr</code>,
+            <em>ck_errmsg_t *</em><code>buff</code>
+        )
+
+  <p>
+  <dt><strong>Purpose:</strong>
+    <dd>Validates an object header.
+
+
+<!--__ *** MOTIVATION ********************************************  -->
+<!--__ This an OPTIONAL section for functions that may need more    -->
+<!--__ than the simple statement in "Purpose:" to enable a user     -->
+<!--__ to understand the situations that might call for this        -->
+<!--__ function's use and/or the types of problems it addresses.    -->
+<!--__                                                              -->
+<!--__ Update H5function_name and the motivation text.              -->
+<!--__ ***********************************************************  -->
 <!--
- /* Style Definitions */
- p.MsoNormal, li.MsoNormal, div.MsoNormal
-	{mso-style-parent:"";
-	margin:0in;
-	margin-bottom:.0001pt;
-	mso-pagination:widow-orphan;
-	font-size:12.0pt;
-	font-family:"Times New Roman";
-	mso-fareast-font-family:"Times New Roman";}
-span.GramE
-	{mso-style-name:"";
-	mso-gram-e:yes;}
-@page Section1
-	{size:8.5in 11.0in;
-	margin:1.0in 1.25in 1.0in 1.25in;
-	mso-header-margin:.5in;
-	mso-footer-margin:.5in;
-	mso-paper-source:0;}
-div.Section1
-	{page:Section1;}
+  <p>
+  <dt><strong>Motivation:</strong>
+    <dd><code>h5checker_obj</code> 
+      is used in these circumstances to achieve these things and/or 
+      to address these problems.  
+      <p>
+      Keep it concise and high-level, but use multiple paragraphs 
+      if needed.
 -->
-</style>
-<!--[if gte mso 10]>
-<style>
- /* Style Definitions */
- table.MsoNormalTable
-	{mso-style-name:"Table Normal";
-	mso-tstyle-rowband-size:0;
-	mso-tstyle-colband-size:0;
-	mso-style-noshow:yes;
-	mso-style-parent:"";
-	mso-padding-alt:0in 5.4pt 0in 5.4pt;
-	mso-para-margin:0in;
-	mso-para-margin-bottom:.0001pt;
-	mso-pagination:widow-orphan;
-	font-size:10.0pt;
-	font-family:"Times New Roman";
-	mso-ansi-language:#0400;
-	mso-fareast-language:#0400;
-	mso-bidi-language:#0400;}
-</style>
-<![endif]--><!--[if gte mso 9]><xml>
- <o:shapedefaults v:ext="edit" spidmax="2050"/>
-</xml><![endif]--><!--[if gte mso 9]><xml>
- <o:shapelayout v:ext="edit">
-  <o:idmap v:ext="edit" data="1"/>
- </o:shapelayout></xml><![endif]-->
-</head>
 
-<body lang=EN-US style='tab-interval:.5in'>
 
-<div class=Section1>
+<!--__ *** DESCRIPTION *******************************************  -->
+<!--__ The "Description" section provides a more detailed           -->
+<!--__ description of the function and instructions for its use.    -->
+<!--__                                                              -->
+<!--__ Update H5function_name and the description text.             -->
+<!--__ ***********************************************************  -->
+  <p>
+  <dt><strong>Description:</strong>
+    <dd><code>h5checker_obj</code> 
+      validates the object header of the HDF5 file <code>fname</code> 
+      at the address <code>obj_addr</code> according to the
+      <cite>HDF5 File Format Specification Version 1.1</cite>, 
+      section IV, &ldquo;Disk Format Level 2 - Data Objects.&rdquo;
+      <p>
+      <code>h5checker_obj</code> first opens the file, 
+      then reads and validates the superblock information. 
+      The validation of the superblock must succeed before
+      proceeding with validation of the specified object header.</p>
+      <p>
+      All the header messages embedded in the specified object header 
+      are checked. Addresses of the B-tree, object headers, and local heap 
+      in some header messages in the specified object header are also 
+      followed and validated.  
+      The file <code>fname</code> is closed when validation is complete.</p>
+      <p>
+      When <code>h5checker_obj</code> is called with an undefined 
+      <code>obj_addr (=CK_ADDR_UNDEF)</code>, the whole file is validated.</p>
+      <p>
+      When non-compliant errors are found in the object header and 
+      <code>buf</code> is non-null, <code>h5checker_obj</code> fills in 
+      the following data structure (defined in <code>h5check_public.h</code>)
+      for the errors:</p>
+      <p><pre>
+            #define CK_ADDR_UNDEF ((ck_addr_t)(-1))
+            #define NSLOTS   32              /* number of error records  */
 
-<p class=MsoNormal><b style='mso-bidi-font-weight:normal'>Name</b>: <i
-style='mso-bidi-font-style:normal'>h5checker_obj</i></p>
+            typedef struct ck_errmsg_t {
+                int          nused;          /* number of error records  */
+                                             /*   currently in use       */
+                errmsg_t     slot[NSLOTS];   /* array of error records   */
+            } ck_errmsg_t;
 
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
+            typedef struct errmsg_t {
+                const char   *desc;          /* error message           */
+                ck_addr_t    addr;           /* logical address where   */
+                                             /*   error occurs          */
+            }errmsg_t;
+         </pre>
+    </dd></dt>
 
-<p class=MsoNormal><b style='mso-bidi-font-weight:normal'>Signature</b>: </p>
+  <p>
+  <dt><strong>Parameters:</strong>
+    <dd>
+    <table>
+      <tr valign="top">
+        <td><em>char *</em><code>fname</code>
+            </td><td>&nbsp;&nbsp;&nbsp;&nbsp;</td>
+        <td>IN: Name of the HDF5 file to be validated
+            </td></tr>
+      <tr valign="top">
+        <td><em>ck_addt_t</em>&nbsp;<code>obj_addr</code>
+            </td><td>&nbsp;</td>
+        <td>IN: Address of the object header to be validated
+            </td></tr>
+      <tr valign="top">
+        <td><em>ck_errmsg_t *</em><code>buff</code>
+            </td><td>&nbsp;</td>
+        <td>OUT: Buffer in which to return error information 
+            if there are errors
+            </td></tr>
+    </table>
 
-<p class=MsoNormal><span style='mso-tab-count:1'>            </span><i
-style='mso-bidi-font-style:normal'>ck_err_t h5checker_<span class=GramE>obj(</span>char
-*fname,, ck_addr_t obj_addr, ck_errmsg_t *buf)<o:p></o:p></i></p>
+  <p>
+  <dt><strong>Returns:</strong>
+    <dd>Returns <code>0</code> (zero) if the object header is compliant.
+        Information in <code>buf</code> is undefined, if provided.
+        <p>
+        Returns a negative value if the object header is not compliant.
+        If <code>buf</code> is non-null, information about the error(s)
+        is filled in.
 
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
 
-<p class=MsoNormal><b style='mso-bidi-font-weight:normal'>Description</b>:</p>
+<!--__ *** FAILURE MODES *****************************************  -->
+<!--__ Replace the text following the <dd> with a description       -->
+<!--__ of how the function may fail.                                -->
+<!--__ ***********************************************************  -->
+<!--
+  <p>
+  <dt><strong>Failure Modes:</strong>
+    <dd>List possible failure modes, with causes and ramifications,
+        paying particular attention to non-intuitive failures, 
+        unusual failure modes, and failures caused by the interaction 
+        of two or more functions.
+        <p>
+        In some cases, the possibe failures are obvious and/or trivial;
+        such cases can be kept simple.  On the other hand, don't be 
+        afraid to take several paragraphs for complex cases.
+-->
 
-<p class=MsoNormal><span style='mso-spacerun:yes'>        </span><span
-style='mso-tab-count:1'>    </span><i style='mso-bidi-font-style:normal'>h5checker_obj()</i>
-validates the object header of the HDF5 file <i style='mso-bidi-font-style:
-normal'>fname</i> at <i style='mso-bidi-font-style:normal'>obj_addr</i> <span
-style='mso-tab-count:1'>   </span>according to <b style='mso-bidi-font-weight:
-normal'><i style='mso-bidi-font-style:normal'>HDF5 File Format Specification Version
-1.1</i></b>, <i style='mso-bidi-font-style:normal'>section IV<span
-style='mso-spacerun:yes'>  </span>Disk <span style='mso-tab-count:1'>  </span>Format
-Level 2 - Data Objects<b style='mso-bidi-font-weight:normal'>.</b></i><span
-style='mso-spacerun:yes'>  </span>It first opens the file, <span class=GramE>then</span>
-it reads and validates <span style='mso-tab-count:1'>    </span>the superblock
-information.<span style='mso-spacerun:yes'>  </span>The validation of the
-superblock has to be all passed <span style='mso-tab-count:1'>  </span>before
-proceeding with the validation of the specified object header.</p>
 
-<p class=MsoNormal><span style='mso-tab-count:1'>            </span>All the
-header messages embedded in the specified object header are checked.<span
-style='mso-spacerun:yes'>  </span><span style='mso-tab-count:1'>     </span>Addresses
-of B-tree, object headers and local heap in some header messages of <span
-style='mso-tab-count:1'>   </span>the specified object header are also followed
-and validated.<span style='mso-spacerun:yes'>  </span>The file <i
-style='mso-bidi-font-style:normal'>fname </i>is <span style='mso-tab-count:
-1'>   </span>closed when validation is complete.</p>
+<!--__ *** USAGE EXAMPLES ****************************************  -->
+<!--__ Multiple examples may be given.  Two are shown below and     -->
+<!--__ more can be added if needed (or one removed).                -->
+<!--__                                                              -->
+<!--__ Each usage example should have text describing the meanings  -->
+<!--__ of the parameters following the <dd> tag.                    -->
+<!--__ The sample usage line(s) should be entered between the       -->
+<!--__ <dir><pre> and </pre></dir> tags.                            -->
+<!--__ Multiple entries are separated by <p> tags.                  -->
+<!--__ ***********************************************************  -->
+<!--
+  <p>
+  <dt><strong>Example Usage:</strong>
+    <dd>Discuss the elements in the first usage example here.
+<dir><pre>
+Complete usage example line(s) for the first example here
+</pre></dir>
+    <p>
 
-<p class=MsoNormal><span style='mso-tab-count:1'>            </span>When <span
-style='mso-tab-count:1'>  </span><i style='mso-bidi-font-style:normal'>h5checker_<span
-class=GramE>obj(</span>)</i> is called with an undefined <span
-style='mso-tab-count:1'> </span><i style='mso-bidi-font-style:normal'>obj_addr <span
-style='mso-tab-count:1'>         </span>(=CK_ADDR_UNDEF)</i>, the whole file is
-validated.<span style='mso-spacerun:yes'>  </span></p>
+    <dd>Discuss the elements in the second usage example here.
+<dir><pre>
+Complete usage example line(s) for the second example here
+</pre></dir>
+  <p>
+-->
 
-<p class=MsoNormal><span style='mso-spacerun:yes'>        </span><span
-style='mso-tab-count:1'>    </span>When non-compliant errors are found in the
-object header and <i style='mso-bidi-font-style:normal'>buf</i> is non-null,</p>
 
-<p class=MsoNormal><span style='mso-spacerun:yes'>        </span><span
-style='mso-tab-count:1'>    </span><i style='mso-bidi-font-style:normal'>h5checker_<span
-class=GramE>obj(</span>)</i> fills in the following data structure (defined in <i
-style='mso-bidi-font-style:normal'>h5check_public.h</i>) <span
-style='mso-tab-count:1'>            </span>for the errors:</p>
+<!--__ *** FORTRAN90 INTERFACE  **********************************  -->
+<!--__ When the Fortran90 interface is complete, replace this       -->
+<!--__ section with the Fortran90 subroutine description.           -->
+<!--__                                                              -->
+<!--__ See the file h5fortran_f_insert.htm for a template and       -->
+<!--__ instructions.                                                -->
+<!--__ ***********************************************************  -->
 
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
 
-<p class=MsoNormal><span style='mso-spacerun:yes'>            </span>#define
-NSLOTS<span style='mso-tab-count:1'>        </span>32<span style='mso-tab-count:
-1'>        </span> /* number of error records */</p>
+<!--__ *** SEE ALSO **********************************************  -->
+<!--__ Provide links to related documentation in the following      --> 
+<!--__ order:                                                       -->
+<!--__     related function descriptions                            -->
+<!--__     struct or ENUM descriptions                              -->
+<!--__     callback or operator function descriptions               -->
+<!--__     tool descriptions                                        -->
+<!--__     user guide sections                                      -->
+<!--__     other related documents or sections                      -->
+<!--__                                                              -->
+<!--__ Ask a member of the documentation team if you need help      -->
+<!--__ identifying or locating references.                          -->
+<!--__                                                              -->
+<!--__ Edit the sample links provided, and delete unneeded text.    -->
+<!--__ Use a <p> between types of documents.                        -->
+<!--__ ***********************************************************  -->
+<!--
+  <p>
+  <dt><strong>See Also:</strong>
+    <dd><a href="RM_H5D.html#Dataset-Create">
+        <code>H5Dcreate</code></a>,
+        &nbsp;
+        <a href="RM_H5T.html#Datatype-Commit">
+        <code>H5Tcommit</code></a>
+        <p>
 
-<p class=MsoNormal><span style='mso-tab-count:1'>            </span><span
-class=GramE>typedef</span> struct ck_errmsg_t {</p>
+        <a href="H5L/H5L_elink_traverse_t">
+        <code>H5L_elink_traverse_t</code></a>
+        <p>
 
-<p class=MsoNormal><span style='mso-tab-count:2'>                        </span><span
-class=GramE>int</span><span style='mso-tab-count:2'>                    </span>nused;<span
-style='mso-tab-count:1'>  </span><span style='mso-spacerun:yes'>   </span>/*
-number of error records currently in use */</p>
+        <a href="Tools.html#h5dump"><code>h5dump</code></a>
+        <p>
 
-<p class=MsoNormal><span style='mso-tab-count:1'>            </span><span
-style='mso-spacerun:yes'> </span><span style='mso-tab-count:1'>           </span><span
-class=GramE>errmsg_t</span><span style='mso-tab-count:1'>          </span>slot[NSLOTS];<span
-style='mso-spacerun:yes'>  </span>/* array of error records */</p>
+        &ldquo;Discovering Objects in a Group&rdquo; in the
+        &ldquo;<a href="../UG/UG_frame09Groups.html">Groups</a>&rdquo; 
+        chapter of the
+        <a href="../UG/index.html"><cite>HDF5 User&rsquo;s Guide</cite></a>
+-->
 
-<p class=MsoNormal><span style='mso-spacerun:yes'>                </span>}
-ck_errmsg_t;</p>
 
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
+<!--__ *** HISTORY ***********************************************  -->
+<!--__ Provide information about the HDF5 library version where the -->
+<!--__ C function was first introduced, the Fortran subroutine was  -->
+<!--__ first introduced, and when major changes to the function     -->
+<!--__ or subroutine were made.                                     -->
+<!--__                                                              -->
+<!--__ Replace *.**.** below with the appropriate release number,   -->
+<!--__ e.g., '1.10.4'.                                              -->
+<!--__                                                              -->
+<!--__ There are several minor variations on what you might need    -->
+<!--__ to convey in the history section.  If you need assistance    -->
+<!--__ or your task is not described, speak with Frank.             -->
+<!--__ ***********************************************************  -->
 
-<p class=MsoNormal><span style='mso-tab-count:1'>            </span><span
-class=GramE>typedef</span> errmsg_t<span style='mso-tab-count:1'>         </span>{<span
-style='mso-tab-count:1'>          </span></p>
+<!--__ ***********************************************************  -->
+<!--__ Do not modify the next 9 lines; they set up the table.       -->
+<!--__ ***********************************************************  -->
+<!--
+  <p>
+  <dt><strong>History:</strong>
+    <dd><table width="90%">
+        <tr>
+          <td valign="top" align="left" width="10%">
+            <strong>Release</strong>&nbsp;&nbsp;&nbsp;&nbsp;</td>
+          <td valign="top" align="left">
+            <strong>Change</strong></td>
+        </tr>
+-->
 
-<p class=MsoNormal><span style='mso-tab-count:2'>                        </span><span
-class=GramE>const</span><span style='mso-tab-count:1'>    </span>char <span
-style='mso-tab-count:1'>    </span>*desc;<span style='mso-tab-count:1'>  </span>/*
-error message */<span style='mso-tab-count:1'>      </span></p>
+<!--__ ***********************************************************  -->
+<!--__ Adding a new C function                                      -->
+<!--__ ***********************************************************  -->
+<!--
+        <tr>
+          <td valign="top">*.**.**</td>
+          <td valign="top">
+            C function introduced in this release.</td>
+        </tr>
+-->
+        </table>
+</dl>
 
-<p class=MsoNormal><span style='mso-tab-count:2'>                        </span><span
-class=GramE>ck_addr_t</span><span style='mso-tab-count:1'>        </span>addr;<span
-style='mso-tab-count:1'>    </span>/* logical address where error occurs */</p>
 
-<p class=MsoNormal><span style='mso-tab-count:1'>            </span>} errmsg_t;</p>
-
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
-
-<p class=MsoNormal><b style='mso-bidi-font-weight:normal'>Parameters</b>:</p>
-
-<p class=MsoNormal><span style='mso-spacerun:yes'>        </span><span
-class=GramE><i style='mso-bidi-font-style:normal'>char</i></span><i
-style='mso-bidi-font-style:normal'><span style='mso-spacerun:yes'>     </span><span
-style='mso-spacerun:yes'>          </span><span
-style='mso-spacerun:yes'> </span><span style='mso-spacerun:yes'>  </span>*fname
-<span style='mso-tab-count:1'>  </span><span style='mso-spacerun:yes'> </span></i>IN:<span
-style='mso-spacerun:yes'>  </span><span style='mso-tab-count:1'>    </span>the name
-of the HDF5 file to be validated</p>
-
-<p class=MsoNormal><span style='mso-spacerun:yes'>        </span><i
-style='mso-bidi-font-style:normal'>ck_addr_t<span style='mso-spacerun:yes'> 
-</span><span style='mso-spacerun:yes'>      </span>obj_<span class=GramE>addr<span
-style='font-style:normal'><span style='mso-spacerun:yes'>  </span>IN</span></span></i>:<span
-style='mso-spacerun:yes'>  </span><span style='mso-tab-count:1'>    </span>the
-address of the object header to be validated</p>
-
-<p class=MsoNormal><span style='mso-spacerun:yes'>        </span><i
-style='mso-bidi-font-style:normal'>ck_errmsg_t <span
-style='mso-spacerun:yes'>   </span>*buf</i><span
-style='mso-spacerun:yes'>         </span>OUT: <span style='mso-tab-count:1'>  </span>buffer
-in which to return error information if there <span style='mso-tab-count:4'>                                       </span><span
-style='mso-tab-count:2'>                        </span>is error</p>
-
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
-
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
-
-<p class=MsoNormal><b style='mso-bidi-font-weight:normal'>Returns</b>:</p>
-
-<p class=MsoNormal><span style='mso-spacerun:yes'>        </span>Returns 0 if
-the object header associated with <i style='mso-bidi-font-style:normal'>fname</i>
-is compliant.<span style='mso-spacerun:yes'>  </span>Information in <span
-style='mso-tab-count:1'>     </span><i style='mso-bidi-font-style:normal'>buf</i>
-is undefined if provided.</p>
-
-<p class=MsoNormal><span style='mso-spacerun:yes'>        </span>Returns a
-negative value if the object header associated with <i style='mso-bidi-font-style:
-normal'>fname</i> is not compliant.<span style='mso-spacerun:yes'>  </span><span
-style='mso-tab-count:1'>           </span>If <i style='mso-bidi-font-style:
-normal'>buf </i>is non-null, information about the error is filled in.</p>
-
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
-
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
-
-</div>
-
-</body>
-
-</html>
