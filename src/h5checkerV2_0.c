@@ -81,7 +81,7 @@ const B2_class_t G_BT2_CORDER[1]={{ /* B-tree class information */
 
 static ck_err_t SM_message_decode(driver_t *file, const uint8_t *raw, void *native);
 static ck_err_t SM_message_compare(const void *rec1, const void *rec2);
-
+static ck_err_t SOHM_ck_msg_cb(driver_t *file, const void *_record, void *_ck_udata);
 
 /* v2 B-tree class for SOHM indexes*/
 const B2_class_t SM_INDEX[1]={{   /* B-tree class information */
@@ -115,9 +115,9 @@ const B2_class_t A_BT2_CORDER[1]={{  /* B-tree class information */
 }};
 
 static ck_err_t check_bt2_hdr(driver_t *, ck_addr_t, const B2_class_t *, B2_t **);
-static ck_err_t check_bt2_leaf(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned UNUSED, B2_leaf_t **);
-static ck_err_t check_bt2_internal(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned, B2_internal_t **);
-static ck_err_t check_bt2_real(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned);
+static ck_err_t check_bt2_leaf(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned UNUSED, B2_leaf_t **, ck_op_t, void *);
+static ck_err_t check_bt2_internal(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned, B2_internal_t **, ck_op_t, void *);
+static ck_err_t check_bt2_real(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned, ck_op_t, void *);
 static int B2_locate_record(const B2_class_t *, unsigned, ck_size_t *, const uint8_t *, const void *, unsigned *);
 static ck_err_t B2_find(driver_t *, const B2_class_t *, ck_addr_t, void *, B2_found_t, void *);
 static unsigned V_log2_of2(uint32_t);
@@ -286,6 +286,7 @@ HF_huge_btree2_filt_dir_decode(driver_t *file, const uint8_t *raw, void *_nrecor
     return(SUCCEED);
 } /* HF_huge_btree2_filt_dir_decode() */
 
+/* Indexed group on name */
 static ck_err_t 
 G_dense_btree2_name_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
 {
@@ -297,6 +298,7 @@ G_dense_btree2_name_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
     return(SUCCEED);
 } /* G_dense_btree2_name_decode() */
 
+/* Indexed group on creation order */
 static ck_err_t 
 G_dense_btree2_corder_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
 {
@@ -332,6 +334,7 @@ SM_message_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
 
 } /* SM_message_decode() */
 
+/* Indexed attribute on name */
 static ck_err_t 
 A_dense_btree2_name_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
 {
@@ -345,6 +348,7 @@ A_dense_btree2_name_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
     return(SUCCEED);
 } /* A_dense_btree2_name_decode() */
 
+/* Indexed attribute on creation order */
 static ck_err_t 
 A_dense_btree2_corder_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
 {
@@ -462,7 +466,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     assert(type);
 
     if(debug_verbose())
-	printf("VALIDATING version 2 btree header at logical address %llu...\n", bt_hdr_addr);
+	printf("VALIDATING version 2 btree header at address %llu...\n", bt_hdr_addr);
 
     hdr = calloc(1, sizeof(B2_t));
     bt2_shared = calloc(1, sizeof(B2_shared_t));
@@ -470,7 +474,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
 
     hdr_size = B2_HEADER_SIZE(file->shared);
     if((buf = malloc(hdr_size)) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "v2 B-tree:Internal allocation error", bt_hdr_addr, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: b2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
@@ -479,13 +483,13 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     logical = get_logical_addr(p, start_buf, bt_hdr_addr);
 
     if(FD_read(file, bt_hdr_addr, hdr_size, buf) == FAIL) {
-	error_push(ERR_FILE, ERR_NONE_SEC, "v2 B-tree:Unable to read B-tree header", bt_hdr_addr, NULL);
+	error_push(ERR_FILE, ERR_NONE_SEC, "Unable to read header: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
     /* magic number */
     if(memcmp(p, B2_HDR_MAGIC, (size_t)B2_SIZEOF_MAGIC)) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Could not find B-tree header signature", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Invalid signature: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     } else if(debug_verbose())
 	printf("FOUND version 2 btree header signature.\n");
@@ -496,13 +500,13 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     version = *p++;
     if(version != B2_HDR_VERSION) {
 	badinfo = version;
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Bad version number", logical, &badinfo);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Bad version number: v2 B-tree header", bt_hdr_addr, &badinfo);
 	CK_SET_RET(FAIL)
     }
 
     logical = get_logical_addr(p, start_buf, bt_hdr_addr);
     if((uint8_t)type->id != *p++) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Invalid B-tree type", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Invalid tree type: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
@@ -524,7 +528,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
 
     computed_chksum = checksum_metadata(buf, (hdr_size - B2_SIZEOF_CHKSUM), 0);
     if(computed_chksum != stored_chksum) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Incorrect checksum for header", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Incorrect checksum: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
@@ -536,7 +540,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
 
     /* initialize bt2_shared->node_info[] */
     if((bt2_shared->node_info = calloc((ck_size_t)(bt2_shared->depth + 1), sizeof(B2_node_info_t))) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "v2 B-tree:Internal allocation error", bt_hdr_addr, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
      /* Initialize leaf's node_info */ 
@@ -547,7 +551,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     bt2_shared->type = type;
 
     if(bt2_shared->max_nrec_size > B2_SIZEOF_RECORDS_PER_NODE) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Internal:Incorrect maximum possible # of records", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Incorrect maximum possible # of records: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
@@ -556,7 +560,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
         for(u = 1; u < (bt2_shared->depth + 1); u++) {
             bt2_shared->node_info[u].max_nrec = B2_NUM_INT_REC(file->shared, bt2_shared, u);
             if(bt2_shared->node_info[u].max_nrec > bt2_shared->node_info[u - 1].max_nrec) {
-		error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Internal:Incorrect maximum # of records for this depth", logical, NULL);
+		error_push(ERR_LEV_1, ERR_LEV_1A2, "Incorrect maximum # of records for this depth: v2 B-tree header", bt_hdr_addr, NULL);
 		CK_SET_RET(FAIL)
 	    }
 
@@ -570,7 +574,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     /* (uses leaf # of records because its the largest) */
     if((bt2_shared->nat_off = 
         calloc((ck_size_t)bt2_shared->node_info[0].max_nrec, sizeof(ck_size_t))) == NULL) {
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "v2 B-tree:Internal allocation error", bt_hdr_addr, NULL);
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree header", bt_hdr_addr, NULL);
 	    CK_SET_RET_DONE(FAIL)
     }
 
@@ -589,9 +593,12 @@ done:
 
 /* 
  * Validate version 2 btree leaf node
+ *
+ * Modifications:
+ *	Add user callback to validate messages
  */
 static ck_err_t
-check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned UNUSED depth, B2_leaf_t **ret_leaf)
+check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned UNUSED depth, B2_leaf_t **ret_leaf, ck_op_t ck_op, void *ck_udata)
 {
     int		ret_value=SUCCEED;
     int		u;
@@ -607,14 +614,14 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     assert(bt2_shared);
 
     if(debug_verbose())
-	printf("VALIDATING version 2 btree leaf node at logical address %llu...\n", addr);
+	printf("VALIDATING version 2 btree leaf node at address %llu...\n", addr);
 
     leaf = calloc(1, sizeof(B2_leaf_t));
     leaf->shared = bt2_shared;
     leaf->nrec = nrec;
 
     if((buf = malloc(bt2_shared->node_size)) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "v2 B-tree:Internal error", addr, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree leaf node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
     p = buf;
@@ -622,13 +629,13 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     logical = get_logical_addr(p, start_buf, addr);
 
     if(FD_read(file, addr, bt2_shared->node_size, buf) == FAIL) {
-	error_push(ERR_FILE, ERR_NONE_SEC, "v2 B-tree:Unable to read B-tree leaf header", logical, NULL);
+	error_push(ERR_FILE, ERR_NONE_SEC, "Unable to read node: v2 B-tree leaf node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
     /* magic number */
     if(memcmp(p, B2_LEAF_MAGIC, (size_t)B2_SIZEOF_MAGIC)) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Could not find B-tree leaf signature", addr, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Invalid signature: v2 B-tree leaf node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     } else if(debug_verbose())
 	printf("FOUND version 2 btree leaf signature.\n");
@@ -638,28 +645,34 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     logical = get_logical_addr(p, start_buf, addr);
 
     if(*p++ != B2_LEAF_VERSION) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree: wrong B-tree leaf node version", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Invalid version: b2 B-tree leaf node", addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
     logical = get_logical_addr(p, start_buf, addr);
     if(*p++ != bt2_shared->type->id) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree: Incorrect B-tree type", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Incorrect tree type: v2 B-tree leaf node", addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
     if((leaf->leaf_native = calloc(leaf->nrec, bt2_shared->type->nrec_size)) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "v2 B-tree:Internal allocation error", addr, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree leaf node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
     native = leaf->leaf_native;
     for(u = 0; u < leaf->nrec; u++) { 
 	logical = get_logical_addr(p, start_buf, addr);
-	if (bt2_shared->type->decode(file, p, native) < 0) {
-	    error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Errors found in decoding B-tree record", logical, NULL);
+	if(bt2_shared->type->decode(file, p, native) < 0) {
+	    error_push(ERR_LEV_1, ERR_LEV_1A2, "Errors from decoding B-tree record: v2 B-tree leaf node", addr, NULL);
 	    CK_SET_RET(FAIL)
 	}
+
+	if(ck_op && ck_op(file, native, ck_udata) < 0) {
+	    error_push(ERR_LEV_1, ERR_LEV_1A2, "Errors from callback: v2 B-tree leaf node", addr, NULL);
+	    CK_SET_RET(FAIL)
+	}
+
 	p += bt2_shared->rrec_size;
 	native += bt2_shared->type->nrec_size;
     }
@@ -671,7 +684,7 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     UINT32DECODE(p, stored_chksum);
 
     if(computed_chksum != stored_chksum) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Incorrect checksum for leaf node", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Incorrect checksum: v1 B-tree leaf node", addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
@@ -685,9 +698,12 @@ done:
 
 /*
  * Validate version 2 btree internal node
+ * 
+ * Modifications:
+ *	Add user callback to validate messages
  */
 static ck_err_t
-check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned depth, B2_internal_t **ret_internal)
+check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned depth, B2_internal_t **ret_internal, ck_op_t ck_op, void *ck_udata)
 {
     int			ret_value=SUCCEED;
     int			version, badinfo;
@@ -706,7 +722,7 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     assert(bt2_shared);
 
     if(debug_verbose())
-	printf("VALIDATING version 2 btree internal node at logical address %llu...\n", addr);
+	printf("VALIDATING version 2 btree internal node at address %llu...\n", addr);
 
     internal = calloc(1, sizeof(B2_internal_t));
     internal->shared = bt2_shared;
@@ -714,7 +730,7 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     internal->depth = depth;
 
     if((buf = malloc(bt2_shared->node_size)) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "v2 B-tree:Internal allocation error", addr, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree internal node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
     p = buf;
@@ -722,14 +738,14 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     logical = get_logical_addr(p, start_buf, addr);
 
     if(FD_read(file, addr, bt2_shared->node_size, buf) == FAIL) {
-	error_push(ERR_FILE, ERR_NONE_SEC, "v2 B-tree:Unable to read B-tree internal header", addr, NULL);
+	error_push(ERR_FILE, ERR_NONE_SEC, "Unable to read internal header: v2 B-tree internal node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
     /* magic number */
     if(memcmp(p, B2_INT_MAGIC, (size_t)B2_SIZEOF_MAGIC)) {
 	error_push(ERR_LEV_1, ERR_LEV_1A2, 
-	    "v2 B-tree:Could not find B-tree internal node signature", logical, NULL);
+	    "Invalid signature: v2 B-tree internal node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     } else if(debug_verbose())
 	printf("FOUND version 2 btree internal signature.\n");
@@ -739,20 +755,20 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     logical = get_logical_addr(p, start_buf, addr);
     version = *p++;
     if(version != B2_INT_VERSION) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Wrong B-tree internal node version", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Invalid version: v2 B-tree internal node", addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
     logical = get_logical_addr(p, start_buf, addr);
     type_id = *p++;
     if(type_id != bt2_shared->type->id) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Incorrect B-tree type", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Incorrect tree type: v2 B-tree internal node", addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
     /* records */
     if((internal->int_native = calloc(internal->nrec, bt2_shared->type->nrec_size)) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "v2 B-tree:Internal allocation error", addr, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree internal node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
@@ -760,7 +776,12 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     for(u = 0; u < internal->nrec; u++) {
 	logical = get_logical_addr(p, start_buf, addr);
 	if (bt2_shared->type->decode(file, p, native) < SUCCEED) {
-	    error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Errros found in decoding B-tree record", logical, NULL);
+	    error_push(ERR_LEV_1, ERR_LEV_1A2, "Errors from decoding B-tree record: v2 B-tree internal node", addr, NULL);
+	    CK_SET_RET(FAIL)
+	}
+
+	if(ck_op && ck_op(file, native, ck_udata) < 0) {
+	    error_push(ERR_LEV_1, ERR_LEV_1A2, "Errors from callback: v2 B-tree internal node", addr, NULL);
 	    CK_SET_RET(FAIL)
 	}
 	p += bt2_shared->rrec_size;
@@ -769,7 +790,7 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
 
     /* node pointers */
     if((internal->node_ptrs = calloc(internal->nrec+1, sizeof(B2_node_ptr_t))) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "v2 B-tree:Internal allocation error", addr, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree internal node", addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
@@ -795,7 +816,7 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     logical = get_logical_addr(p, start_buf, addr);
     UINT32DECODE(p, stored_chksum);
     if(computed_chksum != stored_chksum) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Incorrect checksum for internal node", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Incorrect checksum: v2 B-tree internal node", addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
@@ -810,7 +831,7 @@ done:
  * Validate version 2 btree leaf or internal nodes
  */
 static ck_err_t
-check_bt2_real(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned depth)
+check_bt2_real(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned depth, ck_op_t ck_op, void *ck_udata)
 {
     int			ret_value=SUCCEED;
     B2_internal_t	*internal;
@@ -822,26 +843,17 @@ check_bt2_real(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     assert(bt2_shared);
 
     if(depth > 0) { /* internal */
-	if(check_bt2_internal(file, addr, bt2_shared, nrec, depth, &internal) < SUCCEED) {
-	    error_push(ERR_LEV_1, ERR_LEV_1A2, 
-		"v2 B-tree: Error found in validating btree internal node", addr, NULL);
+	if(check_bt2_internal(file, addr, bt2_shared, nrec, depth, &internal, ck_op, ck_udata) < SUCCEED)
 	    CK_SET_RET_DONE(FAIL)
-	}
 
 	/* Iterate through node ptrs */
 	for(u = 0; u < internal->nrec + 1; u++) {
-            if(check_bt2_real(file, internal->node_ptrs[u].addr, bt2_shared, internal->node_ptrs[u].node_nrec, depth-1) < SUCCEED) {
-		error_push(ERR_LEV_1, ERR_LEV_1A2, 
-		    "v2 B-tree: Error found in iterating over btree internal node ptrs", addr, NULL);
+            if(check_bt2_real(file, internal->node_ptrs[u].addr, bt2_shared, internal->node_ptrs[u].node_nrec, depth-1, ck_op, ck_udata) < SUCCEED)
 		CK_SET_RET_DONE(FAIL)
-	    }
 	} 
     } else { /* leaf */
-	if(check_bt2_leaf(file, addr, bt2_shared, nrec, depth, &leaf) < SUCCEED) {
-	    error_push(ERR_LEV_1, ERR_LEV_1A2, 
-		"v2 B-tree: Error found in validating btree leaf node", addr, NULL);
+	if(check_bt2_leaf(file, addr, bt2_shared, nrec, depth, &leaf, ck_op, ck_udata) < SUCCEED)
 	    CK_SET_RET_DONE(FAIL)
-	}
     }
 
 done:
@@ -852,7 +864,7 @@ done:
  * ENTRY to validate version 2 btree 
  */
 ck_err_t
-check_btree2(driver_t *file, ck_addr_t btree_addr, const B2_class_t *type)
+check_btree2(driver_t *file, ck_addr_t btree_addr, const B2_class_t *type, ck_op_t ck_op, void *ck_udata)
 {
     ck_err_t ret_value = SUCCEED; /* return value */
     ck_err_t ret_err = 0;         /* errors from the current routine */
@@ -866,20 +878,14 @@ check_btree2(driver_t *file, ck_addr_t btree_addr, const B2_class_t *type)
     if(debug_verbose())
 	printf("VALIDATING version 2 btree at logical address %llu...\n", btree_addr);
 
-    if(check_bt2_hdr(file, btree_addr, type, &hdr) < 0) {
-	error_push(ERR_LEV_1, ERR_LEV_1A2, 
-	    "v2 B-tree: Error found in validating btree header", btree_addr, NULL);
+    if(check_bt2_hdr(file, btree_addr, type, &hdr) < 0)
 	CK_INC_ERR_DONE
-    }
 
     if(addr_defined(hdr->root.addr)) {
-	if (check_bt2_real(file, hdr->root.addr, hdr->shared, hdr->root.node_nrec, hdr->shared->depth) < 0) {
-	    error_push(ERR_LEV_1, ERR_LEV_1A2, 
-		"v2 B-tree: Error found in validating btree", hdr->root.addr, NULL);
+	if(check_bt2_real(file, hdr->root.addr, hdr->shared, hdr->root.node_nrec, hdr->shared->depth, ck_op, ck_udata) < 0)
 	    CK_INC_ERR_DONE
-	}
     } else { /* shouldn't happen */
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "v2 B-tree:Undefined btree address", hdr->root.addr, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Undefined v2 B-tree root node address", -1, NULL);
 	CK_INC_ERR_DONE
     }
 
@@ -964,7 +970,7 @@ B2_find(driver_t *file, const B2_class_t *type, ck_addr_t addr, void *udata, B2_
         B2_internal_t *internal;          /* Pointer to internal node in B-tree */
         B2_node_ptr_t next_node_ptr;      /* Node pointer info for next node */
 
-	if(check_bt2_internal(file, curr_node_ptr.addr, bt2_shared, curr_node_ptr.node_nrec, depth, &internal) < SUCCEED) {
+	if(check_bt2_internal(file, curr_node_ptr.addr, bt2_shared, curr_node_ptr.node_nrec, depth, &internal, NULL, NULL) < SUCCEED) {
             error_push(ERR_LEV_1, ERR_LEV_1A2,
                 "v2 B-tree: Error found in validating btree internal node", addr, NULL);
             CK_SET_RET_DONE(FAIL)
@@ -996,7 +1002,7 @@ B2_find(driver_t *file, const B2_class_t *type, ck_addr_t addr, void *udata, B2_
     {
         B2_leaf_t *leaf;
 
-	if(check_bt2_leaf(file, curr_node_ptr.addr, bt2_shared, curr_node_ptr.node_nrec, depth, &leaf) < SUCCEED) {
+	if(check_bt2_leaf(file, curr_node_ptr.addr, bt2_shared, curr_node_ptr.node_nrec, depth, &leaf, NULL, NULL) < SUCCEED) {
             error_push(ERR_LEV_1, ERR_LEV_1A2,
                 "v2 B-tree: Error found in validating btree leaf node", addr, NULL);
             CK_SET_RET_DONE(FAIL)
@@ -1400,6 +1406,8 @@ HF_dtable_init(HF_dtable_t *dtable)
     /* INITIALIZE header info for later use based on parameter values */
     dtable->start_bits = V_log2_of2((uint32_t)dtable->cparam.start_block_size);
     dtable->first_row_bits = dtable->start_bits + V_log2_of2(dtable->cparam.width);
+    dtable->num_id_first_row = dtable->cparam.start_block_size * dtable->cparam.width;
+
     dtable->max_root_rows = (dtable->cparam.max_index - dtable->first_row_bits) + 1;
     dtable->max_direct_bits = V_log2_of2((uint32_t)dtable->cparam.max_direct_size);
     dtable->max_direct_rows = (dtable->max_direct_bits - dtable->start_bits) + 2;
@@ -1476,7 +1484,7 @@ check_iblock_real(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned
     uint8_t             iblock_buf[HF_IBLOCK_BUF_SIZE]; 
     const uint8_t       *p;        
     ck_addr_t           heap_addr;  
-    uint32_t            stored_chksum, computed_chksum;
+    uint32_t            stored_chksum=0, computed_chksum=0;
     size_t              u;            
     unsigned		dir_rows;
     unsigned		entry, row, col;
@@ -1627,7 +1635,7 @@ printf("iblock->nchildren=%u\n", iblock->nchildren);
     UINT32DECODE(p, stored_chksum);
 
     if(computed_chksum != stored_chksum) {
-	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Indirect Block:Incorrect checksum", logical, NULL);
+	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Indirect Block:Incorrect checksum", iblock_addr, NULL);
 	CK_SET_RET(FAIL)
     }
 
@@ -1701,7 +1709,7 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
         /* Locate child indirect block */
         iblock_addr = iblock->ents[entry].addr;
 
-	if(check_iblock_real(file, iblock_addr, fhdr, fhdr->man_dtable.curr_root_rows, &new_iblock) < SUCCEED) {
+	if(check_iblock_real(file, iblock_addr, fhdr, nrows, &new_iblock) < SUCCEED) {
 	    error_push(ERR_NONE_PRIM, ERR_NONE_SEC, 
 		"HF_man_dblock_locate():Errors found when validating Fractal Heap Indirect Block", -1, NULL);
 	    CK_SET_RET_DONE(FAIL)
@@ -2424,18 +2432,18 @@ check_fheap(driver_t *file, ck_addr_t fheap_addr)
 		fhdr->huge_bt2_addr);
 	if(fhdr->huge_ids_direct) { /* directly accessed */
 	    if(fhdr->filter_len > 0) {
-		if(check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_DIR) != SUCCEED)
+		if(check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_DIR, NULL, NULL) != SUCCEED)
 		    ++ret_other_err;
 	    } else {
-		if(check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_DIR) != SUCCEED)
+		if(check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_DIR, NULL, NULL) != SUCCEED)
 		    ++ret_other_err;
 	    }
 	} else { /* indirectly accessed */
 	    if(fhdr->filter_len > 0) {
-		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_INDIR) != SUCCEED)
+		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_INDIR, NULL, NULL) != SUCCEED)
 		    ++ret_other_err;
 	    } else {
-		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_INDIR) != SUCCEED)
+		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_INDIR, NULL, NULL) != SUCCEED)
 		    ++ret_other_err;
 	    }
 	}
@@ -2653,6 +2661,10 @@ done:
 } /* HF_huge_read() */
 
 
+/* 
+ * Modifications: 
+ *	Turn offset assert into a validation check
+ */
 static ck_err_t
 HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
 {
@@ -2708,6 +2720,7 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
         HF_indirect_t *iblock;        /* Pointer to indirect block */
 	unsigned entry;               /* Entry of block */
 
+
         if(HF_man_dblock_locate(file, fhdr, objinfo->u.off, &iblock, &entry) < 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
 		"HF_man_read:Errors found when locating direct block", -1, NULL);
@@ -2735,8 +2748,16 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
         iblock = NULL;
     }
 
+#ifdef TEMP
     /* Compute offset of object within block */
     assert((objinfo->u.off - dblock->block_off) < (ck_hsize_t)dblock_size);
+#endif
+    if((objinfo->u.off - dblock->block_off) >= (ck_hsize_t)dblock_size) {
+	error_push(ERR_LEV_1, ERR_LEV_1F, 
+	    "HF_man_read:Object offset is not within direct block size", -1, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
     blk_off = (size_t)(objinfo->u.off - dblock->block_off);
 
     /* Check for object's offset in the direct block prefix information */
@@ -2857,6 +2878,8 @@ done:
 
 /*
  * ENTRY to validate the Master Table of Shared Object Header Message Indexes
+ *
+ * Modifications: add warning for validation that is not implemented yet
  */
 ck_err_t
 check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
@@ -2926,6 +2949,9 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 
     /* Read in the index headers */
     for(x = 0; x < table->num_indexes; ++x) {
+	ck_op_t ck_msg_op = NULL;
+        HF_hdr_t *fhdr = NULL;
+
         /* Verify correct version of index list */
 	logical = get_logical_addr(p, start_buf, sohm_addr);
         if(SM_LIST_VERSION != *p++) {
@@ -2990,45 +3016,27 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 
         /* Address of the actual index */
         addr_decode(file->shared, &p, &(table->indexes[x].index_addr));
-	if(addr_defined(table->indexes[x].index_addr) && (table->indexes[x].index_type == SM_BTREE)) {
-#ifdef DEBUG
-	    printf("Doing check_btree2() from check_SOHM()\n");
-#endif
-	    if(check_btree2(file, table->indexes[x].index_addr, SM_INDEX))
-		++ret_other_err;
-	}
 
 	logical = get_logical_addr(p, start_buf, sohm_addr);
+
         /* Address of the index's heap */
         addr_decode(file->shared, &p, &(table->indexes[x].heap_addr));
 	if(addr_defined(table->indexes[x].heap_addr)) {
-#ifdef DEBUG
-	    printf("Doing check_fheap() from check_SOHM()\n");
-#endif
-	    if(check_fheap(file, table->indexes[x].heap_addr))
+	    if(check_fheap(file, table->indexes[x].heap_addr) < 0)
 		++ret_other_err;
 	}
-#if 0 /* BUG */
-	if(!(addr_defined(table->indexes[x].index_addr))) {
-	    error_push(ERR_LEV_2, ERR_LEV_2A2p, "SOHM:Undefined list or btree address", -1, NULL);
-	    CK_INC_ERR
-	} else if(table->indexes[x].index_type == SM_BTREE) {
-	    printf("Doing check_btree2() from check_SOHM()\n");
-	    if(check_btree2(file, table->indexes[x].index_addr, SM_INDEX))
+
+	if(addr_defined(table->indexes[x].index_addr) && (table->indexes[x].index_type == SM_BTREE)) {
+	    if(check_btree2(file, table->indexes[x].index_addr, SM_INDEX, NULL, fhdr))
 		++ret_other_err;
 	}
-        /* Address of the index's heap */
-        addr_decode(file->shared, &p, &(table->indexes[x].heap_addr));
-	if(!(addr_defined(table->indexes[x].heap_addr))) {
-	    error_push(ERR_LEV_2, ERR_LEV_2A2p, "SOHM:Undefined heap address", -1, NULL);
-	    CK_INC_ERR
-	} else {
-	    printf("Doing check_fheap() from check_SOHM()\n");
-	    if(check_fheap(file, table->indexes[x].heap_addr))
-		++ret_other_err;
-	}
-#endif
-    
+
+	if(addr_defined(table->indexes[x].index_addr) && (table->indexes[x].index_type == SM_LIST))
+	    printf("Warning:validation of shared message record list is not implemented yet\n");
+
+	if(fhdr)
+	    (void) HF_close(fhdr);
+
     } /* end for */
 
     
@@ -3064,6 +3072,7 @@ done:
 
     return(ret_value);
 } /* check_SOHM() */
+
 
 
 

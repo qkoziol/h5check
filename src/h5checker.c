@@ -121,6 +121,7 @@ static const obj_class_t OBJ_SDS[1] = {{
 
 
 static void *OBJ_linfo_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static ck_err_t G_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_msg_udata);
 
 /* Link Info: 0x0002 */
 static const obj_class_t OBJ_LINFO[1] = {{
@@ -286,6 +287,7 @@ static const obj_class_t OBJ_DRVINFO[1] = {{
 
 
 static void *OBJ_ainfo_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static ck_err_t A_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_msg_udata);
 
 /* Attribute Information : 0x0015 */
 static const obj_class_t OBJ_AINFO[1] = {{
@@ -5308,6 +5310,85 @@ done:
 } /* end check_gheap() */
 #endif
 
+/*
+ * Callback function from check_btree2() for indexed group:
+ * 	Get info about the message from the btree record _RECORD
+ *	Read the message from fractal heap 
+ *	Decode the message
+ */
+static ck_err_t
+G_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_udata)
+{
+    G_dense_bt2_name_rec_t *rec = (G_dense_bt2_name_rec_t *)_record;
+    HF_hdr_t *fhdr = (HF_hdr_t *)_ck_udata;
+    ck_err_t ret_value = SUCCEED;      /* Return value */
+    obj_info_t objinfo;
+    uint8_t	*mesg_ptr;
+
+    assert(fhdr);
+    assert(fhdr->man_dtable.table_addr);
+
+    if(HF_get_obj_info(file, fhdr, &rec->id, &objinfo) < SUCCEED) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+	    "Dense msg cb:cannot get fractal heap ID info", -1, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
+    mesg_ptr = malloc(objinfo.size);
+    if(HF_read(file, fhdr, &rec->id, mesg_ptr, &objinfo) < SUCCEED) {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Dense msg cb:Unable to read message from fractal heap", 
+		fhdr->heap_addr, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+    if(message_type_g[OBJ_LINK_ID]->decode(file, mesg_ptr, NULL, -1) == NULL) {
+	error_push(ERR_LEV_2, ERR_LEV_2A, "Dense msg cb:Errors found when decoding message from fractal heap", fhdr->heap_addr, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
+done:
+    return(ret_value);
+} /* G_dense_ck_fh_msg_cb() */
+
+/*
+ * Callback function from check_btree2() for indexed attribute:
+ *	1. Shared indexed attribute: not implemented yet 
+ *		(need to get it from the shared message table)
+ * 	2. Get info about the message from the btree record _RECORD
+ *	   Read the message from fractal heap 
+ *	   Decode the message
+ */
+static ck_err_t
+A_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_udata)
+{
+    A_dense_bt2_name_rec_t *rec = (A_dense_bt2_name_rec_t *)_record;
+    HF_hdr_t *fhdr = (HF_hdr_t *)_ck_udata;
+    ck_err_t ret_value = SUCCEED;      /* Return value */
+    obj_info_t objinfo;
+    uint8_t	*mesg_ptr;
+
+    if(rec->flags & OBJ_MSG_FLAG_SHARED)
+	printf("Warning: Callback for shared indexed attributes not implemented yet...\n");
+    else {
+	assert(fhdr);
+	assert(fhdr->man_dtable.table_addr);
+	if(HF_get_obj_info(file, fhdr, &rec->id, &objinfo) < SUCCEED) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
+		"Indexed attribute cb:cannot get fractal heap ID info", -1, NULL);
+	    CK_SET_RET_DONE(FAIL)
+	}
+
+	mesg_ptr = malloc(objinfo.size);
+	if(HF_read(file, fhdr, &rec->id, mesg_ptr, &objinfo) < SUCCEED) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, "Indexed attribute cb:Unable to read message from fractal heap", 
+		fhdr->heap_addr, NULL);
+	    CK_SET_RET_DONE(FAIL)
+	}
+    }
+
+done:
+    return(ret_value);
+} /* A_dense_ck_fh_msg_cb() */
+
 
 /*
  * Call routines to decode annd validate messages
@@ -5354,9 +5435,7 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 	} else
 	    mesg = message_type_g[id]->decode(file, oh->mesg[i].raw, start_buf, logi_base);
 
-	oh->mesg[i].native = mesg;
-
-	if(mesg == NULL) {
+	if((oh->mesg[i].native = mesg) == NULL) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A, "Errors found when decoding message", logical, NULL);
 	    CK_INC_ERR_CONTINUE
 	}
@@ -5375,12 +5454,15 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 		break;
 
 	    case OBJ_EDF_ID:
-		ret_other_err = check_lheap(file,((OBJ_edf_t *)mesg)->heap_addr, &heap_chunk);
+	    {
+		OBJ_edf_t *edf = (OBJ_edf_t *)mesg;
+
+		ret_other_err = check_lheap(file, edf->heap_addr, &heap_chunk);
 		if(heap_chunk) {
 		    const char  *s = NULL;
 
-		    for(k = 0; k < ((OBJ_edf_t *)mesg)->nused; k++) {
-			s = heap_chunk + HL_SIZEOF_HDR(file->shared) +((OBJ_edf_t *)mesg)->slot[k].name_offset;
+		    for(k = 0; k < edf->nused; k++) {
+			s = heap_chunk + HL_SIZEOF_HDR(file->shared) + edf->slot[k].name_offset;
 			if(s) {
 			    if(!(*s)) {
 				error_push(ERR_LEV_2, ERR_LEV_2A2h, 
@@ -5394,94 +5476,133 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 		    }  
 		    free(heap_chunk);
 		}
-		break;
+	    }
+	    break;
 
 	    case OBJ_LAYOUT_ID:
-		if(((OBJ_layout_t *)mesg)->type == DATA_CHUNKED) {
-		    local_ndims = ((OBJ_layout_t *)mesg)->u.chunk.ndims;
-		    btree_addr = ((OBJ_layout_t *)mesg)->u.chunk.addr;
+	    {
+		OBJ_layout_t *layout = (OBJ_layout_t *)mesg;
+
+		if(layout->type == DATA_CHUNKED) {
+		    local_ndims = layout->u.chunk.ndims;
+		    btree_addr = layout->u.chunk.addr;
 
 		    /* may be undefined if storage is not allocated yet */
 		    if(addr_defined(btree_addr) && check_btree(file, btree_addr, local_ndims, NULL, NULL, NULL, NULL) < 0)
 			++ret_other_err;
 		}
-		break;
+	    }
+	    break;
 
 	    case OBJ_GROUP_ID:
+	    {
+		OBJ_stab_t *stab = (OBJ_stab_t *)mesg;
+
 		name_list_init(&name_list);
-		if(check_lheap(file, ((OBJ_stab_t *)mesg)->heap_addr, &heap_chunk) < 0)
+		if(check_lheap(file, stab->heap_addr, &heap_chunk) < 0)
 		    ++ret_other_err;
-		if(check_btree(file, ((OBJ_stab_t *)mesg)->btree_addr, ndims, heap_chunk, name_list, NULL, NULL) < 0)
+		if(check_btree(file, stab->btree_addr, ndims, heap_chunk, name_list, NULL, NULL) < 0)
 		    ++ret_other_err;
 
 		name_list_dest(name_list);
 		if(heap_chunk) free(heap_chunk);
-
-		break;
-
+	    }
+	    break;
 
 	    case OBJ_LINFO_ID:
+	    {
+		OBJ_linfo_t *linfo = (OBJ_linfo_t *)mesg;
+		ck_op_t ck_fh_msg_op = NULL;
+		HF_hdr_t *fhdr = NULL;
+
 		if(g_format_num == FORMAT_ONE_SIX)
 		    break;
-		if(addr_defined(((OBJ_linfo_t *)mesg)->corder_bt2_addr)) {
-		    if(check_btree2(file, ((OBJ_linfo_t *)mesg)->corder_bt2_addr, G_BT2_CORDER) != SUCCEED)
+
+		if(addr_defined(linfo->fheap_addr)) {
+		    if(check_fheap(file, linfo->fheap_addr) != SUCCEED)
 			++ret_other_err;
+		    else {
+			if((fhdr = HF_open(file, linfo->fheap_addr)) == NULL) {
+			    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal: Unable to open fractal heap", -1, NULL);
+			    CK_INC_ERR
+			} else 
+			    ck_fh_msg_op = G_dense_ck_fh_msg_cb;
+		    }
 		} 
 
-		if(addr_defined(((OBJ_linfo_t *)mesg)->name_bt2_addr)) {
-		    if(check_btree2(file, ((OBJ_linfo_t *)mesg)->name_bt2_addr, G_BT2_NAME) != SUCCEED)
+		if(addr_defined(linfo->corder_bt2_addr) &&
+		   check_btree2(file, linfo->corder_bt2_addr, G_BT2_CORDER, ck_fh_msg_op, fhdr) != SUCCEED)
 			++ret_other_err;
-		} 
 
-		if(addr_defined(((OBJ_linfo_t *)mesg)->fheap_addr)) {
-		    if(check_fheap(file, ((OBJ_linfo_t *)mesg)->fheap_addr) != SUCCEED)
+		if(addr_defined(linfo->name_bt2_addr) &&
+		   check_btree2(file, linfo->name_bt2_addr, G_BT2_NAME, ck_fh_msg_op, fhdr) != SUCCEED)
 			++ret_other_err;
-		} 
+		if(fhdr)
+		    (void) HF_close(fhdr);
+	    }
 
-		break;
+	    break;
 
 	    case OBJ_GINFO_ID:
 		break;
 
 	    case OBJ_SHMESG_ID:
+	    {
+		OBJ_shmesg_table_t *shm = (OBJ_shmesg_table_t *)mesg;
+
 		if(g_format_num == FORMAT_ONE_SIX)
 		    break;
 
-		if(addr_defined(((OBJ_shmesg_table_t *)mesg)->addr)) {
+		if(addr_defined(shm->addr)) {
 #ifdef DEBUG
 		    printf("The SOHM table address from message is %llu; num of indices=%u\n",
-			((OBJ_shmesg_table_t *)mesg)->addr,
-			((OBJ_shmesg_table_t *)mesg)->nindexes);
+			shm->addr, shm->nindexes);
 #endif
-		    if((check_SOHM(file, ((OBJ_shmesg_table_t *)mesg)->addr,
-			((OBJ_shmesg_table_t *)mesg)->nindexes)) != SUCCEED)
+		    if((check_SOHM(file, shm->addr, shm->nindexes)) != SUCCEED)
 			++ret_other_err;
 		}
-		break;
+	    }
+	    break;
 
 	    case OBJ_BTREEK_ID:
 	    case OBJ_DRVINFO_ID:
 		break;
 
 	    case OBJ_AINFO_ID:
+	    {
+		OBJ_ainfo_t *ainfo = (OBJ_ainfo_t *)mesg;
+		ck_op_t ck_fh_msg_op = NULL;
+		HF_hdr_t *fhdr = NULL;
+
 		if(g_format_num == FORMAT_ONE_SIX)
 		    break;
 
-		if(addr_defined(((OBJ_ainfo_t *)mesg)->corder_bt2_addr)) {
-		    if(check_btree2(file, ((OBJ_ainfo_t *)mesg)->corder_bt2_addr, A_BT2_CORDER) != SUCCEED)
+		if(addr_defined(ainfo->fheap_addr)) {
+		    if(check_fheap(file, ainfo->fheap_addr) != SUCCEED)
+			++ret_other_err;
+		    else {
+			if((fhdr = HF_open(file, ainfo->fheap_addr)) == NULL) {
+			    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Internal: Unable to open fractal heap", -1, NULL);
+			    CK_INC_ERR
+			} else 
+			    ck_fh_msg_op = A_dense_ck_fh_msg_cb;
+		    }
+		} 
+
+		if(addr_defined(ainfo->corder_bt2_addr)) {
+		    if(check_btree2(file, ainfo->corder_bt2_addr, A_BT2_CORDER, ck_fh_msg_op, fhdr) != SUCCEED)
 			++ret_other_err;
 		}
 
-		if(addr_defined(((OBJ_ainfo_t *)mesg)->name_bt2_addr)) {
-		    if(check_btree2(file, ((OBJ_ainfo_t *)mesg)->name_bt2_addr, A_BT2_NAME) != SUCCEED)
+		if(addr_defined(ainfo->name_bt2_addr)) {
+		    if(check_btree2(file, ainfo->name_bt2_addr, A_BT2_NAME, ck_fh_msg_op, fhdr) != SUCCEED)
 			++ret_other_err;
 		}
+		if(fhdr)
+		    (void) HF_close(fhdr);
 
-		if(addr_defined(((OBJ_ainfo_t *)mesg)->fheap_addr)) {
-		    if(check_fheap(file, ((OBJ_ainfo_t *)mesg)->fheap_addr) != SUCCEED)
-			++ret_other_err;
-		}
-		break;
+	    }
+	    break;
 
 	    case OBJ_REFCOUNT_ID:
 	    case OBJ_LINK_ID:
@@ -5674,6 +5795,7 @@ OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *typ
     assert(obj_shared);
     assert(type);
 
+/* NEEd to initialize logi_base */
     if(obj_shared->type == OBJ_SHARE_TYPE_SOHM) {
 	if(SM_get_fheap_addr(file, type->id, &fheap_addr) < SUCCEED) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 

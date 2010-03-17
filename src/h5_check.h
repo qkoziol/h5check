@@ -29,8 +29,8 @@
 #define TERSE_VERBOSE   0
 #define DEBUG_VERBOSE   2
 
-/* release version of h5checker */
-#define		H5Check_VERSION		"1.1"
+/* release version of h5checker: based on Format Specification version */
+#define		H5Check_VERSION		"2.0"
 #define 	CK_ADDR_MAX            	(CK_ADDR_UNDEF-1)
 #define 	addr_defined(X)     	(X!=CK_ADDR_UNDEF)
 #define 	addr_eq(X,Y)        	((X)!=CK_ADDR_UNDEF && (X)==(Y))
@@ -2153,9 +2153,12 @@ const B2_class_t SM_INDEX[1];
 const B2_class_t A_BT2_NAME[1];
 const B2_class_t A_BT2_CORDER[1];
 
+/* Define the check indexed message (group & attribute) callback function from check_btree2() */
+typedef ck_err_t (*ck_op_t)(driver_t *file, const void *record, void *_ck_udata);
+
 ck_err_t check_fheap(driver_t *, ck_addr_t);
 ck_err_t check_SOHM(driver_t *, ck_addr_t, unsigned);
-ck_err_t check_btree2(driver_t *, ck_addr_t, const B2_class_t *);
+ck_err_t check_btree2(driver_t *, ck_addr_t, const B2_class_t *, ck_op_t ck_op, void *ck_udata);
 HF_hdr_t *HF_open(driver_t *, ck_addr_t fh_addr);
 ck_err_t HF_close(HF_hdr_t *fhdr);
 ck_err_t HF_get_obj_info(driver_t *, HF_hdr_t *, const void *, obj_info_t *);

@@ -138,7 +138,7 @@ error_print(FILE *stream, driver_t *file)
 		fname = FD_get_fname(file, estack->slot[i].logical_addr);
 		fprintf(stream, "\n  file=%s;", fname);
 #endif
-		fprintf(stream, " at logical addr %llu",
+		fprintf(stream, " at addr %llu",
 		    (unsigned long long)estack->slot[i].logical_addr);
 		if(estack->slot[i].err_info.reported)
 		    fprintf(stream, "; Value decoded: %d",
