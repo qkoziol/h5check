@@ -2780,6 +2780,10 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
     memcpy(op_data, p, objinfo->size);
 
 done:
+    if(dblock && dblock->blk) {
+	free(dblock->blk);
+	free(dblock);
+    }
     return(ret_value);
 } /* HF_man_read() */
 
@@ -2950,7 +2954,6 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
     /* Read in the index headers */
     for(x = 0; x < table->num_indexes; ++x) {
 	ck_op_t ck_msg_op = NULL;
-        HF_hdr_t *fhdr = NULL;
 
         /* Verify correct version of index list */
 	logical = get_logical_addr(p, start_buf, sohm_addr);
@@ -3027,15 +3030,12 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 	}
 
 	if(addr_defined(table->indexes[x].index_addr) && (table->indexes[x].index_type == SM_BTREE)) {
-	    if(check_btree2(file, table->indexes[x].index_addr, SM_INDEX, NULL, fhdr))
+	    if(check_btree2(file, table->indexes[x].index_addr, SM_INDEX, NULL, NULL))
 		++ret_other_err;
 	}
 
 	if(addr_defined(table->indexes[x].index_addr) && (table->indexes[x].index_type == SM_LIST))
 	    printf("Warning:validation of shared message record list is not implemented yet\n");
-
-	if(fhdr)
-	    (void) HF_close(fhdr);
 
     } /* end for */
 
