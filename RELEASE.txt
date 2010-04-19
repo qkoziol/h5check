@@ -3,6 +3,20 @@ This document describes the changes between releases.
 Changes since version "1.0-post0"
 =================================
 
+- 2010-03-24 by vchoi
+    Bug fix:
+	Fixed failure on "duty":
+	Free memory allocated for direct block after it was done.
+
+- 2010-03-17 by vchoi
+    1. Fix for chicago bug from master_REUTERS_ASIA.h5.bad:
+	Add callbacks to validate indexed group and indexed attribute messages
+    2. Add warnings for coding that is not implemented yet
+    3. Turn assert into a validation check in HF_man_read(): fix for
+	ahmcoef_aix.nc (from bug #1755)
+    4. Update version # to be the same format specification number
+    5. Some cleanup
+
 - 2010-01-06 by vchoi
     Fixed bug for Chicago developers: duplicate symbol name and symbol name out of order.
     Modified and cleaned up coding (particularly on error reporting).
