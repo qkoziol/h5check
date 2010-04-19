@@ -148,3 +148,11 @@ typedef enum Z_EDC_t {
     Z_ENABLE_EDC      = 1,
     Z_NO_EDC          = 2     /* must be the last */
 } Z_EDC_t;
+
+/* Function prototypes */
+ck_err_t pline_init_interface(void);
+ck_err_t filter_pline(const OBJ_filter_t *, unsigned, unsigned */*in,out*/,
+    Z_EDC_t, Z_cb_t, ck_size_t */*in,out*/,
+    ck_size_t */*in,out*/, void **/*in,out*/);
+
+

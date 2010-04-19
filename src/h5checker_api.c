@@ -1,5 +1,6 @@
 #include "h5_check.h"
 #include "h5_error.h"
+#include "h5_pline.h"
 
 ck_err_t
 h5checker_obj(char *fname, ck_addr_t obj_addr, int format_num, ck_errmsg_t *errbuf)

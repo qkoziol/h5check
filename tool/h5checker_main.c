@@ -10,6 +10,7 @@
 #include <string.h>
 #include "h5_check.h"
 #include "h5_error.h"
+#include "h5_pline.h"
 
 
 int main(int argc, char **argv)

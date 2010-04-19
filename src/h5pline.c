@@ -23,10 +23,6 @@ static Z_class_t      	   *Z_table_g = NULL;
 static ck_err_t pline_register(const Z_class_t *);
 static int filter_find_idx(Z_filter_t);
 
-ck_err_t pline_init_interface(void);
-ck_err_t filter_pline(const OBJ_filter_t *, unsigned, unsigned */*in,out*/, Z_EDC_t, Z_cb_t, ck_size_t */*in,out*/,
-    ck_size_t */*in,out*/, void **/*in,out*/);
-
 
 static ck_err_t
 pline_register(const Z_class_t *cls)

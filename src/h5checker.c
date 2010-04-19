@@ -1290,7 +1290,7 @@ done:
 } /* family_close() */
 
 static ck_err_t
-family_read(driver_t *_file, ck_addr_t addr, size_t size, void *buf/*out*/)
+family_read(driver_t *_file, ck_addr_t addr, size_t size, void *_buf/*out*/)
 {
     driver_fami_t       *file=(driver_fami_t*)_file;
     ck_err_t            ret_value=SUCCEED; 
@@ -1298,6 +1298,7 @@ family_read(driver_t *_file, ck_addr_t addr, size_t size, void *buf/*out*/)
     ck_size_t   	req;
     ck_size_t          	tempreq;
     unsigned            u; 
+    char *		buf=(char*)_buf;
 
     while(size > 0) {
 	ASSIGN_OVERFLOW(u,addr/file->fa.memb_size,ck_hsize_t,unsigned);
@@ -4042,8 +4043,8 @@ gp_node_cmp_key(global_shared_t *shared, unsigned UNUSED ndims, uint8_t *heap_ch
     assert(heap_chunk);
 
     if(heap_chunk) {
-	s1 = heap_chunk + HL_SIZEOF_HDR(shared) + lt_key->offset;
-	s2 = heap_chunk + HL_SIZEOF_HDR(shared) + rt_key->offset;
+	s1 = (char *)(heap_chunk + HL_SIZEOF_HDR(shared) + lt_key->offset);
+	s2 = (char *)(heap_chunk + HL_SIZEOF_HDR(shared) + rt_key->offset);
 
 	/* Set return value */
 	ret_value = strcmp(s1, s2);
@@ -4351,7 +4352,7 @@ check_superblock(driver_t *file)
 	    logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
 	    UINT16DECODE(p, lshared->btree_k[BT_ISTORE_ID]);
 	    p += 2;   /* reserved */
-	    if (lshared->btree_k <= 0) {
+	    if (lshared->btree_k[BT_ISTORE_ID] == 0) {
 		error_push(ERR_LEV_0, ERR_LEV_0A, 
 		    "Superblock v.1:Invalid value for Indexed Storage Internal Node K", logical, NULL);
 		CK_SET_RET(FAIL)
@@ -4729,7 +4730,7 @@ check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *
     for(u = 0, ent = sym->entry; u < sym->nsyms; u++, ent++) {
 	char *s1, *s2, *sym_name;
 
-	sym_name = heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off;
+	sym_name = (char *)(heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off);
 	if(name_list_search(name_list, sym_name)) {
 	    error_push(ERR_LEV_1, ERR_LEV_1C, "Symbol table node entry:Duplicate name", sym_addr, NULL);
 		CK_INC_ERR
@@ -4737,8 +4738,8 @@ check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *
 	    name_list_insert(name_list, sym_name);
 
 	if(u && heap_chunk) {
-	    s1 = heap_chunk + HL_SIZEOF_HDR(file->shared) + prev_ent->name_off;
-	    s2 = heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off;
+	    s1 = (char *)(heap_chunk + HL_SIZEOF_HDR(file->shared) + prev_ent->name_off);
+	    s2 = (char *)(heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off);
 
 	    if(strcmp(s1, s2) >= 0) {
 		error_push(ERR_LEV_1, ERR_LEV_1C, "Symbol table node entry:Name out of order", sym_addr, NULL);
@@ -5459,10 +5460,10 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 
 		ret_other_err = check_lheap(file, edf->heap_addr, &heap_chunk);
 		if(heap_chunk) {
-		    const char  *s = NULL;
+		    char  *s = NULL;
 
 		    for(k = 0; k < edf->nused; k++) {
-			s = heap_chunk + HL_SIZEOF_HDR(file->shared) + edf->slot[k].name_offset;
+			s = (char*)(heap_chunk + HL_SIZEOF_HDR(file->shared) + edf->slot[k].name_offset);
 			if(s) {
 			    if(!(*s)) {
 				error_push(ERR_LEV_2, ERR_LEV_2A2h, 
