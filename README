@@ -35,14 +35,14 @@ To install:
 ==========
 To install,
     % gmake install
-These go to /usr/local/{bin,lib} by default.  If you want to install it
-somewhere else like /usr/software/{bin,lib},
+These go to h5check/{bin,lib} of the built directory by default.  If you want
+to install it somewhere else like /usr/software/{bin,lib},
     % gmake prefix=/usr/software install
 
 ===================
 Platforms supported:
 ===================
-Linux 2.6 (32bit, 64bit), Solaris 10 (32 bit)
+Linux 2.6 (32bit, 64bit), Solaris 10 (32 bit, 64 bit)
 
 ========
 Question:
