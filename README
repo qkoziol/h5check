@@ -40,7 +40,7 @@ to install it somewhere else like /usr/software/{bin,lib},
     % gmake prefix=/usr/software install
 
 ===================
-Platforms supported:
+Platforms tested:
 ===================
 Linux 2.6 (32/64bits), Solaris 10 (32/64bits), FreeBSD 6.3 (32/64bits).
 
