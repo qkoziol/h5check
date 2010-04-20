@@ -23,7 +23,7 @@ If you want to use a different C compiler and/or h5cc command, do
 
 To set different compiler flags use CFLAGS variable, e.g.
      % env CFLAGS=-O2 ./configure
-This command will set the compiling to "gcc -O2"
+This command will set the compiling to "gcc -O2".
     
 ============
 To run tests:
@@ -42,7 +42,7 @@ to install it somewhere else like /usr/software/{bin,lib},
 ===================
 Platforms supported:
 ===================
-Linux 2.6 (32bit, 64bit), Solaris 10 (32 bit, 64 bit)
+Linux 2.6 (32/64bits), Solaris 10 (32/64bits), FreeBSD 6.3 (32/64bits).
 
 ========
 Question:
