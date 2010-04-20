@@ -1,7 +1,11 @@
-This document describes the changes between releases.
+This is V2.0 release of the HDF5 format checker.  This document describes the
+changes between releases.
 
 Changes since version "1.0-post0"
 =================================
+
+- 2010-04-19 by acheng
+    Ported to Solaris 10, 64bit.
 
 - 2010-03-24 by vchoi
     Bug fix:
@@ -38,12 +42,12 @@ Changes since version "1.0-post0"
 - 2009-09-11 by acheng
     Improve configure process:
     Problem:
-	The package needs h5cc to compile the test generation program to generate
-	test files. Configure (config/commence.am) used to hardcode the h5cc tool
-	as in $bindir/h5cc which was rarely true.
+    The package needs h5cc to compile the test generation program to generate
+    test files. Configure (config/commence.am) used to hardcode the h5cc tool
+    as in $bindir/h5cc which was rarely true.
     Solution:
-	I changed it to just use "h5cc" which uses the bigger $PATH scope.
-	One can still use the old way of "make H5CC=$mypath/h5cc".
+    I changed it to just use "h5cc" which uses the bigger $PATH scope.
+    One can still use the old way of "make H5CC=$mypath/h5cc".
 
 - 2009-09-11 by acheng
     Bug fix: ID 1650
@@ -51,15 +55,16 @@ Changes since version "1.0-post0"
     These three files are installed by the current version:
 	bin/h5check    OK. Kept as is.
 
-	bin/testgen   	Incorrect since it generates test files and is not a user tool.
-			I have removed it from the install list.
+	bin/testgen   	Incorrect since it generates test files and is not a
+			user tool.  I have removed it from the install list.
 
 	lib/libh5check.a  
-                  Though the implementation design provides the ability that this library
-                  can be used by user applications but it is pre-mature to install it because
-                  the related header file is not installed and no API definition document
-                  exists yet, I think. Therefore, I am removing it from the install
-                  list.
+		  Though the implementation design provides the ability
+		  that this library can be used by user applications
+		  but it is pre-mature to install it because the
+		  related header file is not installed and no API
+		  definition document exists yet, I think. Therefore, I
+		  am removing it from the install list.
 
 - 2009-05-08 by vchoi
     Fixed bug #1557: checked for null pointer in check_lheap() of h5checker.c.
