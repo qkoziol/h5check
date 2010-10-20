@@ -14,8 +14,6 @@
 #include <string.h>
 #include <ctype.h>
 
-
-
 #define FORMAT_ONE_SIX		16	/* library release version 1.6.6 */
 #define FORMAT_ONE_EIGHT	18	/* library release version 1.8 */
 #define DEFAULT_FORMAT		FORMAT_ONE_EIGHT
@@ -31,45 +29,43 @@
 #define DEBUG_VERBOSE   2
 
 /* release version of h5checker: based on Format Specification version */
-#define		H5Check_VERSION		"2.1-snap0"
-#define 	CK_ADDR_MAX            	(CK_ADDR_UNDEF-1)
-#define 	addr_defined(X)     	(X!=CK_ADDR_UNDEF)
-#define 	addr_eq(X,Y)        	((X)!=CK_ADDR_UNDEF && (X)==(Y))
+#define	H5Check_VERSION		"2.1-snap0"
+#define CK_ADDR_MAX            	(CK_ADDR_UNDEF-1)
+#define addr_defined(X)     	(X!=CK_ADDR_UNDEF)
+#define addr_eq(X,Y)        	((X)!=CK_ADDR_UNDEF && (X)==(Y))
 
 /* see H5public.h for definition of ck_size_t, H5pubconf.h */
 typedef size_t                  ck_size_t;
 typedef unsigned long long      ck_hsize_t;
 
 /* NEED to check into this more */
-#define 	long_long   long long
+#define long_long   long long
 
-#define SUCCEED         0
-#define FAIL            (-1)
-#define UFAIL           (unsigned)(-1)
-#define UNUSED		/*void*/
-
-
-#define MAX(a,b)            (((a)>(b)) ? (a) : (b))
-#define MIN(a,b)            (((a)<(b)) ? (a) : (b))
+#define SUCCEED 0
+#define FAIL (-1)
+#define UFAIL (unsigned)(-1)
+#define UNUSED /*void*/
+#define MAX(a,b) 	(((a)>(b)) ? (a) : (b))
+#define MIN(a,b) 	(((a)<(b)) ? (a) : (b))
 
 #ifndef FALSE
-#define 	FALSE 0
+#define FALSE 0
 #endif
 #ifndef TRUE
-#define 	TRUE 1
+#define TRUE 1
 #endif
 
 /* for handling hard links */
 typedef struct obj_t {
-    ck_addr_t 	objno;
-    int	  	nlink;
+    ck_addr_t objno;
+    int	nlink;
 } obj_t;
 
 
 typedef struct table_t {
-    size_t 	size;
-    size_t 	nobjs; 
-    obj_t	*objs;
+    size_t size;
+    size_t nobjs; 
+    obj_t *objs;
 } table_t;
 
 /* for handling symbol table names */
@@ -119,9 +115,9 @@ typedef struct name_list_t {
 #define SHAREDHEADER_VERSION 0     /* of the Shared-Header Info      */
 #define DRIVERINFO_VERSION 0       /* of the Driver Information Block*/
 
-#define SIZEOF_CHKSUM 		4     	   /* Checksum size in the file */
+#define SIZEOF_CHKSUM 4     	   /* Checksum size in the file */
 
-#define GP_SIZEOF_SCRATCH      16
+#define GP_SIZEOF_SCRATCH 16
 #define GP_SIZEOF_ENTRY(F) 					\
    (SIZEOF_SIZE(F) +   /* name offset */    			\
     SIZEOF_ADDR(F) +   /* object header address */    		\
@@ -137,7 +133,7 @@ typedef struct name_list_t {
         + 4 /* group leaf k, group internal k */                        \
         + 4) /* consistency flags */
 
-#define SUPERBLOCK_VARLEN_SIZE_V0		SUPERBLOCK_VARLEN_SIZE_COMMON
+#define SUPERBLOCK_VARLEN_SIZE_V0 SUPERBLOCK_VARLEN_SIZE_COMMON
 
 #define SUPERBLOCK_VARLEN_SIZE_V1					\
     ( SUPERBLOCK_VARLEN_SIZE_COMMON					\
@@ -177,10 +173,9 @@ typedef struct name_list_t {
 #define DRVINFOBLOCK_SIZE  	1024
 #define DRVINFOBLOCK_HDR_SIZE	16
 
-#define SUPER_WRITE_ACCESS          0x01
-#define SUPER_FILE_OK               0x02
-#define SUPER_ALL_FLAGS             (SUPER_WRITE_ACCESS | SUPER_FILE_OK)
-
+#define SUPER_WRITE_ACCESS 	0x01
+#define SUPER_FILE_OK         	0x02
+#define SUPER_ALL_FLAGS  	(SUPER_WRITE_ACCESS | SUPER_FILE_OK)
 
 #define UINT16DECODE(p, i) {                                                  \
    (i)  = (uint16_t) (*(p) & 0xff);       (p)++;                              \
@@ -236,22 +231,21 @@ typedef struct name_list_t {
    (p) += l;                                                                  \
 }
 
-
-#define DECODE_LENGTH(F,p,l) switch(SIZEOF_SIZE(F)) {     			      \
-   case 4: UINT32DECODE(p,l); break;                                          \
-   case 8: UINT64DECODE(p,l); break;                                          \
-   case 2: UINT16DECODE(p,l); break;                                          \
+#define DECODE_LENGTH(F,p,l) switch(SIZEOF_SIZE(F)) { 			    	\
+   case 4: UINT32DECODE(p,l); break;                                          	\
+   case 8: UINT64DECODE(p,l); break;                                          	\
+   case 2: UINT16DECODE(p,l); break;                                          	\
 }
 
-#define INT32DECODE(p, i) {                                                 \
-   (i)  = (          *(p) & 0xff);        (p)++;                            \
-   (i) |= ((int32_t)(*(p) & 0xff) <<  8); (p)++;                            \
-   (i) |= ((int32_t)(*(p) & 0xff) << 16); (p)++;                            \
-   (i) |= ((int32_t)(((*(p) & 0xff) << 24) |                                \
-                   ((*(p) & 0x80) ? ~0xffffffff : 0x0))); (p)++;             \
+#define INT32DECODE(p, i) {                                                 	\
+   (i)  = (          *(p) & 0xff);        (p)++;                            	\
+   (i) |= ((int32_t)(*(p) & 0xff) <<  8); (p)++;                            	\
+   (i) |= ((int32_t)(*(p) & 0xff) << 16); (p)++;                            	\
+   (i) |= ((int32_t)(((*(p) & 0xff) << 24) |                                	\
+                   ((*(p) & 0x80) ? ~0xffffffff : 0x0))); (p)++;             	\
 }
 
-#define CHECK_OVERFLOW(var,vartype,casttype) \
+#define CHECK_OVERFLOW(var,vartype,casttype) 	\
 {                                               \
     casttype _tmp_overflow=(casttype)(var);     \
     assert((var)==(vartype)_tmp_overflow);      \
@@ -260,15 +254,13 @@ typedef struct name_list_t {
 #define 	BT_SNODE_K	16
 #define 	BT_ISTORE_K	32	/* for older version of superblock < 1 */
 
-
 /*
  * symbol table
  */
-#define SNODE_MAGIC  		"SNOD"    /*symbol table node magic number     */
-#define SNODE_SIZEOF_MAGIC 	4         /*sizeof symbol node magic number    */
-
-#define SNODE_VERS   		1         /*symbol table node version number   */
-#define SNODE_SIZEOF_HDR(F) 	(SNODE_SIZEOF_MAGIC + 4)
+#define SNODE_MAGIC "SNOD"    	/*symbol table node magic number     */
+#define SNODE_SIZEOF_MAGIC 4  	/*sizeof symbol node magic number    */
+#define SNODE_VERS 1         	/*symbol table node version number   */
+#define SNODE_SIZEOF_HDR(F) (SNODE_SIZEOF_MAGIC + 4)
 
 typedef enum GP_type_t {
     GP_CACHED_ERROR    = -1,   /*force enum to be signed       */
@@ -277,7 +269,6 @@ typedef enum GP_type_t {
     GP_CACHED_SLINK    = 2,    /*symbolic link                 */
     GP_NCACHED         = 3     /*THIS MUST BE LAST             */
 } GP_type_t;
-
 
 typedef union GP_cache_t {
     struct {
@@ -297,7 +288,6 @@ typedef struct GP_entry_t {
     ck_addr_t   header;           /* file address of object header      */
 } GP_entry_t;
 
-
 typedef struct GP_node_t {
     unsigned nsyms;                /*number of symbols                  */
     GP_entry_t *entry;             /*array of symbol table entries      */
@@ -309,32 +299,32 @@ typedef struct driver_class_t driver_class_t;
 
 /* 1.6 B-tree IDs */
 typedef enum BT_subid_t {
-    BT_SNODE_ID         = 0,   /* B-tree is for symbol table nodes           */
-    BT_ISTORE_ID        = 1,   /* B-tree is for indexed object storage       */
-    BT_NUM_BTREE_ID            /* Number of B-tree key IDs (must be last)   */
+    BT_SNODE_ID         = 0,   /* B-tree is for symbol table nodes        	*/
+    BT_ISTORE_ID        = 1,   /* B-tree is for indexed object storage       	*/
+    BT_NUM_BTREE_ID            /* Number of B-tree key IDs (must be last)	*/
 } BT_subid_t;
-
 
 /*
  *  A global structure for storing the information obtained
  *  from the superblock to be shared by all routines.
  */
 typedef struct 	global_shared_t {
-	ck_addr_t	super_addr;	    /* absolute address of the super block */
-        size_t          size_offsets;       /* size of offsets: sizeof_addr */
-        size_t          size_lengths;       /* size of lengths: sizeof_size */
-	unsigned	gr_leaf_node_k;	    /* group leaf node k */
-        uint32_t        file_consist_flg;   /* file consistency flags */
-        unsigned        btree_k[BT_NUM_BTREE_ID];  /* internal node k for SNODE & ISTORE */
-        ck_addr_t       base_addr;          /* absolute base address for rel.addrs. */
-        ck_addr_t       freespace_addr;     /* relative address of free-space info  */
-        ck_addr_t       stored_eoa;         /* end of file address */
-        ck_addr_t       driver_addr;        /* file driver information block address*/
-	GP_entry_t 	*root_grp;	    /* pointer to root group symbol table entry */
-	ck_addr_t	extension_addr;	    /* 1.8: extension address */
-	int		driverid;	    /* the driver id to be used */
-	void		*sohm_tbl;	    /* address of the master table of shared messages */
-	void		*fa;	    	    /* driver specific info */
+    ck_addr_t super_addr;	    	/* absolute address of the super block */
+    size_t size_offsets;       		/* size of offsets: sizeof_addr */
+    size_t size_lengths;       		/* size of lengths: sizeof_size */
+    unsigned gr_leaf_node_k;    	/* group leaf node k */
+    uint32_t file_consist_flg;   	/* file consistency flags */
+    unsigned btree_k[BT_NUM_BTREE_ID];  /* internal node k for SNODE & ISTORE */
+    ck_addr_t base_addr;          	/* absolute base address for rel.addrs. */
+    ck_addr_t freespace_addr;     	/* relative address of free-space info  */
+    ck_addr_t stored_eoa;         	/* end of file address */
+    ck_addr_t driver_addr;        	/* file driver information block address*/
+    GP_entry_t *root_grp;	    	/* pointer to root group symbol table entry */
+    ck_addr_t extension_addr;	/* 1.8: extension address */
+    int driverid;	    	/* the driver id to be used */
+    void *sohm_tbl;	    	/* address of the master table of shared messages */
+    void *fa;    	    	/* driver specific info */
+    table_t  *obj_table;	/* Table for handling hard links */
 } global_shared_t;
 
 /*
@@ -380,48 +370,47 @@ typedef enum OBJ_sds_class_t {
 				    /* 1.6 OBJ_SDS_COMPLEX: not supported yet 	 */
 } OBJ_sds_class_t;
 
-
-#define OBJ_SDS_VERSION_1  		1
-#define OBJ_SDS_VERSION_2  		2
-#define OBJ_SDS_VERSION_LATEST 		OBJ_SDS_VERSION_2
-#define OBJ_SDS_VALID_MAX   		0x01
+#define OBJ_SDS_VERSION_1  	1
+#define OBJ_SDS_VERSION_2  	2
+#define OBJ_SDS_VERSION_LATEST 	OBJ_SDS_VERSION_2
+#define OBJ_SDS_VALID_MAX   	0x01
 
 typedef struct OBJ_sds_extent_t {
-    OBJ_sds_class_t 	type;     /* Type of extent */
-    ck_hsize_t 		nelem;    /* Number of elements in extent */
-    unsigned 		rank;     /* Number of dimensions */
-    ck_hsize_t 		*size;    /* Current size of the dimensions */
-    ck_hsize_t 		*max;     /* Maximum size of the dimensions */
+    OBJ_sds_class_t type;	/* Type of extent */
+    ck_hsize_t nelem; 	/* Number of elements in extent */
+    unsigned rank;     	/* Number of dimensions */
+    ck_hsize_t *size;	/* Current size of the dimensions */
+    ck_hsize_t *max;	/* Maximum size of the dimensions */
 } OBJ_sds_extent_t;
 
 /*
  * Link Information Message 
  */
-#define OBJ_LINFO_VERSION    0
-#define OBJ_LINFO_TRACK_CORDER          0x01
-#define OBJ_LINFO_INDEX_CORDER          0x02
-#define OBJ_LINFO_ALL_FLAGS             (OBJ_LINFO_TRACK_CORDER | OBJ_LINFO_INDEX_CORDER)
+#define OBJ_LINFO_VERSION    	0
+#define OBJ_LINFO_TRACK_CORDER 	0x01
+#define OBJ_LINFO_INDEX_CORDER 	0x02
+#define OBJ_LINFO_ALL_FLAGS  	(OBJ_LINFO_TRACK_CORDER | OBJ_LINFO_INDEX_CORDER)
 
 typedef struct OBJ_linfo_t {
-    ck_bool_t     track_corder;         /* Are creation order values tracked on links? */
-    ck_bool_t     index_corder;         /* Are creation order values indexed on links? */
-    int64_t       max_corder;           /* Current max. creation order value for group */
-    ck_addr_t     corder_bt2_addr;      /* Address of v2 B-tree for indexing creation order values of links */
+    ck_bool_t track_corder; 	/* Are creation order values tracked on links? */
+    ck_bool_t index_corder;    	/* Are creation order values indexed on links? */
+    int64_t max_corder;       	/* Current max. creation order value for group */
+    ck_addr_t corder_bt2_addr; 	/* Address of v2 B-tree for indexing creation order values of links */
 /* ??? DO I NEED THIS FIELD */
-    ck_size_t       nlinks;               /* Number of links in the group      */
-    ck_addr_t     fheap_addr;           /* Address of fractal heap for storing "dense" links */
-    ck_addr_t     name_bt2_addr;        /* Address of v2 B-tree for indexing names of links */
+    ck_size_t nlinks;    	/* Number of links in the group      */
+    ck_addr_t fheap_addr;   	/* Address of fractal heap for storing "dense" links */
+    ck_addr_t name_bt2_addr;	/* Address of v2 B-tree for indexing names of links */
 } OBJ_linfo_t;
 
 
 /* Datatype Message */
 
-#define DT_VERSION_1     	1
-#define DT_VERSION_2     	2
-#define DT_VERSION_3     	3
-#define DT_VERSION_LATEST 	DT_VERSION_3
+#define DT_VERSION_1  1
+#define DT_VERSION_2  2
+#define DT_VERSION_3  3
+#define DT_VERSION_LATEST DT_VERSION_3
 
-#define DT_OPAQUE_TAG_MAX      256   
+#define DT_OPAQUE_TAG_MAX 256   
 
 typedef enum DT_order_t {
     DT_ORDER_ERROR      = -1,  /*error                                      */
@@ -436,26 +425,22 @@ typedef enum DT_sign_t {
     DT_SGN_ERROR        = -1,  /*error                                      */
     DT_SGN_NONE         = 0,   /*this is an unsigned type                   */
     DT_SGN_2            = 1,   /*two's complement                           */
-
     DT_NSGN             = 2    /*this must be last!                         */
 } DT_sign_t;
 
-
 typedef enum DT_norm_t {
-    DT_NORM_ERROR       = -1,  /*error                                      */
-    DT_NORM_IMPLIED     = 0,   /*msb of mantissa isn't stored, always 1     */
-    DT_NORM_MSBSET      = 1,   /*msb of mantissa is always 1                */
-    DT_NORM_NONE        = 2    /*not normalized                             */
-    /*DT_NORM_NONE must be last */
+    DT_NORM_ERROR       = -1,  	/*error                                      */
+    DT_NORM_IMPLIED     = 0,   	/*msb of mantissa isn't stored, always 1     */
+    DT_NORM_MSBSET      = 1,   	/*msb of mantissa is always 1                */
+    DT_NORM_NONE        = 2    	/*not normalized                             */
+    				/*DT_NORM_NONE must be last */
 } DT_norm_t;
-
 
 typedef enum DT_pad_t {
     DT_PAD_ERROR        = -1,  /*error                                      */
     DT_PAD_ZERO         = 0,   /*always set to zero                         */
     DT_PAD_ONE          = 1,   /*always set to one                          */
     DT_PAD_BACKGROUND   = 2,   /*set to background value                    */
-
     DT_NPAD             = 3    /*THIS MUST BE LAST                          */
 } DT_pad_t;
 
@@ -479,7 +464,6 @@ typedef enum DT_cset_t {
     DT_CSET_RESERVED_15 = 15   /*reserved for later use                     */
 } DT_cset_t;
 
-
 typedef enum DT_str_t {
     DT_STR_ERROR        = -1,  /*error                                      */
     DT_STR_NULLTERM     = 0,   /*null terminate like in C                   */
@@ -500,7 +484,6 @@ typedef enum DT_str_t {
     DT_STR_RESERVED_15  = 15   /*reserved for later use                     */
 } DT_str_t;
 
-
 typedef enum {
     DTR_BADTYPE     =   (-1),   /*invalid Reference Type                     */
     DTR_OBJECT,                 /*Object reference                           */
@@ -508,7 +491,6 @@ typedef enum {
     DTR_INTERNAL,               /*Internal Reference                         */
     DTR_MAXTYPE                 /*highest type (Invalid as true type)        */
 } DTR_type_t;
-
 
 typedef enum DT_class_t {
     DT_NO_CLASS         = -1,  /* error                                      */
@@ -523,22 +505,22 @@ typedef enum DT_class_t {
     DT_ENUM             = 8,   /* enumeration types                          */
     DT_VLEN             = 9,   /* variable-Length types                      */
     DT_ARRAY            = 10,  /* array types                                */
-
     DT_NCLASSES                /* this must be last                          */
 } DT_class_t;
 
-
+/* Forward declaration */
+typedef struct OBJ_type_t OBJ_type_t;
 
 typedef struct DT_atomic_t {
     DT_order_t         order;  /*byte order                                 */
     size_t             prec;   /*precision in bits                          */
     size_t             offset; /*bit position of lsb of value               */
-    DT_pad_t           lsb_pad; /*type of lsb padding                        */
-    DT_pad_t           msb_pad; /*type of msb padding                        */
+    DT_pad_t           lsb_pad; /*type of lsb padding                       */
+    DT_pad_t           msb_pad; /*type of msb padding                       */
     union {
         struct {
-            DT_sign_t  sign;    /*type of integer sign                       */
-        } i;                    /*integer; integer types                     */
+            DT_sign_t  sign;    /*type of integer sign                      */
+        } i;                    /*integer; integer types                    */
 
         struct {
             size_t     sign;   /*bit position of sign bit                   */
@@ -547,14 +529,14 @@ typedef struct DT_atomic_t {
             uint64_t   ebias;  /*exponent bias                              */
             size_t     mpos;   /*position of lsb of mantissa                */
             size_t     msize;  /*size of mantissa                           */
-            DT_norm_t  norm;    /*normalization                              */
-            DT_pad_t   pad;     /*type of padding for internal bits          */
-        } f;                    /*floating-point types                       */
+            DT_norm_t  norm;   /*normalization                              */
+            DT_pad_t   pad;    /*type of padding for internal bits          */
+        } f;                   /*floating-point types                       */
 
         struct {
             DT_cset_t  cset;   /*character set                              */
             DT_str_t   pad;    /*space or null padding of extra bytes       */
-        } s;                    /*string types                               */
+        } s;                   /*string types                               */
 
         struct {
             DTR_type_t  rtype;  /*type of reference stored                   */
@@ -563,11 +545,10 @@ typedef struct DT_atomic_t {
 } DT_atomic_t;
 
 typedef enum DT_sort_t {
-    DT_SORT_NONE       = 0,            /*not sorted                         */
-    DT_SORT_NAME       = 1,            /*sorted by member name              */
-    DT_SORT_VALUE      = 2             /*sorted by memb offset or enum value*/
+    DT_SORT_NONE       = 0,	/*not sorted                         */
+    DT_SORT_NAME       = 1,    	/*sorted by member name              */
+    DT_SORT_VALUE      = 2     	/*sorted by memb offset or enum value*/
 } DT_sort_t;
-
 
 typedef struct DT_enum_t {
     unsigned    nalloc;         /*num entries allocated              */
@@ -577,13 +558,19 @@ typedef struct DT_enum_t {
     char        **name;         /*array of symbol names              */
 } DT_enum_t;
 
+typedef struct DT_cmemb_t {
+    char *name;       		/*name of this member                	*/
+    size_t offset;    		/*offset from beginning of struct    	*/
+    size_t size;  		/*total size: dims * type_size       	*/
+    struct OBJ_type_t *type; 	/*type of this member        		*/
+} DT_cmemb_t;
 
 typedef struct DT_compnd_t {
-    unsigned    nalloc;         /*num entries allocated in MEMB array*/
-    unsigned    nmembs;         /*number of members defined in struct*/
-    DT_sort_t  sorted;         /*how are members sorted?            */
-    ck_bool_t     packed;         /*are members packed together?       */
-    struct DT_cmemb_t  *memb;  /*array of struct members            */
+    unsigned nalloc; 		/*num entries allocated in MEMB array*/
+    unsigned nmembs;         	/*number of members defined in struct*/
+    DT_sort_t sorted;         	/*how are members sorted?            */
+    ck_bool_t packed;         	/*are members packed together?       */
+    struct DT_cmemb_t *memb;  	/*array of struct members            */
 } DT_compnd_t;
 
 typedef enum {
@@ -594,38 +581,44 @@ typedef enum {
 } DT_vlen_type_t;
 
 typedef struct DT_vlen_t {
-    DT_vlen_type_t     type;   /* Type of VL data in buffer */
-    DT_cset_t          cset;   /* For VL string. character set */
-    DT_str_t           pad;    /* For VL string.  space or null padding of
-                                 * extra bytes */
+    DT_vlen_type_t type;	/* Type of VL data in buffer */
+    DT_cset_t cset;   		/* For VL string. character set */
+    DT_str_t pad;    		/* For VL string.  space or null padding of extra bytes */
 } DT_vlen_t;
 
 typedef struct DT_opaque_t {
-    char                *tag;           /*short type description string      */
+    char *tag; 	/*short type description string      */
 } DT_opaque_t;
 
-
 typedef struct DT_array_t {
-    size_t      nelem;          /* total number of elements in array */
-    int         ndims;          /* member dimensionality        */
-    size_t      dim[OBJ_SDS_MAX_RANK];  /* size in each dimension       */
-    int         perm[OBJ_SDS_MAX_RANK]; /* index permutation            */
+    size_t nelem;          	/* total number of elements in array */
+    int ndims;          	/* member dimensionality        */
+    size_t dim[OBJ_SDS_MAX_RANK];  	/* size in each dimension       */
+    int perm[OBJ_SDS_MAX_RANK]; 	/* index permutation            */
 } DT_array_t;
 
 typedef struct DT_shared_t {
-    ck_size_t          fo_count; /* number of references to this file object */
-    DT_class_t         type;   /*which class of type is this?               */
-    size_t             size;   /*total size of an instance of this type     */
-    struct type_t      *parent;/*parent type for derived datatypes          */
+    ck_size_t fo_count; /* number of references to this file object */
+    DT_class_t type;   	/*which class of type is this?               */
+    size_t size;   	/*total size of an instance of this type     */
+    struct OBJ_type_t *parent;	/*parent type for derived datatypes  */
     union {
-        DT_atomic_t    atomic; /* an atomic datatype              */
-        DT_compnd_t    compnd;
-        DT_enum_t      enumer;
-        DT_vlen_t      vlen; 
-        DT_array_t     array;  /* an array datatype                */
+        DT_atomic_t    atomic; 	/* an atomic datatype	*/
+        DT_compnd_t    compnd;	/* compound datatype */
+        DT_enum_t      enumer;	/* enumerated datatype */
+        DT_vlen_t      vlen; 	/* variable length datatype */
+        DT_array_t     array;  	/* an array datatype 	*/
         DT_opaque_t    opaque;
     } u;
 } DT_shared_t;
+
+struct OBJ_type_t {
+    GP_entry_t    ent;     /* entry information if the type is a named type */
+    DT_shared_t   *shared; /* all other information */
+}; /* OBJ_type_t */
+
+
+#ifdef TEMP
 
 typedef struct type_t type_t;
 
@@ -640,6 +633,8 @@ typedef struct DT_cmemb_t {
     size_t              size;           /*total size: dims * type_size       */
     struct type_t       *type;          /*type of this member                */
 } DT_cmemb_t;
+
+#endif
 
 /* 
  * Data Storage -  Fill Value 
@@ -916,13 +911,13 @@ typedef struct OBJ_attr_t OBJ_attr_t;
 
 struct OBJ_attr_t {
     char        	*name;      /* Attribute's name */
-    type_t       	*dt;        /* Attribute's datatype */
+    OBJ_type_t       	*dt;        /* Attribute's datatype */
     size_t      	dt_size;    /* Size of datatype on disk */
     OBJ_space_t       	*ds;        /* Attribute's dataspace */
     size_t      	ds_size;    /* Size of dataspace on disk */
     void        	*data;      /* Attribute data (on a temporary basis) */
     size_t      	data_size;  /* Size of data on disk */
-};
+}; /* OBJ_attr_t */
 
 /* 
  * Object Comment
@@ -1060,9 +1055,10 @@ typedef uint32_t OBJ_refcount_t;        /* Contains # of links to object, if >1 
 #define MSG_TYPES   24              /* # of types of messages            */
 
 typedef struct obj_class_t {
-   int 		id;                 /* header message ID */
-		/* decode method */
-   void 	*(*decode)(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+    int id;        			/* header message ID */ 
+    void *(*decode)(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);	/* Decode method */
+    void *(*copy)(void *, void *); 	/* copy native value	  */
+    ck_err_t (*free)(void *);		/* free main data struct  */
 } obj_class_t;
 
 
@@ -2033,13 +2029,9 @@ typedef struct FS_hdr_t {
     FS_section_class_t *sect_cls; /* Array of section classes for this free list */
 } FS_hdr_t;
 
-
-
 /*
  *  Virtual file drivers
  */
-
-
 #define SEC2_DRIVER	1
 #define MULTI_DRIVER	2
 #define FAMILY_DRIVER	3
@@ -2054,8 +2046,6 @@ struct driver_class_t {
     char        *(*get_fname)(driver_t *file, ck_addr_t logi_addr);
 };
 
-
-
 struct driver_t {
     int			driver_id;      /* driver ID for this file   */
     global_shared_t	*shared;
@@ -2068,7 +2058,6 @@ typedef struct driver_sec2_t {
     	ck_addr_t      	eof;                  /* end of file; current file size */
 	char		*name;		      /* name passed to Fopen */
 } driver_sec2_t;
-
 
 typedef enum driver_mem_t {
     FD_MEM_NOLIST     = -1,                   /* must be negative*/
@@ -2083,13 +2072,11 @@ typedef enum driver_mem_t {
     FD_MEM_NTYPES                             /*must be last*/
 } driver_mem_t;
 
-
 typedef struct driver_multi_fapl_t {
     driver_mem_t  memb_map[FD_MEM_NTYPES];   /* memory usage map           */
     char          *memb_name[FD_MEM_NTYPES]; /* name generators            */
     ck_addr_t     memb_addr[FD_MEM_NTYPES];  /* starting addr per member   */
 } driver_multi_fapl_t;
-
 
 typedef struct driver_multi_t {
     driver_t    pub;            /* public stuff, must be first            */
@@ -2104,7 +2091,6 @@ typedef struct driver_fami_fapl_t {
     ck_hsize_t	memb_size;	/* size of each member 	*/
 } driver_fami_fapl_t;
 
-
 typedef struct driver_fami_t {
     driver_t    pub;            /* public stuff, must be first            */
     driver_fami_fapl_t fa;      /* driver-specific file access properties */
@@ -2115,12 +2101,12 @@ typedef struct driver_fami_t {
     char	*name;		/* name generator printf format */
 } driver_fami_t;
 
-
 /* virtual file drivers */
 driver_t        *FD_open(const char *, global_shared_t *, int);
 ck_err_t        FD_close(driver_t *);
 ck_addr_t       FD_get_eof(driver_t *);
 char     	*FD_get_fname(driver_t *, ck_addr_t);
+void free_driver_fa(global_shared_t *shared);
 
 /* command line option */
 int     	g_verbose_num;
@@ -2131,8 +2117,9 @@ void            usage(char *);
 void            leave(int);
 
 /* for handling hard links */
-table_t         *obj_table;
-int             table_init(table_t **);
+ck_err_t	table_init(table_t **);
+void 		table_free(table_t *table);
+
 
 /* Validation routines */
 ck_err_t        check_superblock(driver_t *);
@@ -2167,11 +2154,11 @@ ck_err_t HF_read(driver_t *, HF_hdr_t *, const void *, void */*out*/, obj_info_t
 ck_err_t SM_get_fheap_addr(driver_t *, unsigned, ck_addr_t *);
 unsigned V_log2_gen(uint64_t);
 
-ck_err_t        FD_read(driver_t *, ck_addr_t, size_t, void */*out*/);
-void      	addr_decode(global_shared_t *, const uint8_t **, ck_addr_t *);
-ck_addr_t 	get_logical_addr(const uint8_t *, const uint8_t *, ck_addr_t);
-int     	debug_verbose(void);
-int     	object_api(void);
+ck_err_t FD_read(driver_t *, ck_addr_t, size_t, void */*out*/);
+void addr_decode(global_shared_t *, const uint8_t **, ck_addr_t *);
+ck_addr_t get_logical_addr(const uint8_t *, const uint8_t *, ck_addr_t);
+int debug_verbose(void);
+int object_api(void);
 
-uint32_t 	checksum_metadata(const void *, ck_size_t, uint32_t);
-uint32_t 	checksum_lookup3(const void *, ck_size_t, uint32_t);
+uint32_t checksum_metadata(const void *, ck_size_t, uint32_t);
+uint32_t checksum_lookup3(const void *, ck_size_t, uint32_t);

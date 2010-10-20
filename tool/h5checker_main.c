@@ -12,15 +12,15 @@
 #include "h5_error.h"
 #include "h5_pline.h"
 
-
 int main(int argc, char **argv)
 {
-    ck_err_t	ret_err = 0;
-    ck_addr_t	ss;
-    ck_addr_t	gheap_addr;
-    FILE 	*inputfd;
-    driver_t	*thefile;
-    global_shared_t	*shared;
+    ck_addr_t ss;
+    ck_addr_t gheap_addr;
+    FILE *inputfd;
+    driver_t *thefile;
+    global_shared_t *shared;
+    table_t *obj_table;
+    ck_err_t ret_err = 0;
 
     /* command line declarations */
     int		argno;
@@ -82,15 +82,24 @@ int main(int argc, char **argv)
 	/* --object=a or --object or -oa */
 	} else if(!strncmp(argv[argno], "--object=", 9)) {
 	    g_obj_addr = strtoull(argv[argno]+9, NULL, 0);
-	    printf("CHECK OBJECT_HEADER is true:object address =%llu\n", g_obj_addr);
-	} else if(!strncmp(argv[argno], "--object", 10)) {
-	    g_obj_addr = CK_ADDR_UNDEF;
+	    if(addr_defined(g_obj_addr))
+		printf("CHECK OBJECT_HEADER is true:object address =%llu\n", g_obj_addr);
+	    else {
+		printf("CHECK OBJECT_HEADER is true: but address in undefined, assume default validation\n");
+		g_obj_addr = CK_ADDR_UNDEF;
+	    }
+	} else if(!strncmp(argv[argno], "--object", 10))
 	    printf("CHECK OBJECT_HEADER is true:no address provided, assume default validation\n");
-	} else if(!strncmp(argv[argno], "-o", 2)) {
+	else if(!strncmp(argv[argno], "-o", 2)) {
 	    if(argv[argno][2]) {
 		s = argv[argno]+2;
 		g_obj_addr = strtoull(s, NULL, 0);
-		printf("CHECK OBJECT_HEADER is true:object address =%llu\n", g_obj_addr);
+		if(addr_defined(g_obj_addr))
+		    printf("CHECK OBJECT_HEADER is true:object address =%llu\n", g_obj_addr);
+		else {
+		    printf("CHECK OBJECT_HEADER is true: but address in undefined, assume default validation\n");
+		    g_obj_addr = CK_ADDR_UNDEF;
+		}
 	    } else {
 		usage(prog_name);
 		leave(EXIT_COMMAND_FAILURE);
@@ -130,7 +139,6 @@ int main(int argc, char **argv)
     }
 
     g_obj_api = FALSE;
-    shared = calloc(1, sizeof(global_shared_t));
     fname = strdup(argv[argno]);
 
     if(g_format_num == FORMAT_ONE_SIX)
@@ -140,12 +148,23 @@ int main(int argc, char **argv)
     else
         printf("...invalid library release version...shouldn't happen.\n");
 
-
-    if(g_obj_addr != CK_ADDR_UNDEF)
+    if(addr_defined(g_obj_addr))
 	printf("at object header address %llu", g_obj_addr);
     printf("\n\n");
 
-	
+    if(table_init(&obj_table) < 0) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing hard link table", -1, NULL);
+	CK_INC_ERR_DONE
+    }
+
+    if((shared = calloc(1, sizeof(global_shared_t))) == NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in allocating memory for shared", -1, NULL);
+	CK_INC_ERR_DONE
+    }
+
+    if(shared && obj_table)
+	shared->obj_table = obj_table;
+
     /* Initially, use the SEC2 driver by default */
     if((thefile = FD_open(fname, shared, SEC2_DRIVER)) == NULL) {
 	error_push(ERR_FILE, ERR_NONE_SEC, 
@@ -154,7 +173,7 @@ int main(int argc, char **argv)
     }
 
     /* superblock validation has to be all passed before proceeding further */
-    if(check_superblock(thefile) != SUCCEED) {
+    if(check_superblock(thefile) < 0) {
 	error_push(ERR_LEV_0, ERR_LEV_0A, 
 	    "Errors found when checking superblock. Validation stopped.", -1, NULL);
 	CK_INC_ERR_DONE
@@ -162,12 +181,13 @@ int main(int argc, char **argv)
 
     /* not using the default driver */
     if(thefile->shared->driverid != SEC2_DRIVER) {
-	if(FD_close(thefile) != SUCCEED) {
+	if(FD_close(thefile) < 0) {
 	    error_push(ERR_FILE, ERR_NONE_SEC, 
 		"Errors in closing input file using the default driver", -1, NULL);
 	    error_print(stderr, thefile);
 	    error_clear();
 	}
+
 	printf("Switching to new file driver...\n");
 	if((thefile = FD_open(fname, shared, shared->driverid)) == NULL) {
 	    error_push(ERR_FILE, ERR_NONE_SEC, "Errors in opening input file. Validation stopped.", -1, NULL);
@@ -175,39 +195,60 @@ int main(int argc, char **argv)
         }
     }
 
+    shared = NULL;
     ss = FD_get_eof(thefile);
-    if((ss == CK_ADDR_UNDEF) || (ss < shared->stored_eoa)) {
+    if(!addr_defined(ss) || ss < thefile->shared->stored_eoa) {
 	error_push(ERR_FILE, ERR_NONE_SEC, 
 	    "Invalid file size or file size less than superblock eoa. Validation stopped.", 
 	    -1, NULL);
 	CK_INC_ERR_DONE
     }
 
-    if((g_obj_addr != CK_ADDR_UNDEF) && (g_obj_addr >= shared->stored_eoa)) {
+    if(addr_defined(g_obj_addr) && g_obj_addr >= thefile->shared->stored_eoa) {
 	error_push(ERR_FILE, ERR_NONE_SEC, 
 	    "Invalid Object header address provided. Validation stopped.", 
 	    -1, NULL);
 	CK_INC_ERR_DONE
     }
 
-    if(table_init(&obj_table) != SUCCEED) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing hard link table", -1, NULL);
-	CK_INC_ERR
-    }
- 
-    if(pline_init_interface() != SUCCEED) {
+    if(pline_init_interface() < 0) {
 	error_push(ERR_LEV_0, ERR_NONE_SEC, "Problems in initializing filters...later validation may be affected", 
 	    -1, NULL);
 	CK_INC_ERR
     }
 
-    if(g_obj_addr != CK_ADDR_UNDEF)
+    /* errors should have been flushed already in check_obj_header() */
+    if(addr_defined(g_obj_addr))
 	check_obj_header(thefile, g_obj_addr, NULL);
     else
-	check_obj_header(thefile, shared->root_grp->header, NULL);
+	check_obj_header(thefile, thefile->shared->root_grp->header, NULL);
 
 done:
-    if(thefile != NULL && FD_close(thefile) != SUCCEED) {
+    if(fname) free(fname);
+
+    if(thefile && thefile->shared)
+	(void) table_free(thefile->shared->obj_table);
+
+    (void) pline_free();
+
+    if(thefile && thefile->shared) {
+	SM_master_table_t *tbl = thefile->shared->sohm_tbl;
+
+	if(thefile->shared->root_grp)
+	    free(thefile->shared->root_grp);
+
+        if(thefile->shared->sohm_tbl) {
+	    SM_master_table_t *tbl = thefile->shared->sohm_tbl;
+    
+            if(tbl->indexes) free(tbl->indexes);
+	    free(tbl);
+	}
+	if(thefile->shared->fa) 
+	    free_driver_fa(thefile->shared);
+	free(thefile->shared);
+    }
+
+    if(thefile != NULL && FD_close(thefile) < 0) {
 	error_push(ERR_FILE, ERR_NONE_SEC, "Errors in closing input file", -1, NULL);
 	CK_INC_ERR
     }
@@ -216,9 +257,7 @@ done:
 	error_print(stderr, thefile);
 	error_clear();
     }
-	
-    if(shared) 
-	free(shared);
+
     if(found_error()){
 	printf("Non-compliance errors found\n");
 	leave(EXIT_FORMAT_FAILURE);

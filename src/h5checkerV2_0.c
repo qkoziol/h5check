@@ -114,30 +114,48 @@ const B2_class_t A_BT2_CORDER[1]={{  /* B-tree class information */
     A_dense_btree2_corder_compare,   /* Record comparison callback */
 }};
 
+static unsigned V_log2_of2(uint32_t);
+
 static ck_err_t check_bt2_hdr(driver_t *, ck_addr_t, const B2_class_t *, B2_t **);
+static void free_bt2_hdr(B2_t *hdr);
+
 static ck_err_t check_bt2_leaf(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned UNUSED, B2_leaf_t **, ck_op_t, void *);
+static void free_bt2_leaf(B2_leaf_t *leaf);
+
 static ck_err_t check_bt2_internal(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned, B2_internal_t **, ck_op_t, void *);
+static void free_bt2_internal(B2_internal_t *internal);
+
 static ck_err_t check_bt2_real(driver_t *, ck_addr_t, B2_shared_t *, unsigned, unsigned, ck_op_t, void *);
+
 static int B2_locate_record(const B2_class_t *, unsigned, ck_size_t *, const uint8_t *, const void *, unsigned *);
 static ck_err_t B2_find(driver_t *, const B2_class_t *, ck_addr_t, void *, B2_found_t, void *);
-static unsigned V_log2_of2(uint32_t);
+
 static ck_err_t HF_dtable_init(HF_dtable_t *);
 static ck_err_t HF_dtable_lookup(const HF_dtable_t *, ck_hsize_t, unsigned *, unsigned *);
 static unsigned HF_dtable_size_to_rows(const HF_dtable_t *, ck_hsize_t);
-static ck_err_t check_iblock_real(driver_t *, ck_addr_t, HF_hdr_t *, unsigned, HF_indirect_t **);
-static ck_err_t HF_man_dblock_locate(driver_t *, HF_hdr_t *, ck_hsize_t, HF_indirect_t **, unsigned *);
-static ck_err_t check_dblock(driver_t *, ck_addr_t, HF_hdr_t *, ck_hsize_t, HF_parent_t *, HF_direct_t **);
+
 static ck_err_t check_iblock(driver_t *, ck_addr_t, HF_hdr_t *, unsigned);
+static ck_err_t check_iblock_real(driver_t *, ck_addr_t, HF_hdr_t *, unsigned, HF_indirect_t **);
+static void free_fheap_iblock(HF_indirect_t *iblock);
+
+static ck_err_t check_dblock(driver_t *, ck_addr_t, HF_hdr_t *, ck_hsize_t, HF_parent_t *, HF_direct_t **);
+static void free_fheap_dblock(HF_direct_t *dblock);
+
 static ck_err_t check_dtable(driver_t *, const uint8_t **, HF_dtable_t *, const uint8_t *, ck_addr_t);
+static ck_err_t check_fheap_hdr(driver_t *, ck_addr_t, HF_hdr_t **);
+static void free_fheap_hdr(HF_hdr_t *hdr);
+
 static ck_err_t HF_tiny_init(HF_hdr_t *);
 static ck_err_t HF_huge_init(driver_t *, HF_hdr_t *);
-static ck_err_t check_fheap_hdr(driver_t *, ck_addr_t, HF_hdr_t **);
+static ck_err_t HF_man_dblock_locate(driver_t *, HF_hdr_t *, ck_hsize_t, HF_indirect_t **, unsigned *);
 static ck_err_t HF_huge_get_obj_info(driver_t *, HF_hdr_t *, const uint8_t *, obj_info_t *);
 static ck_err_t HF_huge_read(driver_t *, HF_hdr_t *, void *, obj_info_t *);
 static ck_err_t HF_man_read(driver_t *, HF_hdr_t *, void *, obj_info_t *);
 static ck_err_t HF_tiny_read(driver_t *, HF_hdr_t *, const uint8_t *, void *);
+
 static ck_err_t SM_type_to_flag(unsigned, unsigned *);
 static ssize_t SM_get_index(const SM_master_table_t *, unsigned);
+
 static ck_err_t check_fshdr(driver_t *, ck_addr_t, HF_hdr_t *);
 static ck_err_t check_fssection(driver_t *, ck_addr_t, FS_hdr_t *);
 
@@ -449,17 +467,17 @@ HF_huge_bt2_filt_indir_found(const void *nrecord, void *op_data)
 static ck_err_t
 check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_t **ret_hdr)
 {
-    int		ret_value=SUCCEED;
     int		version, badinfo, u;
     uint8_t	*buf = NULL, *p;
     ck_size_t	hdr_size;
     uint32_t	stored_chksum, computed_chksum;
     uint8_t 	split_percent, merge_percent;   
     ck_hsize_t	all_nrec;
-    B2_t	*hdr;
-    B2_shared_t	*bt2_shared;
+    B2_t	*hdr = NULL;
+    B2_shared_t	*bt2_shared = NULL;
     uint8_t     *start_buf = NULL;
     ck_addr_t   logical;
+    int		ret_value = SUCCEED;
 
     assert(file);
     assert(addr_defined(bt_hdr_addr));
@@ -468,13 +486,21 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     if(debug_verbose())
 	printf("VALIDATING version 2 btree header at address %llu...\n", bt_hdr_addr);
 
-    hdr = calloc(1, sizeof(B2_t));
-    bt2_shared = calloc(1, sizeof(B2_shared_t));
+    if((hdr = calloc(1, sizeof(B2_t))) == NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree header", bt_hdr_addr, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
+    if((bt2_shared = calloc(1, sizeof(B2_shared_t))) == NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree header", bt_hdr_addr, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
     hdr->shared = bt2_shared;
 
     hdr_size = B2_HEADER_SIZE(file->shared);
     if((buf = malloc(hdr_size)) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: b2 B-tree header", bt_hdr_addr, NULL);
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
@@ -482,7 +508,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     start_buf = buf;
     logical = get_logical_addr(p, start_buf, bt_hdr_addr);
 
-    if(FD_read(file, bt_hdr_addr, hdr_size, buf) == FAIL) {
+    if(FD_read(file, bt_hdr_addr, hdr_size, buf) < 0) {
 	error_push(ERR_FILE, ERR_NONE_SEC, "Unable to read header: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
@@ -491,6 +517,7 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     if(memcmp(p, B2_HDR_MAGIC, (size_t)B2_SIZEOF_MAGIC)) {
 	error_push(ERR_LEV_1, ERR_LEV_1A2, "Invalid signature: v2 B-tree header", bt_hdr_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
+
     } else if(debug_verbose())
 	printf("FOUND version 2 btree header signature.\n");
 
@@ -584,12 +611,31 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
         bt2_shared->nat_off[u] = type->nrec_size * u;
 
 done:
-    if(buf) 
-	free(buf);
-    *ret_hdr = hdr;
+    if(buf) free(buf);
+
+    if(hdr) {
+	if(ret_value == SUCCEED && ret_hdr) 
+	    *ret_hdr = hdr;
+	else
+	    free_bt2_hdr(hdr);
+    }
+
     return(ret_value);
 } /* check_bt2_hdr() */
 
+/* Free memory for version 2 B-tree header */
+static void
+free_bt2_hdr(B2_t *hdr)
+{
+    assert(hdr);
+
+    if(hdr->shared) {
+	if(hdr->shared->nat_off) free(hdr->shared->nat_off);
+	if(hdr->shared->node_info) free(hdr->shared->node_info);
+	free(hdr->shared);
+    }
+    free(hdr);
+} /* free_bt2_hdr() */
 
 /* 
  * Validate version 2 btree leaf node
@@ -600,14 +646,14 @@ done:
 static ck_err_t
 check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned UNUSED depth, B2_leaf_t **ret_leaf, ck_op_t ck_op, void *ck_udata)
 {
-    int		ret_value=SUCCEED;
     int		u;
-    uint8_t	*buf=NULL, *p;
+    uint8_t	*buf = NULL, *p;
     uint32_t	stored_chksum, computed_chksum;
     uint8_t    	*native;
-    B2_leaf_t	*leaf=NULL;
-    uint8_t     *start_buf=NULL;
+    B2_leaf_t	*leaf = NULL;
+    uint8_t     *start_buf = NULL;
     ck_addr_t   logical;
+    int		ret_value = SUCCEED;
 
     assert(file);
     assert(addr_defined(addr));
@@ -616,7 +662,11 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     if(debug_verbose())
 	printf("VALIDATING version 2 btree leaf node at address %llu...\n", addr);
 
-    leaf = calloc(1, sizeof(B2_leaf_t));
+    if((leaf = calloc(1, sizeof(B2_leaf_t))) == NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree leaf node", addr, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
     leaf->shared = bt2_shared;
     leaf->nrec = nrec;
 
@@ -688,13 +738,29 @@ check_bt2_leaf(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
 	CK_SET_RET(FAIL)
     }
 
-    *ret_leaf = leaf;
 done:
-    if(buf) 
-	free(buf);
+    if(buf) free(buf);
+
+    if(leaf) {
+	if(ret_value == SUCCEED && ret_leaf)
+	    *ret_leaf = leaf;
+	else 
+	    free_bt2_leaf(leaf);
+    }
+
     return(ret_value);
 } /* check_bt2_leaf(() */
 
+/* Free memory for v2 B-tree leaf node */
+static void
+free_bt2_leaf(B2_leaf_t *leaf)
+{
+    assert(leaf);
+
+    if(leaf->leaf_native) 
+	free(leaf->leaf_native);
+    free(leaf);
+} /* free_bt2_leaf() */
 
 /*
  * Validate version 2 btree internal node
@@ -705,17 +771,17 @@ done:
 static ck_err_t
 check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned depth, B2_internal_t **ret_internal, ck_op_t ck_op, void *ck_udata)
 {
-    int			ret_value=SUCCEED;
     int			version, badinfo;
     B2_subid_t 		type_id;
     uint32_t		stored_chksum, computed_chksum;
     unsigned		u;
     uint8_t		*buf = NULL, *p;
-    B2_internal_t	*internal=NULL;
+    B2_internal_t	*internal = NULL;
     uint8_t    		*native;
     B2_node_ptr_t	*int_node_ptr;
     uint8_t             *start_buf = NULL;
     ck_addr_t           logical;
+    int			ret_value = SUCCEED;
 
     assert(file);
     assert(addr_defined(addr));
@@ -724,7 +790,11 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     if(debug_verbose())
 	printf("VALIDATING version 2 btree internal node at address %llu...\n", addr);
 
-    internal = calloc(1, sizeof(B2_internal_t));
+    if((internal = calloc(1, sizeof(B2_internal_t))) == NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Memory allocation error: v2 B-tree internal node", addr, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
     internal->shared = bt2_shared;
     internal->nrec = nrec;
     internal->depth = depth;
@@ -775,7 +845,7 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
     native = internal->int_native;
     for(u = 0; u < internal->nrec; u++) {
 	logical = get_logical_addr(p, start_buf, addr);
-	if (bt2_shared->type->decode(file, p, native) < SUCCEED) {
+	if (bt2_shared->type->decode(file, p, native) < 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1A2, "Errors from decoding B-tree record: v2 B-tree internal node", addr, NULL);
 	    CK_SET_RET(FAIL)
 	}
@@ -820,12 +890,32 @@ check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsi
 	CK_SET_RET(FAIL)
     }
 
-    *ret_internal = internal;
 done:
-    if(buf) 
-	free(buf);
+    if(buf) free(buf);
+
+    if(internal) {
+       	if(ret_value == SUCCEED && ret_internal)
+	    *ret_internal = internal;
+	else 
+	    free_bt2_internal(internal);
+    }
+
     return(ret_value);
 } /* check_bt2_internal() */
+
+
+/* Free memory for v2 B-tree internal node */
+static void
+free_bt2_internal(B2_internal_t *internal)
+{
+    assert(internal);
+
+    if(internal->int_native) 
+	free(internal->int_native);
+    if(internal->node_ptrs) 
+	free(internal->node_ptrs);
+    free(internal);
+} /* free_bt2_internal() */
 
 /*
  * Validate version 2 btree leaf or internal nodes
@@ -833,9 +923,9 @@ done:
 static ck_err_t
 check_bt2_real(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned depth, ck_op_t ck_op, void *ck_udata)
 {
-    int			ret_value=SUCCEED;
-    B2_internal_t	*internal;
-    B2_leaf_t		*leaf;
+    int			ret_value = SUCCEED;
+    B2_internal_t	*internal = NULL;
+    B2_leaf_t		*leaf = NULL;
     unsigned		u;
 
     assert(file);
@@ -843,20 +933,26 @@ check_bt2_real(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned
     assert(bt2_shared);
 
     if(depth > 0) { /* internal */
-	if(check_bt2_internal(file, addr, bt2_shared, nrec, depth, &internal, ck_op, ck_udata) < SUCCEED)
+	if(check_bt2_internal(file, addr, bt2_shared, nrec, depth, &internal, ck_op, ck_udata) < 0)
 	    CK_SET_RET_DONE(FAIL)
 
 	/* Iterate through node ptrs */
 	for(u = 0; u < internal->nrec + 1; u++) {
-            if(check_bt2_real(file, internal->node_ptrs[u].addr, bt2_shared, internal->node_ptrs[u].node_nrec, depth-1, ck_op, ck_udata) < SUCCEED)
+            if(check_bt2_real(file, internal->node_ptrs[u].addr, bt2_shared, internal->node_ptrs[u].node_nrec, depth-1, ck_op, ck_udata) < 0)
 		CK_SET_RET_DONE(FAIL)
 	} 
     } else { /* leaf */
-	if(check_bt2_leaf(file, addr, bt2_shared, nrec, depth, &leaf, ck_op, ck_udata) < SUCCEED)
+	if(check_bt2_leaf(file, addr, bt2_shared, nrec, depth, &leaf, ck_op, ck_udata) < 0)
 	    CK_SET_RET_DONE(FAIL)
     }
 
 done:
+    if(internal) 
+	free_bt2_internal(internal);
+
+    if(leaf) 
+	free_bt2_leaf(leaf);
+
     return(ret_value);
 } /* check_bt2_real() */
 
@@ -869,7 +965,7 @@ check_btree2(driver_t *file, ck_addr_t btree_addr, const B2_class_t *type, ck_op
     ck_err_t ret_value = SUCCEED; /* return value */
     ck_err_t ret_err = 0;         /* errors from the current routine */
 
-    B2_t *hdr;
+    B2_t *hdr = NULL;
 
     assert(file);
     assert(addr_defined(btree_addr));
@@ -890,6 +986,8 @@ check_btree2(driver_t *file, ck_addr_t btree_addr, const B2_class_t *type, ck_op
     }
 
 done:
+    if(hdr) free_bt2_hdr(hdr);
+
     if(ret_err && !object_api()) {
         error_print(stderr, file);
         error_clear();
@@ -899,6 +997,7 @@ done:
         ret_value = FAIL;
     return(ret_value);
 } /* check_btree2() */
+
 
 /*
  * version 2 btree support routine to find a certain record
@@ -938,7 +1037,9 @@ B2_find(driver_t *file, const B2_class_t *type, ck_addr_t addr, void *udata, B2_
     unsigned    	depth;                  /* Current depth of the tree */
     int         	cmp;                    /* Comparison value of records */
     unsigned    	idx;                    /* Location of record which matches key */
-    ck_err_t      	ret_value=SUCCEED;
+    B2_internal_t 	*internal = NULL;       /* Pointer to internal node in B-tree */
+    B2_leaf_t 		*leaf = NULL;
+    ck_err_t      	ret_value = SUCCEED;
 
     assert(file);
     assert(type);
@@ -967,10 +1068,9 @@ B2_find(driver_t *file, const B2_class_t *type, ck_addr_t addr, void *udata, B2_
     /* Walk down B-tree to find record or leaf node where record is located */
     cmp = -1;
     while(depth > 0 && cmp != 0) {
-        B2_internal_t *internal;          /* Pointer to internal node in B-tree */
         B2_node_ptr_t next_node_ptr;      /* Node pointer info for next node */
 
-	if(check_bt2_internal(file, curr_node_ptr.addr, bt2_shared, curr_node_ptr.node_nrec, depth, &internal, NULL, NULL) < SUCCEED) {
+	if(check_bt2_internal(file, curr_node_ptr.addr, bt2_shared, curr_node_ptr.node_nrec, depth, &internal, NULL, NULL) < 0) {
             error_push(ERR_LEV_1, ERR_LEV_1A2,
                 "v2 B-tree: Error found in validating btree internal node", addr, NULL);
             CK_SET_RET_DONE(FAIL)
@@ -982,13 +1082,13 @@ B2_find(driver_t *file, const B2_class_t *type, ck_addr_t addr, void *udata, B2_
             idx++;
         if(cmp != 0) {
             /* Get node pointer for next node to search */
-            next_node_ptr = internal->node_ptrs[idx];
+            curr_node_ptr = next_node_ptr = internal->node_ptrs[idx];
 
             /* Set pointer to next node to load */
-            curr_node_ptr = next_node_ptr;
+            /* curr_node_ptr = next_node_ptr; */
         } else {
             /* Make callback: HF_huge_bt2_filt_indir_found() or HF_huge_bt2_indir_found() */
-            if(op && (op)(B2_INT_NREC(internal, bt2_shared, idx), op_data) < SUCCEED) {
+            if(op && (op)(B2_INT_NREC(internal, bt2_shared, idx), op_data) < 0) {
 		error_push(ERR_LEV_1, ERR_LEV_1A2,
 		    "v2 B-tree: Error found from callback of internal node record", addr, NULL);
 		CK_SET_RET_DONE(FAIL)
@@ -997,33 +1097,42 @@ B2_find(driver_t *file, const B2_class_t *type, ck_addr_t addr, void *udata, B2_
 	} 
         /* Decrement depth we're at in B-tree */
         depth--;
+	if(internal) {
+	    free_bt2_internal(internal);
+	    internal = NULL;
+	}
     } /* end while */
 
-    {
-        B2_leaf_t *leaf;
+    if(check_bt2_leaf(file, curr_node_ptr.addr, bt2_shared, curr_node_ptr.node_nrec, depth, &leaf, NULL, NULL) < 0) {
+	error_push(ERR_LEV_1, ERR_LEV_1A2,
+	    "v2 B-tree: Error found in validating btree leaf node", addr, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
 
-	if(check_bt2_leaf(file, curr_node_ptr.addr, bt2_shared, curr_node_ptr.node_nrec, depth, &leaf, NULL, NULL) < SUCCEED) {
-            error_push(ERR_LEV_1, ERR_LEV_1A2,
-                "v2 B-tree: Error found in validating btree leaf node", addr, NULL);
-            CK_SET_RET_DONE(FAIL)
-        }
+    /* Locate record */        
+    cmp = B2_locate_record(bt2_shared->type, leaf->nrec, bt2_shared->nat_off, leaf->leaf_native, udata, &idx);
 
-        /* Locate record */        
-	cmp = B2_locate_record(bt2_shared->type, leaf->nrec, bt2_shared->nat_off, leaf->leaf_native, udata, &idx);
-
-        if(cmp != 0)
+    if(cmp != 0)
+	CK_SET_RET_DONE(FAIL)
+    else {
+	/* Make callback: HF_huge_bt2_filt_indir_found(), HF_huge_bt2_indir_found() */
+	if(op && (op)(B2_LEAF_NREC(leaf, bt2_shared, idx), op_data) < 0) {
+	    error_push(ERR_LEV_1, ERR_LEV_1A2,
+		"v2 B-tree: Error found from callback of leaf node record", addr, NULL);
 	    CK_SET_RET_DONE(FAIL)
-        else {
-            /* Make callback: HF_huge_bt2_filt_indir_found(), HF_huge_bt2_indir_found() */
-	    if(op && (op)(B2_LEAF_NREC(leaf, bt2_shared, idx), op_data) < SUCCEED) {
-		error_push(ERR_LEV_1, ERR_LEV_1A2,
-		    "v2 B-tree: Error found from callback of leaf node record", addr, NULL);
-		CK_SET_RET_DONE(FAIL)
-            } /* end if */
-        } /* end else */
-    } /* end block */
+	} /* end if */
+    } /* end else */
 
 done:
+    if(bt2_hdr) 
+	free_bt2_hdr(bt2_hdr);
+
+    if(internal)
+	free_bt2_internal(internal);
+
+    if(leaf)
+	free_bt2_leaf(leaf);
+
     return(ret_value);
 } /* B2_find() */
 
@@ -1084,10 +1193,9 @@ done:
 static ck_err_t
 check_fssection(driver_t *file, ck_addr_t fssect_addr, FS_hdr_t *fs_hdr)
 {
-
     uint8_t             *buf = NULL;
     ck_addr_t           fshdr_addr;
-    int                 ret_value=SUCCEED;
+    int                 ret_value = SUCCEED;
     size_t              old_sect_size; 
     const uint8_t       *p;           
     uint32_t            stored_chksum, computed_chksum; 
@@ -1213,6 +1321,8 @@ check_fssection(driver_t *file, ck_addr_t fssect_addr, FS_hdr_t *fs_hdr)
     }
 
 done:
+    if(buf) free(buf);
+
     return(ret_value);
 } /* end check_fssection() */
 
@@ -1225,7 +1335,7 @@ check_fshdr(driver_t *file, ck_addr_t fs_addr, HF_hdr_t *fh_hdr)
     ck_size_t           size;           
     const uint8_t       *p;           
     uint32_t            stored_chksum, computed_chksum; 
-    int                 ret_value=SUCCEED;
+    int                 ret_value = SUCCEED;
     uint8_t             *start_buf = NULL;
     ck_addr_t           logical;
     ck_size_t		u, nclasses;
@@ -1361,8 +1471,11 @@ check_fshdr(driver_t *file, ck_addr_t fs_addr, HF_hdr_t *fh_hdr)
     }
 
 done:
-    if(ret_value != SUCCEED && (fs_hdr))
-        free(fs_hdr);
+    if(fs_hdr) {
+	if(fs_hdr->sect_cls) free(fs_hdr->sect_cls);
+	free(fs_hdr);
+    }
+
     return(ret_value);
 } /* check_fshdr() */
 
@@ -1489,9 +1602,9 @@ check_iblock_real(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned
     unsigned		dir_rows;
     unsigned		entry, row, col;
     int			i;
-    int			ret_value=SUCCEED; 
     uint8_t             *start_buf = NULL;
     ck_addr_t           logical;
+    int			ret_value = SUCCEED; 
 
 
     /* Allocate space for the fractal heap indirect block */
@@ -1642,17 +1755,30 @@ printf("iblock->nchildren=%u\n", iblock->nchildren);
     assert((size_t)(p - iblock_buf) == iblock->size);
 
 done:
-    if((ret_value == SUCCEED) && ret_iblock)
-	*ret_iblock = iblock;
-
-    if((ret_value != SUCCEED) && iblock) {
-	if (iblock->ents) free(iblock->ents);
-        if (iblock->filt_ents) free(iblock->filt_ents);
-	free(iblock);
+    if(iblock) {
+	if(ret_value == SUCCEED && ret_iblock)
+	    *ret_iblock = iblock;
+	else
+	    free_fheap_iblock(iblock);
     }
 
     return(ret_value);
 } /* check_iblock_real() */
+
+/* Free memory for fractal heap indirect block */
+static void
+free_fheap_iblock(HF_indirect_t *iblock)
+{
+    assert(iblock);
+
+    if(iblock->ents) 
+	free(iblock->ents);
+
+    if(iblock->filt_ents) 
+	free(iblock->filt_ents);
+
+    free(iblock);
+} /* free_fheap_iblock() */
 
 /*
  *  Locate a direct block in a managed heap
@@ -1664,7 +1790,7 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
     HF_indirect_t 	*iblock;        	/* Pointer to indirect block */
     unsigned 		row, col;               /* Row & column for object's block */
     unsigned 		entry;                  /* Entry of block */
-    ck_err_t 		ret_value=SUCCEED;      /* Return value */
+    ck_err_t 		ret_value = SUCCEED;      /* Return value */
 
 
     assert(file);
@@ -1684,7 +1810,7 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
     /* Set initial indirect block info */
     iblock_addr = fhdr->man_dtable.table_addr;
 
-    if(check_iblock_real(file, iblock_addr, fhdr, fhdr->man_dtable.curr_root_rows, &iblock) < SUCCEED) {
+    if(check_iblock_real(file, iblock_addr, fhdr, fhdr->man_dtable.curr_root_rows, &iblock) < 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, 
 	    "HF_man_dblock_locate():Errors found when validating Fractal Heap Indirect Block", -1, NULL);
 	CK_SET_RET_DONE(FAIL)
@@ -1692,8 +1818,8 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
 
     /* Check for indirect block row */
     while(row >= fhdr->man_dtable.max_direct_rows) {
-        HF_indirect_t 	*new_iblock;   	/* Pointer to new indirect block */
-        unsigned 	nrows;          /* Number of rows in new indirect block */
+        HF_indirect_t 	*new_iblock = NULL;   	/* Pointer to new indirect block */
+        unsigned 	nrows;          	/* Number of rows in new indirect block */
 
         /* Compute # of rows in child indirect block */
         nrows = (V_log2_gen(fhdr->man_dtable.row_block_size[row]) - fhdr->man_dtable.first_row_bits) + 1;
@@ -1709,11 +1835,13 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
         /* Locate child indirect block */
         iblock_addr = iblock->ents[entry].addr;
 
-	if(check_iblock_real(file, iblock_addr, fhdr, nrows, &new_iblock) < SUCCEED) {
+	if(check_iblock_real(file, iblock_addr, fhdr, nrows, &new_iblock) < 0) {
 	    error_push(ERR_NONE_PRIM, ERR_NONE_SEC, 
 		"HF_man_dblock_locate():Errors found when validating Fractal Heap Indirect Block", -1, NULL);
 	    CK_SET_RET_DONE(FAIL)
 	}
+
+	if(iblock) free_fheap_iblock(iblock);
 
         /* Switch variables to use new indirect block */
         iblock = new_iblock;
@@ -1734,9 +1862,15 @@ HF_man_dblock_locate(driver_t *file, HF_hdr_t *fhdr, ck_hsize_t obj_off, HF_indi
     /* Set return parameters */
     if(ret_entry)
         *ret_entry = (row * fhdr->man_dtable.cparam.width) + col;
-    *ret_iblock = iblock;
 
 done:
+    if(iblock) {
+	if(ret_value == SUCCEED && ret_iblock)
+	    *ret_iblock = iblock;
+	else
+	    free_fheap_iblock(iblock);
+    }
+
     return(ret_value);
 } /* HF_man_dblock_locate() */
 
@@ -1831,7 +1965,7 @@ check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t db
         memcpy(dblock->blk, read_buf, dblock->size);
 
         /* Release the read buffer */
-        free(read_buf);
+        if(read_buf) free(read_buf);
     } else {
         /* Read direct block from disk */
 	if (FD_read(file, dblock_addr, dblock->size, dblock->blk) == FAIL) {
@@ -1900,26 +2034,37 @@ check_dblock(driver_t *file, ck_addr_t dblock_addr, HF_hdr_t *hdr, ck_hsize_t db
 #endif
 
 done:
-    if((ret_value != SUCCEED) && dblock) {
-	if(dblock->blk) free(dblock->blk);
-	free(dblock);
-    } 
-    if((ret_value == SUCCEED) && ret_dblock)
-	*ret_dblock = dblock;
+    if(dblock) {
+	if(ret_value == SUCCEED && ret_dblock)
+	    *ret_dblock = dblock;
+	else
+	    free_fheap_dblock(dblock);
+    }
 
     return(ret_value);
 } /* check_dblock() */
 
 
+/* Free memory for fractal heap direct block */
+static void
+free_fheap_dblock(HF_direct_t *dblock)
+{
+    assert(dblock);
+
+    if(dblock->blk)
+	free(dblock->blk);
+
+    free(dblock);
+} /* free_fheap_dblock() */
 
 /* Validating fractal heap: indirect block */
 static ck_err_t
 check_iblock(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned nrows)
 {
-    HF_indirect_t       *iblock = NULL; 	/* Indirect block info */
-    unsigned		entry, row, col;
-    int			ret_value=SUCCEED;     /* Return value */
-    HF_parent_t		par_info;
+    HF_indirect_t *iblock = NULL; 	/* Indirect block info */
+    unsigned entry, row, col;
+    int	ret_value = SUCCEED;     	/* Return value */
+    HF_parent_t	par_info;
     
 
     /* Check arguments */
@@ -1929,7 +2074,7 @@ check_iblock(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned nrow
     if(debug_verbose())
 	printf("VALIDATING the fractal heap indirect block at %llu...\n", iblock_addr);
     
-    if(check_iblock_real(file, iblock_addr, hdr, nrows, &iblock) < SUCCEED) {
+    if(check_iblock_real(file, iblock_addr, hdr, nrows, &iblock) < 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1F,
 	    "Fractal Heap Indirect Block:Error found when checking indirect block", iblock_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
@@ -1953,7 +2098,7 @@ check_iblock(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned nrow
                         dblock_size = row_block_size;
 			par_info.iblock = iblock;
 			par_info.entry = entry;
-		    if (check_dblock(file, iblock->ents[entry].addr, hdr, dblock_size, &par_info, NULL) < SUCCEED) {
+		    if (check_dblock(file, iblock->ents[entry].addr, hdr, dblock_size, &par_info, NULL) < 0) {
 			error_push(ERR_LEV_1, ERR_LEV_1F, 
 			    "Fractal Heap Indirect Block:Errors found when checking direct block", iblock->ents[entry].addr, NULL);
 			CK_SET_RET_DONE(FAIL)
@@ -1965,7 +2110,7 @@ check_iblock(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned nrow
 
                     /* Compute # of rows in next child indirect block to use */
                     child_nrows = HF_dtable_size_to_rows(&hdr->man_dtable, row_block_size);
-		    if (check_iblock(file, iblock->ents[entry].addr, hdr, child_nrows) < SUCCEED) {
+		    if (check_iblock(file, iblock->ents[entry].addr, hdr, child_nrows) < 0) {
 			error_push(ERR_LEV_1, ERR_LEV_1F, 
 			    "Fractal Heap Indirect Block:Errors found when checking indirect block (recursive)",
 			    iblock->ents[entry].addr, NULL);
@@ -1977,9 +2122,7 @@ check_iblock(driver_t *file, ck_addr_t iblock_addr, HF_hdr_t *hdr, unsigned nrow
     } /* end row */
 
 done:
-    if(!ret_value && iblock)
-	/* NEED CHECK:there should more to be freed */
-	free(iblock);
+    if(iblock) free_fheap_iblock(iblock);
 
     return(ret_value);
 } /* check_iblock() */
@@ -1990,7 +2133,7 @@ done:
 static ck_err_t
 check_dtable(driver_t *file, const uint8_t **pp, HF_dtable_t *dtable, const uint8_t *start_buf, ck_addr_t logi_base)
 {   
-    int		ret_value=SUCCEED;
+    int		ret_value = SUCCEED;
     ck_addr_t  	logical;
 
     /* Check arguments */
@@ -2157,11 +2300,10 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
     const uint8_t       *p;          
     uint8_t             heap_flags;     /* Status flags for heap */
     uint32_t            stored_chksum, computed_chksum;
-    int 		ret_value=SUCCEED;
     OBJ_filter_t     	*pline = NULL;
-
     uint8_t             *start_buf = NULL;
     ck_addr_t           logical;
+    int 		ret_value = SUCCEED;
 
 
     /* Check arguments */
@@ -2255,7 +2397,7 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
 
     /* Managed objects' doubling-table info */
     logical = get_logical_addr(p, start_buf, fhdr_addr);
-    if(check_dtable(file, &p, &(hdr->man_dtable), start_buf, fhdr_addr) < SUCCEED) {
+    if(check_dtable(file, &p, &(hdr->man_dtable), start_buf, fhdr_addr) < 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, "Fractal Heap Headers:Errors found when validating doubling table info", logical, NULL);
 	CK_SET_RET(FAIL)
     }
@@ -2376,14 +2518,28 @@ check_fheap_hdr(driver_t *file, ck_addr_t fhdr_addr, HF_hdr_t **ret_hdr)
 	printf("table_addr is undefined\n");
 #endif
 
-    if(ret_value == SUCCEED)
-	*ret_hdr = hdr;
-
 done:
-    if((ret_value != SUCCEED) && (hdr))
-	free(hdr);
+    if(hdr) {
+	if(ret_value == SUCCEED && ret_hdr)
+	    *ret_hdr = hdr;
+	else
+	    free_fheap_hdr(hdr);
+    }
+
     return(ret_value);
 } /* check_fheap_hdr() */
+
+
+/* Free memory for fractal heap header */
+static void
+free_fheap_hdr(HF_hdr_t *hdr)
+{
+    assert(hdr);
+
+    if(hdr->man_dtable.row_block_size)
+	free(hdr->man_dtable.row_block_size);
+    free(hdr);
+} /* free_fheap_hdr() */
 
 /*
  * ENTRY to validation of fractal heap 
@@ -2400,7 +2556,7 @@ check_fheap(driver_t *file, ck_addr_t fheap_addr)
     if(debug_verbose())
 	printf("VALIDATING the fractal heap at logical address %llu...\n", fheap_addr);
 
-    if(check_fheap_hdr(file, fheap_addr, &fhdr) < SUCCEED) {
+    if(check_fheap_hdr(file, fheap_addr, &fhdr) < 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, "Errors found when validating Fractal Heap Header", fheap_addr, NULL);
 	CK_INC_ERR_DONE
     }
@@ -2409,13 +2565,13 @@ check_fheap(driver_t *file, ck_addr_t fheap_addr)
 	if(fhdr->man_dtable.curr_root_rows == 0){ /* table_addr points to root direct block */
 	    par_info.iblock = NULL;
 	    par_info.entry = 0;
-	    if(check_dblock(file, fhdr->man_dtable.table_addr, fhdr, fhdr->man_dtable.cparam.start_block_size, &par_info, NULL) < SUCCEED) {
+	    if(check_dblock(file, fhdr->man_dtable.table_addr, fhdr, fhdr->man_dtable.cparam.start_block_size, &par_info, NULL) < 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
 		"Errors found when validating Fractal Heap Direct Block", fhdr->man_dtable.table_addr, NULL);
 	    CK_INC_ERR_DONE
 	    }
 	} else { /* table_addr points to root indirect block */
-	    if(check_iblock(file, fhdr->man_dtable.table_addr, fhdr, fhdr->man_dtable.curr_root_rows) < SUCCEED) {
+	    if(check_iblock(file, fhdr->man_dtable.table_addr, fhdr, fhdr->man_dtable.curr_root_rows) < 0) {
 		error_push(ERR_LEV_1, ERR_LEV_1F, 
 		    "Errors found when validating Fractal Heap Indirect Block", fhdr->man_dtable.table_addr, NULL);
 		CK_INC_ERR_DONE
@@ -2432,24 +2588,26 @@ check_fheap(driver_t *file, ck_addr_t fheap_addr)
 		fhdr->huge_bt2_addr);
 	if(fhdr->huge_ids_direct) { /* directly accessed */
 	    if(fhdr->filter_len > 0) {
-		if(check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_DIR, NULL, NULL) != SUCCEED)
+		if(check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_DIR, NULL, NULL) < 0)
 		    ++ret_other_err;
 	    } else {
-		if(check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_DIR, NULL, NULL) != SUCCEED)
+		if(check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_DIR, NULL, NULL) < 0)
 		    ++ret_other_err;
 	    }
 	} else { /* indirectly accessed */
 	    if(fhdr->filter_len > 0) {
-		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_INDIR, NULL, NULL) != SUCCEED)
+		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_FILT_INDIR, NULL, NULL) < 0)
 		    ++ret_other_err;
 	    } else {
-		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_INDIR, NULL, NULL) != SUCCEED)
+		if (check_btree2(file, fhdr->huge_bt2_addr, HF_BT2_INDIR, NULL, NULL) < 0)
 		    ++ret_other_err;
 	    }
 	}
     }
 
 done:
+    if(fhdr) free_fheap_hdr(fhdr);
+
     if(ret_err && !object_api()) {
         error_print(stderr, file);
         error_clear();
@@ -2458,22 +2616,20 @@ done:
     if(ret_err || ret_other_err)
         ret_value = FAIL;
 
-    if(fhdr) 
-	free(fhdr);
     return(ret_value);
 } /* check_fheap() */
 
 
-
-/* NEED CHECK:to be done */
 /* ENTRY */
 ck_err_t
 HF_close(HF_hdr_t *fhdr)
 {
     assert(fhdr);
-#ifdef DEBUG
-    printf("Should free the fractal header and its associated data structures\n");
-#endif
+
+    if(fhdr->man_dtable.row_block_size)
+	free(fhdr->man_dtable.row_block_size);
+    free(fhdr);
+
 } /* HF_close() */
 
 /* ENTRY */
@@ -2486,16 +2642,16 @@ HF_open(driver_t *file, ck_addr_t fh_addr)
     assert(file);
     assert(addr_defined(fh_addr));
 
-    if(check_fheap_hdr(file, fh_addr, &fhdr) < SUCCEED) {
+    if(check_fheap_hdr(file, fh_addr, &fhdr) < 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1F, "Errors found when validating Fractal Heap Header", -1, NULL);
 	CK_SET_RET_DONE(NULL)
     }
 
     ret_value = fhdr;
+
 done:
-    if(ret_value == NULL && fhdr) {
+    if(ret_value == NULL && fhdr)
 	(void)HF_close(fhdr);
-    } /* end if */
 
     return(ret_value);
 } /* HF_open() */
@@ -2504,7 +2660,7 @@ done:
 static ck_err_t
 HF_huge_get_obj_info(driver_t *file, HF_hdr_t *fhdr, const uint8_t *id, obj_info_t *objinfo)
 {
-    ck_err_t ret_value=SUCCEED;         /* Return value */
+    ck_err_t ret_value = SUCCEED;         /* Return value */
 
     assert(file);
     assert(fhdr);
@@ -2575,7 +2731,7 @@ HF_get_obj_info(driver_t *file, HF_hdr_t *fhdr, const void *_id, obj_info_t *obj
 {
     const uint8_t 	*id=(const uint8_t *)_id;   	/* Object ID */
     uint8_t 		id_flags;               	/* Heap ID flag bits */
-    ck_err_t 		ret_value=SUCCEED;      	/* Return value */
+    ck_err_t 		ret_value = SUCCEED;      	/* Return value */
     ck_size_t 		enc_obj_size;                	/* Encoded object size */
 
     assert(file);
@@ -2636,7 +2792,7 @@ HF_huge_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
     ck_addr_t 	obj_addr;                 /* Object's address in the file */
     ck_size_t 	obj_size = 0;             /* Object's size in the file */
     unsigned 	filter_mask = 0;           /* Filter mask for object (only used for filtered objects) */
-    ck_err_t 	ret_value=SUCCEED;       /* Return value */
+    ck_err_t 	ret_value = SUCCEED;       /* Return value */
 
     assert(file);
     assert(fhdr);
@@ -2669,12 +2825,13 @@ static ck_err_t
 HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
 {
     HF_direct_t *dblock = NULL;       	/* Pointer to direct block to query */
+    HF_indirect_t *iblock = NULL;        /* Pointer to indirect block */
     HF_parent_t	par_info;
     ck_addr_t 	dblock_addr;            /* Direct block address */
     ck_size_t 	dblock_size;            /* Direct block size */
     ck_size_t 	blk_off;                /* Offset of object in block */
     uint8_t 	*p;                     /* Temporary pointer to obj info in block */
-    ck_err_t 	ret_value=SUCCEED;       /* Return value */
+    ck_err_t 	ret_value = SUCCEED;       /* Return value */
 
     assert(file);
     assert(fhdr);
@@ -2711,15 +2868,13 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
 
        	par_info.iblock = NULL;
 	par_info.entry = 0;
-	if(check_dblock(file, dblock_addr, fhdr, dblock_size, &par_info, &dblock) < SUCCEED) {
+	if(check_dblock(file, dblock_addr, fhdr, dblock_size, &par_info, &dblock) < 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
 		"HF_man_read:Errors found when checking direct block", -1, NULL);
 	    CK_SET_RET_DONE(FAIL)
 	}
     } else {
-        HF_indirect_t *iblock;        /* Pointer to indirect block */
 	unsigned entry;               /* Entry of block */
-
 
         if(HF_man_dblock_locate(file, fhdr, objinfo->u.off, &iblock, &entry) < 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
@@ -2739,13 +2894,11 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
 
 	par_info.iblock = iblock;
 	par_info.entry = entry;
-	if(check_dblock(file, dblock_addr, fhdr, dblock_size, &par_info, &dblock) < SUCCEED) {
+	if(check_dblock(file, dblock_addr, fhdr, dblock_size, &par_info, &dblock) < 0) {
 	    error_push(ERR_LEV_1, ERR_LEV_1F, 
 		"HF_man_read:Errors found when checking direct block", -1, NULL);
 	    CK_SET_RET_DONE(FAIL)
 	}
-
-        iblock = NULL;
     }
 
 #ifdef TEMP
@@ -2780,11 +2933,13 @@ HF_man_read(driver_t *file, HF_hdr_t *fhdr, void *op_data, obj_info_t *objinfo)
     memcpy(op_data, p, objinfo->size);
 
 done:
-    if(dblock && dblock->blk) {
-	free(dblock->blk);
-	free(dblock);
-    }
+    if(dblock) 
+	free_fheap_dblock(dblock);
+    if(iblock) 
+	free_fheap_iblock(iblock);
+
     return(ret_value);
+
 } /* HF_man_read() */
 
 
@@ -2793,7 +2948,7 @@ static ck_err_t
 HF_tiny_read(driver_t *file, HF_hdr_t *fhdr, const uint8_t *id, void *op_data)
 {
     ck_size_t 	enc_obj_size;             /* Encoded object size */
-    ck_err_t 	ret_value=SUCCEED;         /* Return value */
+    ck_err_t 	ret_value = SUCCEED;         /* Return value */
 
     assert(file);
     assert(fhdr);
@@ -2834,7 +2989,7 @@ HF_read(driver_t *file, HF_hdr_t *fhdr, const void *_id, void *obj/*out*/, obj_i
 {
     const uint8_t 	*id = (const uint8_t *)_id; /* Object ID */
     uint8_t 		id_flags;                   /* Heap ID flag bits */
-    ck_err_t 		ret_value=SUCCEED;          /* Return value */
+    ck_err_t 		ret_value = SUCCEED;          /* Return value */
 
     assert(fhdr);
     assert(id);
@@ -3082,7 +3237,7 @@ done:
 static ck_err_t
 SM_type_to_flag(unsigned type_id, unsigned *type_flag)
 {
-    ck_err_t	ret_value=SUCCEED;
+    ck_err_t	ret_value = SUCCEED;
 
     /* Translate the type_id into an SM type flag */
     switch(type_id) {
@@ -3126,7 +3281,7 @@ SM_get_index(const SM_master_table_t *table, unsigned type_id)
     assert(table);
 
     /* Translate the type_id into a SM type flag */
-    if(SM_type_to_flag(type_id, &type_flag) < SUCCEED) {
+    if(SM_type_to_flag(type_id, &type_flag) < 0) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "SM_get_index:Cannot map message type to flag", -1, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
@@ -3154,7 +3309,7 @@ SM_get_fheap_addr(driver_t *f, unsigned type_id, ck_addr_t *fheap_addr)
 {
     SM_master_table_t 	*table=NULL;          /* Shared object master table */
     ssize_t 		index_num;            /* Which index */
-    ck_err_t 		ret_value=SUCCEED;    /* Return value */
+    ck_err_t 		ret_value = SUCCEED;    /* Return value */
 
     assert(f);
     assert(fheap_addr);
@@ -3163,7 +3318,7 @@ SM_get_fheap_addr(driver_t *f, unsigned type_id, ck_addr_t *fheap_addr)
         CK_SET_RET_DONE(FAIL);
 
     /* Look up index for message type */
-    if((index_num = SM_get_index(table, type_id)) < SUCCEED)
+    if((index_num = SM_get_index(table, type_id)) < 0)
         CK_SET_RET_DONE(FAIL);
 
     /* Retrieve heap address for index */

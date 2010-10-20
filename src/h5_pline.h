@@ -1,5 +1,5 @@
 /* Current version of the Z_class_t struct */
-#define 	Z_CLASS_T_VERS 	(1)
+#define	Z_CLASS_T_VERS 	(1)
 
 /* Return values for filter callback function */
 typedef enum Z_cb_return_t {
@@ -151,8 +151,9 @@ typedef enum Z_EDC_t {
 
 /* Function prototypes */
 ck_err_t pline_init_interface(void);
-ck_err_t filter_pline(const OBJ_filter_t *, unsigned, unsigned */*in,out*/,
-    Z_EDC_t, Z_cb_t, ck_size_t */*in,out*/,
-    ck_size_t */*in,out*/, void **/*in,out*/);
+void pline_free(void);
+ck_err_t filter_pline(const OBJ_filter_t *, unsigned, unsigned * /*in,out*/,
+    Z_EDC_t, Z_cb_t, ck_size_t * /*in,out*/,
+    ck_size_t * /*in,out*/, void ** /*in,out*/);
 
 

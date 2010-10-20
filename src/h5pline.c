@@ -11,26 +11,23 @@
 
 #include <math.h>
 
-
 /*
- * The filter code is ported mainly from the library
+ * The filter code is copied mainly from the library
  */
-
-static ck_size_t           Z_table_alloc_g = 0;
-static ck_size_t           Z_table_used_g = 0;
-static Z_class_t      	   *Z_table_g = NULL;
+ck_size_t Z_table_alloc_g = 0;
+ck_size_t Z_table_used_g = 0;
+Z_class_t *Z_table_g = NULL;
 
 static ck_err_t pline_register(const Z_class_t *);
 static int filter_find_idx(Z_filter_t);
 
-
 static ck_err_t
 pline_register(const Z_class_t *cls)
 {
-    ck_size_t 	i;
-    ck_err_t   	ret_value=SUCCEED;
+    ck_size_t i;
+    ck_err_t ret_value = SUCCEED;
 
-    assert (cls);
+    assert(cls);
 
     if((cls->id < 0) || (cls->id > Z_FILTER_MAX)) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC,
@@ -39,12 +36,12 @@ pline_register(const Z_class_t *cls)
     }
 
     for(i = 0; i < Z_table_used_g; i++)
-        if (Z_table_g[i].id == cls->id)
+        if(Z_table_g[i].id == cls->id)
             break;
 
     /* Filter not already registered */
     if(i >= Z_table_used_g) {
-        if (Z_table_used_g >= Z_table_alloc_g) {
+        if(Z_table_used_g >= Z_table_alloc_g) {
             ck_size_t n = MAX(Z_MAX_NFILTERS, 2*Z_table_alloc_g);
             Z_class_t *table = realloc(Z_table_g, n*sizeof(Z_class_t));
             if(!table) {
@@ -71,7 +68,7 @@ done:
 ck_err_t
 pline_init_interface(void)
 {
-    ck_err_t    ret_value=SUCCEED;    
+    ck_err_t ret_value = SUCCEED;    
 
     if(debug_verbose())
         printf("INITIALIZING filters ...\n");
@@ -120,8 +117,13 @@ pline_init_interface(void)
 
 done:
     return(ret_value);
-}
+} /* pline_init_interface() */
 
+void
+pline_free(void)
+{
+    if(Z_table_g) free(Z_table_g);
+}
 
 #ifdef HAVE_FILTER_DEFLATE
 /* 
