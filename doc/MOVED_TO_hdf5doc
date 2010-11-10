@@ -1,0 +1,8 @@
+
+The h5check reference manual entry is now maintained in the hdf5doc repository:
+
+     hdf5doc/<trunk or branch>/html/RM/Tools/h5check.html
+
+All future updates should be made there, NOT in the h5check/ repository.
+
+
