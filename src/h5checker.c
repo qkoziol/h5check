@@ -1,15 +1,16 @@
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "h5_check.h"
 #include "h5_error.h"
 
-/* for handling hard links */
-static int table_search(table_t *, ck_addr_t);
-static ck_err_t table_insert(table_t *, ck_addr_t, int);
+int opt_err;     	/* getoption prints errors if this is on    */
+int opt_ind = 1; 	/* token pointer                            */
+const char *opt_arg; 	/* flag argument (or value)                 */
 
-/* for handling symbol table names */
-static int name_list_init(name_list_t **name_list);
-static ck_bool_t name_list_search(name_list_t *nl, char *symname);
-static ck_err_t name_list_insert(name_list_t *nl, char *symname);
-static void name_list_dest(name_list_t *nl);
+/* For handling table of objects: hard link or external linked files */
+static ck_bool_t table_search(table_t *tbl, void *_id, int type);
 
 /* Validation routines */
 static ck_err_t check_btree(driver_t *, ck_addr_t, unsigned, uint8_t *, name_list_t *, void *, void *);
@@ -35,6 +36,7 @@ static int find_in_ohdr(driver_t *, OBJ_t *, int);
 static void *OBJ_shared_read(driver_t *, OBJ_shared_t *, const obj_class_t *);
 static void *OBJ_shared_decode(driver_t *, const uint8_t *, const obj_class_t *, const uint8_t *, ck_addr_t);
 static ck_err_t decode_validate_messages(driver_t *, OBJ_t *);
+static ck_err_t validate_ext_file(char *ext_fname);
 
 
 /*
@@ -490,10 +492,13 @@ done:
 } /* vector_cmp() */
 
 /*
- *  For handling hard links
+ * For handling table of objects
+ *	Hard link or External linked files
  */
+
+/* Initialize storage for the table */
 ck_err_t
-table_init(table_t **obj_table)
+table_init(table_t **obj_table, int type)
 {
     int 	i;
     table_t	*tb;
@@ -505,14 +510,9 @@ table_init(table_t **obj_table)
     }
     tb->size = 20;
     tb->nobjs = 0;
-    if((tb->objs = malloc(tb->size*sizeof(obj_t))) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Could not malloc() objs", -1, NULL);
+    if((tb->objs = calloc(1, tb->size*sizeof(obj_t))) == NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Could not calloc() obj_table", -1, NULL);
 	CK_SET_RET_DONE(FAIL);
-    }
-
-    for (i = 0; i < tb->size; i++) {
-	tb->objs[i].objno = 0;
-	tb->objs[i].nlink = 0;
     }
     *obj_table = tb;
 
@@ -520,29 +520,48 @@ done:
     return(ret_value);
 } /* table_init() */
 
-static int
-table_search(table_t *obj_table, ck_addr_t obj_id)
+/* Search for an object in the table */
+static ck_bool_t
+table_search(table_t *obj_table, void *_id, int type)
 {
     int	i;
-    ck_err_t ret_value;
+    stat_info_t *id;
+    ck_bool_t ret_value = FALSE;
 
     if (obj_table == NULL)
-	CK_SET_RET_DONE(FAIL)
+	CK_SET_RET_DONE(FALSE)
 
     for (i = 0; i < obj_table->nobjs; i++) {
-	if(obj_table->objs[i].objno == obj_id) /* FOUND */
-	    CK_SET_RET_DONE(i)
+
+	switch(type) {
+	    case TYPE_HARD_LINK:
+		if(obj_table->objs[i].u.addr == *(ck_addr_t *)_id) /* FOUND */
+		    CK_SET_RET_DONE(TRUE)
+		break;
+
+	    case TYPE_EXT_FILE:
+		id = (stat_info_t *)_id;
+		if(obj_table->objs[i].u.stat.st_ino == id->st_ino &&
+		   obj_table->objs[i].u.stat.st_dev == id->st_dev &&
+		   obj_table->objs[i].u.stat.st_mode == id->st_mode)
+		    CK_SET_RET_DONE(TRUE)
+		break;
+
+	    default:
+		break;
+	}
     }
-    ret_value = FAIL;
 
 done:
     return(ret_value);
 } /* table_search() */
 
-static ck_err_t
-table_insert(table_t *obj_table, ck_addr_t objno, int nlink)
+/* Insert an object into the table */
+ck_err_t
+table_insert(table_t *obj_table, void *_id, int type)
 {
     int	i;
+    stat_info_t *id;
     ck_err_t ret_value = SUCCEED;
 
     if (obj_table == NULL)
@@ -555,19 +574,46 @@ table_insert(table_t *obj_table, ck_addr_t objno, int nlink)
     }
 
     for (i = obj_table->nobjs; i < obj_table->size; i++) {
-	obj_table->objs[i].objno = 0;
-	obj_table->objs[i].nlink = 0;
+	switch(type) {
+	    case TYPE_HARD_LINK:
+		obj_table->objs[i].u.addr = CK_ADDR_UNDEF;
+		break;
+
+	    case TYPE_EXT_FILE:
+		obj_table->objs[i].u.stat.st_dev = 0;
+		obj_table->objs[i].u.stat.st_ino = 0;
+		obj_table->objs[i].u.stat.st_mode = 0;
+		break;
+
+	    default:
+		break;
+	}
     }
 
     i = obj_table->nobjs++;
-    obj_table->objs[i].objno = objno;
-    obj_table->objs[i].nlink = nlink;
+    switch(type) {
+	case TYPE_HARD_LINK:
+	    obj_table->objs[i].u.addr = *(ck_addr_t *)_id;
+	    break;
+
+	case TYPE_EXT_FILE:
+		id = (stat_info_t *)_id;
+		obj_table->objs[i].u.stat.st_dev = id->st_dev;
+		obj_table->objs[i].u.stat.st_ino = id->st_ino;
+		obj_table->objs[i].u.stat.st_mode = id->st_mode;
+	    break;
+
+	default:
+	    CK_SET_RET_DONE(FAIL)
+	    break;
+    }
 
 done:
     return(ret_value);
 
 } /* table_insert() */
 
+/* Free memory for the table */
 void 
 table_free(table_t *table )
 {
@@ -578,11 +624,12 @@ table_free(table_t *table )
     }
 } /* table_free() */
 
-
 /* 
- * For handling symbol table names 
+ * For handling table of names 
  */
-static ck_err_t
+
+/* Initialize storage for the table */
+ck_err_t
 name_list_init(name_list_t **name_list)
 {
     name_list_t *nl;
@@ -598,11 +645,15 @@ done:
     return(ret_value);
 } /* name_list_init() */
 
-static ck_bool_t
+/* Search for a name in the table */
+ck_bool_t
 name_list_search(name_list_t *nl, char *symname)
 {
     name_t *ptr;
     ck_bool_t ret_value = FALSE;
+
+    if(nl == NULL)
+	CK_SET_RET_DONE(FALSE)
 
     if(nl->head == NULL && nl->tail == NULL) /* empty */
 	CK_SET_RET_DONE(FALSE)
@@ -619,35 +670,43 @@ done:
     return(ret_value);
 } /* name_list_search() */
 
-static ck_err_t
-name_list_insert(name_list_t *nl, char *symname)
+/* Insert a name into the table */
+ck_err_t
+name_list_insert(name_list_t *nl, char *name)
 {
-    name_t *name;
+    name_t *name_ptr;
     ck_err_t ret_value = SUCCEED;
 
-    if((name = malloc(sizeof(name_t))) == NULL)
+    if(nl == NULL)
+	CK_SET_RET_DONE(FAIL)
+	    
+    if((name_ptr = malloc(sizeof(name_t))) == NULL)
 	CK_SET_RET_DONE(FAIL)
 
-    name->name = strdup(symname);
-    name->next = NULL;
+    name_ptr->name = strdup(name);
+    name_ptr->next = NULL;
 
     if(nl->head == NULL && nl->tail == NULL) /* empty */
-	nl->head = nl->tail = name;
+	nl->head = nl->tail = name_ptr;
     else {
-	nl->tail->next = name;
-	nl->tail = name;
+	nl->tail->next = name_ptr;
+	nl->tail = name_ptr;
     }
 
 done:
     return(ret_value);
 } /* name_list_insert() */
 
-static void
+/* Free memory for the table */
+void
 name_list_dest(name_list_t *nl)
 {
     name_t *ptr;
 
     assert(nl);
+
+    if(nl == NULL) /* empty */
+	return;
 
     if(nl->head == NULL && nl->tail == NULL) { /* empty */
 	free(nl);
@@ -923,14 +982,19 @@ sec2_get_fname(driver_t *file, ck_addr_t UNUSED logi_addr)
 } /* sec2_get_fname() */
 
 static ck_err_t
-sec2_close(driver_t *_file)
-{
+sec2_close(driver_t *_file) {
     int	ret = SUCCEED;
-    driver_sec2_t *file=(driver_sec2_t*)_file;
+
+    driver_sec2_t *file = (driver_sec2_t*)_file;
+
+    assert(file);
  
     ret = close(file->fd);
+
     if(file->name) free(file->name);
+
     if(file->pub.cls) free((void *)file->pub.cls);
+
     free(file);
 
     return(ret);
@@ -2332,7 +2396,9 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
 
 	default:
 	    /* shouldn't come here */
-	    printf("OBJ_dt_decode_helper: datatype class not handled yet...type=%d\n", dt->shared->type);
+	    error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+		"Datatype Message: datatype class not handled yet", logical, NULL);
+	       CK_SET_RET_DONE(FAIL)
     }
 
 done:
@@ -3031,10 +3097,8 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 			    logical, &badinfo);
 			CK_SET_RET(FAIL)
 		    }
-/*
-printf("External link name = %s\n", obj_name);
-printf("External link file= %s\n", file_name);
-*/
+/* printf("External link name = %s\n", obj_name); */
+/* printf("External link file= %s\n", file_name); */
 
 		} else
 		    p += len;
@@ -5459,7 +5523,8 @@ check_superblock(driver_t *file)
 	    error_print(stderr, file);
 	    error_clear();
 	}
-	printf("ASSUMING super block at physical address 0.\n");
+	if(debug_verbose())
+	    printf("ASSUMING super block at physical address 0.\n");
 	lshared->super_addr = 0;
     }
 	
@@ -5495,8 +5560,10 @@ check_superblock(driver_t *file)
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:Version number should be 0, 1 or 2", logical, &badinfo);
 	    CK_SET_RET(FAIL)
 	}
-    } else
-	printf("Invalid library version...shouldn't happen\n");
+    } else {
+	error_push(ERR_FILE, ERR_NONE_SEC, "Superblock: Invalid library version", LOGI_SUPER_BASE, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
 
     logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
 
@@ -5668,6 +5735,7 @@ check_superblock(driver_t *file)
 	}
 	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
 	if(gp_ent_decode(lshared, (const uint8_t **)&p, root_ent/*out*/) < 0) {
+	    if(root_ent) free(root_ent);
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Unable to read root symbol table entry", logical, NULL);
 	    CK_SET_RET_DONE(FAIL)
 	}
@@ -5948,8 +6016,10 @@ check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *
     if (gp_ent_decode_vec(file->shared, (const uint8_t **)&p, sym->entry, sym->nsyms) < 0)
 	CK_INC_ERR_DONE
 
-    if(!heap_chunk)
-	printf("Warning: Symbol table node: invalid heap address--name not validated\n");
+    if(!heap_chunk) {
+	if(debug_verbose())
+	    printf("Warning: Symbol table node: invalid heap address--name not validated\n");
+    }
 
     /* validate symbol table group entries here  */
     prev_ent = sym->entry;
@@ -5957,11 +6027,11 @@ check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *
 	char *s1, *s2, *sym_name;
 
 	sym_name = (char *)(heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off);
-	if(name_list_search(name_list, sym_name)) {
+	if(name_list && name_list_search(name_list, sym_name)) {
 	    error_push(ERR_LEV_1, ERR_LEV_1C, "Symbol table node entry:Duplicate name", sym_addr, NULL);
 		CK_INC_ERR
 	} else
-	    if(name_list_insert(name_list, sym_name) < 0) {
+	    if(name_list && name_list_insert(name_list, sym_name) < 0) {
 		error_push(ERR_LEV_1, ERR_LEV_1C, "Symbol table node entry:can't insert name", sym_addr, NULL);
 		CK_INC_ERR
 	    }
@@ -6131,8 +6201,10 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
     }
 
     /* SNOD */
-    if(!nodetype && !heap_chunk)
-	printf("Warning: Version 1 B-tree: invalid heap address--name not validated\n");
+    if(!nodetype && !heap_chunk) {
+	if(debug_verbose())
+	    printf("Warning: Version 1 B-tree: invalid heap address--name not validated\n");
+    }
 
     p = start_buf = buffer;
 		
@@ -6188,7 +6260,7 @@ done:
     }
 
     if(ret_err || ret_other_err)
-	ret_value = FALSE;
+	ret_value = FAIL;
 
     return(ret_value);
 } /* check_btree() */
@@ -6492,10 +6564,6 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
 	    p += 4; /*reserved*/
 	    DECODE_LENGTH (file->shared, p, heap->obj[idx].size);
 	    heap->obj[idx].begin = begin;
-#ifdef DEBUG
-	    if(idx > 0)
-		printf("global:%s\n", p);
-#endif
             /*
              * The total storage size includes the size of the object header
              * and is zero padded so the next object header is properly
@@ -6556,6 +6624,8 @@ G_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_udata)
     HF_hdr_t *fhdr = (HF_hdr_t *)_ck_udata;
     ck_err_t ret_value = SUCCEED;      /* Return value */
     obj_info_t objinfo;
+    char *full_name = NULL;
+    char *tmp_name = NULL;
     void *mesg = NULL;
     uint8_t *mesg_ptr = NULL;
 
@@ -6582,11 +6652,99 @@ G_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_udata)
 	error_push(ERR_LEV_2, ERR_LEV_2A, "Dense msg cb:Errors found when decoding message from fractal heap", fhdr->heap_addr, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
-    /* printf("External link file (from fractal heap)...to be implemented.\n"); */
+
+    if(mesg) {
+	OBJ_link_t *lnk = (OBJ_link_t *)mesg;
+
+	if(addr_defined(lnk->u.hard.addr) && lnk->type == L_TYPE_HARD) {
+	    /* printf("Hard link encountered in FH CB =%llu\n", lnk->u.hard.addr); */
+	    if(check_obj_header(file, lnk->u.hard.addr, NULL) < 0) {
+		error_push(ERR_LEV_2, ERR_LEV_2A, "Dense msg cb:Errors found when checking object header for hard link", fhdr->heap_addr, NULL);
+		CK_SET_RET_DONE(FAIL)
+	    }
+	} else if(lnk->type == L_TYPE_EXTERNAL && g_follow_ext) {
+	    char *ext_fname, *obj_name;
+	    uint8_t *s;
+	    ck_size_t fname_len, obj_len;
+	    struct stat statbuf;
+	    stat_info_t stat_info;
+	    int ret_stat = FAIL;
+
+	    if(debug_verbose())
+		printf("External link encountered FH CB\n");
+	    s = lnk->u.ud.udata;
+	    s++;
+	    ext_fname = (char *)s;
+	    fname_len = strlen((const char *)ext_fname) + 1;
+	    obj_name = (char *)s + fname_len;
+	    obj_len = strlen((const char *)obj_name) + 1;
+
+	    /* See note in decode_validate_messages(): LINK_ID */
+	    tmp_name = strdup(ext_fname);
+	    if(CHECK_ABSOLUTE(ext_fname)) { /* absolute path name */
+		if((ret_stat = stat(ext_fname, &statbuf)) < 0) {
+		    char *ptr = NULL;
+
+		    /* get last component of file_name */
+		    GET_LAST_DELIMITER(ext_fname, ptr)
+		    assert(ptr);
+		    strcpy(tmp_name, ++ptr);
+		} else
+		    full_name = strdup(ext_fname);
+	    }
+
+	    /* relative path name */
+	    if(ret_stat < 0)
+		if(file->shared->extpath != NULL) {
+		    if(build_name(file->shared->extpath, tmp_name, &full_name/*out*/) < 0) {
+			error_push(ERR_LEV_1, ERR_LEV_1C, "Error in building external linked path name (FH CB)", -1, NULL);
+			CK_SET_RET_DONE(FAIL)
+		    }
+		    ret_stat = stat(full_name, &statbuf);
+		}
+
+	    if(ret_stat < 0) {
+		if((ret_stat = stat(tmp_name, &statbuf)) < 0) {
+		    if(debug_verbose())
+			printf("The external linked file (FH CB) does not exist...%s, %s\n", ext_fname, obj_name);
+		    CK_SET_RET_DONE(SUCCEED)
+		}
+		full_name = strdup(tmp_name);
+	    }
+	    assert(ret_stat >= 0);
+
+	    stat_info.st_dev = statbuf.st_dev;
+	    stat_info.st_ino = statbuf.st_ino;
+	    stat_info.st_mode = statbuf.st_mode;
+		  
+	    if(g_ext_tbl && table_search(g_ext_tbl, &stat_info, TYPE_EXT_FILE)) {
+		if(debug_verbose())
+		    printf("The external linked file (FH CB) is already or being validated...%s, %s\n", ext_fname, obj_name);
+		CK_SET_RET_DONE(SUCCEED)
+	    } else {
+		if(debug_verbose())
+		    printf("Validating external linked file (FH CB)...%s, %s\n", ext_fname, obj_name);
+
+		if(g_ext_tbl && table_insert(g_ext_tbl, &stat_info, TYPE_EXT_FILE) < 0) {
+		    error_push(ERR_LEV_1, ERR_LEV_1C, "Error in inserting external linked file to table (FH CB)", -1, NULL);
+		    CK_SET_RET_DONE(FAIL)
+		} else if(validate_ext_file(full_name) < 0) {
+		    error_push(ERR_LEV_1, ERR_LEV_1C, "Error in validating external linked file (FH CB)", -1, NULL);
+		    CK_SET_RET_DONE(FAIL)
+		}
+	    }
+	}  /* L_TYPE_EXTERNAL */
+	/*
+	else
+	    printf("link type encountered in FH CB: %d\n", lnk->type);
+	*/
+    } /* mesg */
 
 done:
     if(mesg) message_type_g[OBJ_LINK_ID]->free(mesg);
     if(mesg_ptr) free(mesg_ptr);
+    if(tmp_name) free(tmp_name);
+    if(full_name) free(full_name);
 
     return(ret_value);
 } /* G_dense_ck_fh_msg_cb() */
@@ -6608,9 +6766,10 @@ A_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_udata)
     obj_info_t objinfo;			/* Fractal heap ID info */
     ck_err_t ret_value = SUCCEED;      	/* Return value */
 
-    if(rec->flags & OBJ_MSG_FLAG_SHARED)
-	printf("Warning: Callback for shared indexed attributes not implemented yet...\n");
-    else {
+    if(rec->flags & OBJ_MSG_FLAG_SHARED) {
+	if(debug_verbose())
+	    printf("Warning: Callback for shared indexed attributes not implemented yet...\n");
+    } else {
 	assert(fhdr);
 	assert(fhdr->man_dtable.table_addr);
 
@@ -6638,11 +6797,13 @@ done:
     return(ret_value);
 } /* A_dense_ck_fh_msg_cb() */
 
+#define FREE_SPACE(tmp_name, full_name)		\
+	if(tmp_name) free(tmp_name);		\
+	if(full_name) free(full_name);	
 
 /*
  * Call routines to decode annd validate messages
  * Do further validation needed for some messages
- * Both version 1 & 2
  */
 static ck_err_t
 decode_validate_messages(driver_t *file, OBJ_t *oh)
@@ -6660,8 +6821,7 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
     uint8_t	*heap_chunk;
     unsigned	ndims = 0, local_ndims = 0;
     ck_addr_t	btree_addr;
-    name_list_t *name_list;
-    name_list_t *ext_name_list;
+    name_list_t *sym_tbl;
 
     assert(file);
     assert(oh);
@@ -6742,13 +6902,17 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 	    {
 		OBJ_stab_t *stab = (OBJ_stab_t *)mesg;
 
-		name_list_init(&name_list);
+		if(name_list_init(&sym_tbl) < 0) {
+		    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing symbol table", -1, NULL);
+		    CK_INC_ERR
+		}
 		if(check_lheap(file, stab->heap_addr, &heap_chunk) < 0)
 		    ++ret_other_err;
-		if(check_btree(file, stab->btree_addr, ndims, heap_chunk, name_list, NULL, NULL) < 0)
+		if(check_btree(file, stab->btree_addr, ndims, heap_chunk, sym_tbl, NULL, NULL) < 0)
 		    ++ret_other_err;
 
-		name_list_dest(name_list);
+		if(sym_tbl)
+		    name_list_dest(sym_tbl);
 		if(heap_chunk) free(heap_chunk);
 	    }
 	    break;
@@ -6795,10 +6959,6 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 		    break;
 
 		if(addr_defined(shm->addr)) {
-#ifdef DEBUG
-		    printf("The SOHM table address from message is %llu; num of indices=%u\n",
-			shm->addr, shm->nindexes);
-#endif
 		    if((check_SOHM(file, shm->addr, shm->nindexes)) < 0)
 			++ret_other_err;
 		}
@@ -6845,133 +7005,105 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 	    case OBJ_LINK_ID:
 	    {
 		OBJ_link_t *lnk = (OBJ_link_t *)mesg;
-		driver_t *thefile;
-		global_shared_t *shared;
-		table_t *obj_table;
-		ck_addr_t ss;
 
 		if(addr_defined(lnk->u.hard.addr) && lnk->type == L_TYPE_HARD) {
+		    /* printf("Hard link encountered in LINK message\n"); */
 		    if(check_obj_header(file, lnk->u.hard.addr, NULL) < 0)
 			++ret_other_err;
-		} else if(lnk->type == L_TYPE_EXTERNAL) {
-
+		} else if(lnk->type == L_TYPE_EXTERNAL && g_follow_ext) {
+		    char *ext_fname, *obj_name;
 		    uint8_t *s; 
-		    char *file_name, *obj_name;
 		    ck_size_t fname_len, obj_len;
+		    struct stat statbuf;
+		    stat_info_t stat_info;
+		    char *full_name = NULL;
+		    char *tmp_name = NULL;
+		    int ret_stat = FAIL;
 
-		    /* printf("External link file (from link msg)...to be implemented.\n"); */
-
+		    if(debug_verbose())
+			printf("External link encountered (LINK msg)\n");
 		    s = lnk->u.ud.udata;
 		    s++;
-		    file_name = (char *)s;
-		    fname_len = strlen((const char *)file_name) + 1;
+		    ext_fname = (char *)s;
+		    fname_len = strlen((const char *)ext_fname) + 1;
 		    obj_name = (char *)s + fname_len;
 		    obj_len = strlen((const char *)obj_name) + 1;
-/* printf("External link name = %s\n", obj_name); */
-/* printf("External link file= %s\n", file_name); */
 
-#ifdef WORKINGONIT
-name_list_init(&g_ext_tbl); /* file in ./ or absolute path?? */
-		    name_list_search(g_ext_tbl);
-		    name_list_insert(g_ext_tbl);
-/* I tink I need to maintain table so that no dulicate files are validated */
-if(table_init(&obj_table) < 0) {
-        error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing hard link table", -1, NULL);
-        CK_INC_ERR_DONE
-}
+		    tmp_name = strdup(ext_fname);
+		    /* 
+		     * Duplicate tmp_name with ext_fname
+		     * Then try:
+		     * 1) If absolute pathname, stat that
+		     * 2) If absolute pathname but it does not exist, last component to tmp_name
+		     * 3) tmp_name = relative pathname or last component of absolute patname
+		     * 4) full_name = extpath & tmp_name or
+		     * 5) full_name = tmp_name if no extpath
+		     * Note: extpath is formulated--
+		     *		if parent file is absolute, get its full path with filename
+		     *		if parent is not absolute, getcwd + relative path of parent file without filename
+		     *
+		     * If full_name does not exist, try ext_fname
+		     */
+		    if(CHECK_ABSOLUTE(ext_fname)) { /* absolute path name */
+			if((ret_stat = stat(ext_fname, &statbuf)) < 0) {
+			    char *ptr = NULL;
 
-if((shared = calloc(1, sizeof(global_shared_t))) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in allocating memory for shared", -1, NULL);
-	CK_INC_ERR_DONE
-}
+			    /* get last component of file_name */
+			    GET_LAST_DELIMITER(ext_fname, ptr)
+			    assert(ptr);
+			    strcpy(tmp_name, ++ptr);
+			} else
+			    full_name = strdup(ext_fname);
+		    }
 
-if(shared && obj_table)
-	shared->obj_table = obj_table;
+		     /* relative path name */
+		    if(ret_stat < 0)
+			if(file->shared->extpath != NULL) {
+			    if(build_name(file->shared->extpath, tmp_name, &full_name/*out*/) < 0) {
+				FREE_SPACE(tmp_name, full_name)
+				printf("External linked file (LINK msg)-- error in building external linked path name\n");
+				continue; 
+			    }
+			    ret_stat = stat(full_name, &statbuf);
+			}
 
-    /* Initially, use the SEC2 driver by default */
-if((thefile = FD_open(file_name, shared, SEC2_DRIVER)) == NULL) {
-	error_push(ERR_FILE, ERR_NONE_SEC, 
-	    "Failure in opening input file using the default driver. Validation discontinued.", -1, NULL);
-	CK_INC_ERR_DONE
-}
+		    if(ret_stat < 0) {
+			if((ret_stat = stat(tmp_name, &statbuf)) < 0) {
+			    FREE_SPACE(tmp_name, full_name)
+			    if(debug_verbose())
+				printf("The external linked file (LINK msg) does not exist...%s, %s\n", ext_fname, obj_name);
+			    continue;
+			}
+			full_name = strdup(tmp_name);
+		    }
+		    assert(ret_stat >= 0);
 
-/* superblock validation has to be all passed before proceeding further */
-if(check_superblock(thefile) < 0) {
-	error_push(ERR_LEV_0, ERR_LEV_0A, 
-	    "Errors found when checking superblock. Validation stopped.", -1, NULL);
-	CK_INC_ERR_DONE
-}
+		    stat_info.st_dev = statbuf.st_dev;
+		    stat_info.st_ino = statbuf.st_ino;
+		    stat_info.st_mode = statbuf.st_mode;
+		  
+		    if(g_ext_tbl && table_search(g_ext_tbl, &stat_info, TYPE_EXT_FILE)) {
+			FREE_SPACE(tmp_name, full_name)
+			if(debug_verbose())
+			    printf("The external linked file (LINK msg) is already or being validated...%s, %s\n", ext_fname, obj_name);
+			continue;
+		    } else {
+			if(debug_verbose())
+			    printf("Validating external linked file (LINK msg)...%s, %s\n", ext_fname, obj_name);
 
-/* not using the default driver */
-if(thefile->shared->driverid != SEC2_DRIVER) {
-    if(FD_close(thefile) < 0) {
-	error_push(ERR_FILE, ERR_NONE_SEC, 
-		"Errors in closing input file using the default driver", -1, NULL);
-	error_print(stderr, thefile);
-	error_clear();
-    }
-
-    printf("Switching to new file driver...\n");
-    if((thefile = FD_open(file_name, shared, shared->driverid)) == NULL) {
-	    error_push(ERR_FILE, ERR_NONE_SEC, "Errors in opening input file. Validation stopped.", -1, NULL);
-	    CK_INC_ERR_DONE
-   }
-}
-
-shared = NULL;
-ss = FD_get_eof(thefile);
-if(!addr_defined(ss) || ss < thefile->shared->stored_eoa) {
-    error_push(ERR_FILE, ERR_NONE_SEC, 
-    "Invalid file size or file size less than superblock eoa. Validation stopped.", 
-	    -1, NULL);
-    CK_INC_ERR_DONE
-}
-
-/*
-if(pline_init_interface() < 0) {
-	error_push(ERR_LEV_0, ERR_NONE_SEC, "Problems in initializing filters...later validation may be affected", 
-	    -1, NULL);
-	CK_INC_ERR
-}
-*/
-
-/* IT will validate whole file without g_obj_addr*/
-/* errors should have been flushed already in check_obj_header() */
-check_obj_header(thefile, thefile->shared->root_grp->header, NULL);
-
-printf("Done with validating external linked file\n");
-if(thefile && thefile->shared)
-      (void) table_free(thefile->shared->obj_table);
-
-/* (void) pline_free(); */
-
-if(thefile && thefile->shared) {
-        SM_master_table_t *tbl = thefile->shared->sohm_tbl;
-
-        if(thefile->shared->root_grp)
-            free(thefile->shared->root_grp);
-
-        if(thefile->shared->sohm_tbl) {
-            SM_master_table_t *tbl = thefile->shared->sohm_tbl;
-
-            if(tbl->indexes) free(tbl->indexes);
-            free(tbl);
-        }
-        if(thefile->shared->fa)
-            free_driver_fa(thefile->shared);
-        free(thefile->shared);
-}
-
-if(thefile != NULL && FD_close(thefile) < 0) {
-    error_push(ERR_FILE, ERR_NONE_SEC, "Errors in closing input file", -1, NULL);
-    CK_INC_ERR
-}
-
-#endif /* WORKINGONTHIS */
-		}
-
-	    }
-
+			if(g_ext_tbl && table_insert(g_ext_tbl, &stat_info, TYPE_EXT_FILE) < 0) {
+			    error_push(ERR_LEV_1, ERR_LEV_1C, "Error in inserting external linked file to table", -1, NULL);
+			    CK_INC_ERR
+			} else if(validate_ext_file(full_name) < 0)
+			    ++ret_other_err;
+			FREE_SPACE(tmp_name, full_name)
+		    }
+		} 
+		/*
+		else 
+		    printf("Link type encountered in LINK message: %d\n", lnk->type);
+		*/
+	    } /* OBJ_LINK_ID */
 	    break;
 
 	    case OBJ_SDS_ID:
@@ -7379,8 +7511,6 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
     ck_addr_t logical, logi_base;
     ck_addr_t rel_eoa, abs_eoa;
     int version, badinfo;
-    int idx = -1;
-
     ck_err_t ret_value = SUCCEED;  /* return value */
     ck_err_t ret_err = 0;	/* errors from the current routine */
     ck_err_t ret_other_err = 0;	/* track errors from other routines */
@@ -7401,38 +7531,13 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	printf("VALIDATING the object header at logical address %llu...\n", obj_head_addr);
 
     lshared = file->shared;
-    if((idx = table_search(lshared->obj_table, obj_head_addr)) < 0) { /* NOT FOUND */
-	/* NEED to check on nlink */
-	if(table_insert(lshared->obj_table, obj_head_addr, 1) < 0) {
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in inserting link to table", -1, NULL);
+    if(!table_search(lshared->obj_table, &obj_head_addr, TYPE_HARD_LINK)) { /* NOT FOUND */
+	if(table_insert(lshared->obj_table, &obj_head_addr, TYPE_HARD_LINK) < 0) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in inserting hard link to table", -1, NULL);
 	    CK_INC_ERR
 	}
     } else /* FOUND obj_head_addr */
 	if(!ret_oh) goto done;
-
-#ifdef MAYNOTNEEDTHIS
-    if((idx = table_search(obj_head_addr)) >= 0) 
-	/* FOUND obj_head_addr */
-	if(!ret_oh) goto done;
-    else { /* not found */ /* NEED to check on nlink */
-	if(table_insert(obj_head_addr, 1) < 0) {
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in inserting link to table", -1, NULL);
-	    CK_INC_ERR
-	}
-    } 
-
-    /* MAY NOT NEED nlink at all */
-    if(idx >= 0) { /* FOUND the object */
-	if(g_obj_table->objs[idx].nlink > 0) {
-	   g_obj_table->objs[idx].nlink--;
-	    if (!ret_oh) goto done;
-	} else {
-	    error_push(ERR_LEV_2, ERR_LEV_2A, 
-		"Object Header:Inconsistent reference count", obj_head_addr, NULL);
-	    CK_INC_ERR_DONE
-	}
-    }
-#endif
 
     start_buf = buf;
     p = buf;
@@ -7489,15 +7594,6 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
         nmesgs = 1;
 	oh->nlink = 1;
 
-#ifdef MAYNEEDWORKONTHIS
-	/* Object not existed yet in table */
-	/* NEED: may not need nlink at all and then can move this up front, no need to have two */
-	if(idx < 0 && table_insert(lshared->obj_table, obj_head_addr, oh->nlink) < 0) {
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in inserting link to table", -1, NULL);
-	    CK_INC_ERR
-	}
-#endif
-
         /* Time fields */
         if(oh->flags & OBJ_HDR_STORE_TIMES) {
             UINT32DECODE(p, oh->atime);
@@ -7543,7 +7639,11 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
                 break;
 
             default:
-                printf("bad size for chunk 0\n");
+	    {
+		error_push(ERR_LEV_2, ERR_LEV_2A1b, 
+		    "version 2 Object Header:Bad chunk size", -1, &badinfo);
+		CK_INC_ERR_DONE
+	    }
         } /* end switch */
         if(chunk_size && chunk_size < OBJ_SIZEOF_MSGHDR_VERS(OBJ_VERSION_2, oh->flags & OBJ_HDR_ATTR_CRT_ORDER_TRACKED)) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A1b, 
@@ -7581,16 +7681,6 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	}
 
 	UINT32DECODE(p, oh->nlink);
-
-#ifdef MAYNEEDWORKONTHIS
-	/* NEED: may not need nlink at all and then can move this up front, no need to have two */
-	/* Object not existed yet in table */
-	if(idx < 0 && table_insert(lshared->obj_table, obj_head_addr, oh->nlink) < 0) {
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in inserting link to table", -1, NULL);
-	    CK_INC_ERR
-	}
-#endif
-
 	UINT32DECODE(p, chunk_size);
 	p += 4;
     }
@@ -7937,10 +8027,388 @@ checksum_metadata(const void *data, ck_size_t len, uint32_t initval)
     assert(len > 0);
 
     return(checksum_lookup3(data, len, initval));
-}
+} /* checksum_metadata() */
 
 /* end checksum routines from the library */
 
+
+/* Initialize shared information and setup for opening the file */
+driver_t *
+file_init(char *fname)
+{
+    driver_t *thefile = NULL;
+    table_t *obj_table = NULL;
+    global_shared_t *shared = NULL;
+    ck_addr_t ss;
+    driver_t *ret_value = NULL;
+
+/* NEED to make this better */
+    /* Initialize table for this file's hard links */
+    if(table_init(&obj_table, TYPE_HARD_LINK) < 0) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing hard link table", -1, NULL);
+	CK_SET_RET_DONE(NULL)
+    } 
+
+    /* Initialize shared info for this file */
+    if((shared = calloc(1, sizeof(global_shared_t))) == NULL) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in allocating memory for shared", -1, NULL);
+	CK_SET_RET_DONE(NULL)
+    }
+
+    assert(shared);
+    shared->obj_table = obj_table;
+
+    /* Initially, use the SEC2 driver by default */		
+    if((thefile = FD_open(fname, shared, SEC2_DRIVER)) == NULL) {
+	error_push(ERR_FILE, ERR_NONE_SEC, 
+	    "Failure in opening input file using the default driver. Validation discontinued.", -1, NULL);
+	CK_SET_RET_DONE(NULL)
+    }
+									
+    /* superblock validation has to be all passed before proceeding further */
+    if(check_superblock(thefile) < 0) {				
+	error_push(ERR_LEV_0, ERR_LEV_0A, 		
+	    "Errors found when checking superblock. Validation stopped.", -1, NULL);
+	CK_SET_RET_DONE(NULL)
+    }														
+													
+    /* not using the default driver */								
+    if(thefile->shared->driverid != SEC2_DRIVER) {
+	if(FD_close(thefile) < 0) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, 				
+		"Errors in closing input file using the default driver", -1, NULL);
+	    CK_SET_RET_DONE(NULL)
+	}							
+							
+	if(debug_verbose())			
+	    printf("Switching to new file driver...\n");
+	if((thefile = FD_open(fname, shared, shared->driverid)) == NULL) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, "Errors in opening input file. Validation stopped.", -1, NULL);
+	    CK_SET_RET_DONE(NULL)
+        }
+    }	
+
+    ss = FD_get_eof(thefile);
+    if(!addr_defined(ss) || ss < thefile->shared->stored_eoa) {
+	error_push(ERR_FILE, ERR_NONE_SEC, 
+	    "Invalid file size or file size less than superblock eoa. Validation stopped.", 
+	    -1, NULL);
+	CK_SET_RET_DONE(NULL)
+    }
+
+    thefile->shared->extpath = NULL;
+    if(g_follow_ext && build_extpath(fname, &(thefile->shared->extpath)) < 0) {
+	error_push(ERR_FILE, ERR_NONE_SEC, 
+	    "Unable to build external path.  Validation stopped.", -1, NULL);
+	CK_SET_RET_DONE(NULL)
+    }
+
+    ret_value = thefile;
+
+done:
+    if(ret_value == NULL) {
+	if(thefile == NULL && shared) { /* NEED to make this "shared" better */
+	    if(shared->obj_table) (void) table_free(shared->obj_table);
+	    if(shared->extpath) free(shared->extpath);
+	    free(shared);
+	} else {
+	    free_file_shared(thefile);
+	    if(FD_close(thefile) < 0)
+		error_push(ERR_FILE, ERR_NONE_SEC, "Errors in closing input file", -1, NULL);
+	}
+	if(!object_api()) {
+	    error_print(stderr, thefile);
+	    error_clear();
+	}
+    }
+
+    return(ret_value);
+} /* file_init() */
+
+/* Free memory for the file structure */
+void 
+free_file_shared(driver_t *thefile) 
+{
+    if(thefile && thefile->shared) {
+	if(thefile->shared->obj_table)
+	    (void) table_free(thefile->shared->obj_table);
+
+	if(thefile->shared->root_grp)
+	    free(thefile->shared->root_grp);
+	if(thefile->shared->extpath)
+	    free(thefile->shared->extpath);
+
+        if(thefile->shared->sohm_tbl) {
+	    SM_master_table_t *tbl = thefile->shared->sohm_tbl;
+
+            if(tbl->indexes) free(tbl->indexes);
+	    free(tbl);
+	}
+	if(thefile->shared->fa)
+	    free_driver_fa(thefile->shared);
+	free(thefile->shared);		
+    }
+} /* free_file_shared() */
+
+/* Validate the external linked file */
+static ck_err_t
+validate_ext_file(char *ext_fname)
+{
+    driver_t *ext_file = NULL;
+    ck_err_t ret_err = 0;
+    ck_err_t ret_other_err = 0;	/* track errors from other routines */
+    ck_err_t ret_value = SUCCEED;
+
+    if((ext_file = file_init(ext_fname)) == NULL)
+	++ret_other_err;
+    else if(check_obj_header(ext_file, ext_file->shared->root_grp->header, NULL) < 0)
+	    ++ret_other_err;
+
+done:
+    if(ext_file) {
+	free_file_shared(ext_file);
+	if(FD_close(ext_file) < 0) {
+	    error_push(ERR_FILE, ERR_NONE_SEC, "Errors in closing external linked file", -1, NULL);
+	    CK_INC_ERR
+	}
+    }
+
+    if(ret_err & !object_api()) {
+        error_print(stderr, ext_file);
+        error_clear();
+    }
+
+    if(ret_err || ret_other_err) {
+        printf("Non-compliance errors found for %s\n", ext_fname);
+	ret_value = FAIL;
+    } else
+        printf("No non-compliance errors found for %s\n", ext_fname);
+
+    return(ret_value);
+} /* validate_ext_file() */
+
+/* Formulate path name for the external linked file */
+ck_err_t
+build_name(char *prefix, char *file_name, char **full_name/*out*/)
+{
+    ck_size_t prefix_len;             /* length of prefix */
+    ck_size_t fname_len;              /* Length of external link file name */
+    ck_err_t ret_value = SUCCEED;    /* Return value */
+
+    prefix_len = strlen(prefix);
+    fname_len = strlen(file_name);
+
+    /* Allocate a buffer to hold the filename + prefix + possibly the delimiter + terminating null byte */
+    if(NULL == (*full_name = (char *)malloc(prefix_len + fname_len + 2)))
+	CK_SET_RET_DONE(FAIL)
+
+    /* Copy the prefix into the buffer */
+    strcpy(*full_name, prefix);
+    if (!CHECK_DELIMITER(prefix[prefix_len-1]))
+        strcat(*full_name, DIR_SEPS);
+
+    /* Add the external link's filename to the prefix supplied */
+    strcat(*full_name, file_name);
+
+done:
+    return(ret_value);
+} /* build_name() */
+
+
+/* Initialize path name for searching the external linked file */
+/* Just handle unix style path name */
+ck_err_t
+build_extpath(const char *name, char **extpath/*out*/)
+{
+    char *full_path = NULL;      	/* Pointer to the full path, as built or passed in */
+    char *cwdpath = NULL;        	/* Pointer to the current working directory path */
+    char *new_name = NULL;       	/* Pointer to the name of the file */
+    ck_err_t ret_value = SUCCEED;    	/* Return value */
+
+    /* Clear external path pointer to begin with */
+    *extpath = NULL;
+
+    /* If the name has an absolute path */
+    /* Just handle unix style path name */
+    if(CHECK_ABSOLUTE(name)) {
+        if(NULL == (full_path = (char *)strdup(name))) {
+            printf("memory allocation failed\n");
+	    CK_SET_RET_DONE(FAIL)
+	}
+    } else { /* relative pathname */
+        char *retcwd;
+
+        if(NULL == (cwdpath = (char *)malloc(MAX_PATH_LEN))) {
+            printf("memory allocation failed\n");
+	    CK_SET_RET_DONE(FAIL)
+	}
+        if(NULL == (new_name = (char *)strdup(name))) {
+            printf("memory allocation failed\n");
+	    CK_SET_RET_DONE(FAIL)
+	}
+
+        /* Get current working directory  (Unix style only) */
+	if((retcwd = getcwd(cwdpath, MAX_PATH_LEN)) != NULL) {
+            size_t cwdlen;
+            size_t path_len;
+
+            cwdlen = strlen(cwdpath);
+            assert(cwdlen);
+            path_len = cwdlen + strlen(new_name) + 2;
+            if(NULL == (full_path = (char *)malloc(path_len))) {
+                printf("memory allocation failed\n");
+		CK_SET_RET_DONE(FAIL)
+	    }
+            strcpy(full_path, cwdpath);
+            if(!CHECK_DELIMITER(cwdpath[cwdlen - 1]))
+                strcat(full_path, DIR_SEPS);
+            strcat(full_path, new_name);
+        } /* end if */
+    } /* end else */
+
+    /* strip out the last component (the file name itself) from the path */
+    if(full_path) {
+        char *ptr = NULL;
+
+        GET_LAST_DELIMITER(full_path, ptr)
+        assert(ptr);
+        *++ptr = '\0';
+        *extpath = full_path;
+    } 
+
+done:
+    /* Release resources */
+    if(cwdpath) free(cwdpath);
+    if(new_name) free(new_name);
+
+    return(ret_value);
+
+} /* build_extpath() */
+
+/* Copied from HDF5 library tools/lib */
+int
+get_option(int argc, const char **argv, const char *opts, const struct long_options *l_opts)
+{
+    static int sp = 1;    /* character index in current token */
+    int opt_opt = '?';    /* option character passed back to user */
+
+    if(sp == 1) {
+        /* check for more flag-like tokens */
+        if(opt_ind >= argc || argv[opt_ind][0] != '-' || argv[opt_ind][1] == '\0')
+            return EOF;
+        else if (strcmp(argv[opt_ind], "--") == 0) {
+            opt_ind++;
+            return EOF;
+        }
+    }
+
+    if(sp == 1 && argv[opt_ind][0] == '-' && argv[opt_ind][1] == '-') {
+        /* long command line option */
+        const char *arg = &argv[opt_ind][2];
+        int i;
+
+        for (i = 0; l_opts && l_opts[i].name; i++) {
+            size_t len = strlen(l_opts[i].name);
+
+            if(strncmp(arg, l_opts[i].name, len) == 0) {
+                /* we've found a matching long command line flag */
+                opt_opt = l_opts[i].shortval;
+
+                if(l_opts[i].has_arg != no_arg) {
+                    if(arg[len] == '=')
+                        opt_arg = &arg[len + 1];
+                    else if(opt_ind < (argc - 1) && argv[opt_ind + 1][0] != '-')
+                        opt_arg = argv[++opt_ind];
+                    else if(l_opts[i].has_arg == require_arg) {
+                        if (opt_err)
+                            fprintf(stderr, "%s: option required for \"--%s\" flag\n",
+                                    argv[0], arg);
+                        opt_opt = '?';
+                    }
+                } else {
+                    if (arg[len] == '=') {
+                        if (opt_err)
+                            fprintf(stderr, "%s: no option required for \"%s\" flag\n",
+                                    argv[0], arg);
+
+                        opt_opt = '?';
+                    }
+                    opt_arg = NULL;
+                }
+                break;
+            }
+        }
+
+        if (l_opts[i].name == NULL) {
+            /* exhausted all of the l_opts we have and still didn't match */
+            if(opt_err)
+                fprintf(stderr, "%s: unknown option \"%s\"\n", argv[0], arg);
+
+            opt_opt = '?';
+        }
+
+        opt_ind++;
+        sp = 1;
+    } else {
+        register char *cp;    /* pointer into current token */
+
+        /* short command line option */
+        opt_opt = argv[opt_ind][sp];
+
+        if (opt_opt == ':' || (cp = strchr(opts, opt_opt)) == 0) {
+            if (opt_err)
+                fprintf(stderr, "%s: unknown option \"%c\"\n",
+                        argv[0], opt_opt);
+
+            /* if no chars left in this token, move to next token */
+            if (argv[opt_ind][++sp] == '\0') {
+                opt_ind++;
+                sp = 1;
+            }
+
+            return '?';
+        }
+
+        if(*++cp == ':') {
+            /* if a value is expected, get it */
+            if (argv[opt_ind][sp + 1] != '\0') {
+                /* flag value is rest of current token */
+                opt_arg = &argv[opt_ind++][sp + 1];
+            } else if (++opt_ind >= argc) {
+                if (opt_err)
+                    fprintf(stderr, "%s: value expected for option \"%c\"\n",
+                            argv[0], opt_opt);
+
+                opt_opt = '?';
+            } else {
+                /* flag value is next token */
+                opt_arg = argv[opt_ind++];
+            }
+            sp = 1;
+        }
+
+        /* wildcard argument */
+        else if (*cp == '*') {
+            /* check the next argument */
+            opt_ind++;
+            /* we do have an extra argument, check if not last */
+            if ( argv[opt_ind][0] != '-' && (opt_ind+1) < argc )
+                opt_arg = argv[opt_ind++];
+            else
+                opt_arg = NULL;
+        } else {
+            /* set up to look at next char in token, next time */
+            if (argv[opt_ind][++sp] == '\0') {
+                /* no more in current token, so setup next token */
+                opt_ind++;
+                sp = 1;
+            }
+            opt_arg = NULL;
+        }
+    } 
+    /* return the current flag character found */
+    return opt_opt;
+} /* get_option() */
 
 void
 print_version(const char *prog_name)
@@ -7954,17 +8422,18 @@ usage(char *prog_name)
     fflush(stdout);
     fprintf(stdout, "usage: %s [OPTIONS] file\n", prog_name);
     fprintf(stdout, "  OPTIONS\n");
-    fprintf(stdout, "     -h,  --help   	Print a usage message and exit\n");
-    fprintf(stdout, "     -V,  --version	Print version number and exit\n");
-    fprintf(stdout, "     -vn, --verbose=n	Verboseness mode\n");
-    fprintf(stdout, "     		n=0	Terse--only indicates if the file is compliant or not\n");
-    fprintf(stdout, "     		n=1	Default--prints its progress and all errors found\n");
-    fprintf(stdout, "     		n=2	Verbose--prints everything it knows, usually for debugging\n");
-    fprintf(stdout, "     -fn, --format=n	File Format\n");
-    fprintf(stdout, "     		n=16	Validate according to library release version 1.6.6\n");
-    fprintf(stdout, "     		n=18	Default--Validate according to library release version 1.8.0\n");
-    fprintf(stdout, "     -oa, --object=a	Check object header\n");
-    fprintf(stdout, "     		a	Address of the object header to be validated\n");
+    fprintf(stdout, "     -h,  --help   	Print a usage message and exit.\n");
+    fprintf(stdout, "     -V,  --version	Print version number and exit.\n");
+    fprintf(stdout, "     -vn, --verbose=n	Set verbose mode:\n");
+    fprintf(stdout, "     		n=0	Terse--indicate only whether file is compliant.\n");
+    fprintf(stdout, "     		n=1	Default--print progress and all errors found.\n");
+    fprintf(stdout, "     		n=2	Verbose--print all known information, usually for debugging.\n");
+    fprintf(stdout, "     -e,  --external	Validate external linked file(s) existed in the file.\n");
+    fprintf(stdout, "     -fn, --format=n	Set library release version against which the file is to be validated:\n");
+    fprintf(stdout, "     		n=16	Validate according to release 1.6.x series.\n");
+    fprintf(stdout, "     		n=18	Validate according to release 1.8.x series. (Default)\n");
+    fprintf(stdout, "     -oa, --object=a	Check object header:\n");
+    fprintf(stdout, "     		a	Address of the object header to be validated.\n");
     fprintf(stdout, "\n");
 
 } /* usage() */
@@ -7988,3 +8457,4 @@ object_api(void)
 	g_obj_api_err++;
     return(g_obj_api);
 } /* object_api() */
+

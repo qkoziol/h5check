@@ -3190,7 +3190,8 @@ check_SOHM(driver_t *file, ck_addr_t sohm_addr, unsigned nindexes)
 	}
 
 	if(addr_defined(table->indexes[x].index_addr) && (table->indexes[x].index_type == SM_LIST))
-	    printf("Warning:validation of shared message record list is not implemented yet\n");
+	    if(debug_verbose())
+		printf("Warning:validation of shared message record list is not implemented yet\n");
 
     } /* end for */
 

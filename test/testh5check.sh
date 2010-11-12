@@ -69,12 +69,16 @@ TOOLPASS() {
 }
 
 
-# Run a test that the tool should fail (exit with non-zero).  It will print
-# " PASS " # and "*FAIL*" acoordingly.  When it fails, also display up to
-# $NLINES lines of the actual output from the tool test.  The actual output
-# file is usually removed unless $HDF5_NOCLEANUP is defined to any non-null
-# value.  
-# $* arguments to the TOOL.
+
+# Run a test that the tool should fail.  
+# It will print "PASS" and "FAIL" acoordingly.  
+# When it fails, also display up to $NLINES lines of the actual output from the tool test.  
+# The actual output file is usually removed unless $HDF5_NOCLEANUP is defined 
+# to any non-null value.  
+# Arguments to TOOLFAIL():
+# $1: expected failure code
+# $2: argument to h5check
+# $3: the file to be validated by h5check
 TOOLFAIL() {
     tmpout=$TOOL.$$.out
     tmperr=$TOOL.$$.err
@@ -82,12 +86,12 @@ TOOLFAIL() {
     # Run test.
     # Stderr is included in stdout so that the diff can detect
     # any unexpected output from that stream too.
-    TESTING $TOOL $@
+    TESTING $TOOL $2 $srcdir/$3
     (
         $TOOL_BIN "$@"
     ) 2> $tmperr > $tmpout
     exitcode=$?
-    if [ $exitcode -ne 0 ]; then
+    if [ $exitcode -eq $1 ]; then
         echo " PASSED"
     else
 	echo "*FAILED*"
@@ -198,7 +202,25 @@ TOOLPASS root.h5
 TOOLPASS stdio.h5
 TOOLPASS time.h5
 TOOLPASS vl.h5
-
+# external links 
+TOOLPASS --exte ext_dangle1.h5
+TOOLPASS -e ext_dangle2.h5
+TOOLPASS -e ext_dangle2.h5
+TOOLPASS --exter ext_self1.h5
+TOOLPASS -e ext_self2.h5
+TOOLPASS --ex ext_self3.h5
+TOOLPASS -e ext_mult1.h5
+TOOLPASS -e ext_mult2.h5
+TOOLPASS -e ext_mult3.h5
+TOOLPASS -e ./ext_mult3.h5
+TOOLPASS -e ext_mult4.h5
+TOOLPASS -e ext_pingpong1.h5
+TOOLPASS -e ext_pingpong2.h5
+TOOLPASS -e ./ext_pingpong2.h5
+TOOLPASS --external ext_toomany1.h5
+TOOLPASS --external ext_toomany2.h5
+TOOLPASS --external ./ext_toomany2.h5
+TOOLPASS -e ext_links.h5
 # these 2 files are generated only when 1.8 library is used
 if test -r new_grat.h5; then
 TOOLPASS new_grat.h5
@@ -223,15 +245,15 @@ fi
 echo ========================================
 echo The following tests are expected to fail.
 echo ========================================
-TOOLFAIL invalidfiles/base_addr.h5
+TOOLFAIL 2 invalidfiles/base_addr.h5
 # Temporary block out since this file is not really invalid.
 #TOOLFAIL invalidfiles/leaf_internal_k.h5
-TOOLFAIL invalidfiles/offsets_lengths.h5
-TOOLFAIL invalidfiles/sb_version.h5
-TOOLFAIL invalidfiles/signature.h5
+TOOLFAIL 2 invalidfiles/offsets_lengths.h5
+TOOLFAIL 2 invalidfiles/sb_version.h5
+TOOLFAIL 2 invalidfiles/signature.h5
 # this is a valid 1.8 file
 # this should fail when checked against 1.6 format
-TOOLFAIL --format=16 invalidfiles/vms_data.h5
+TOOLFAIL 2 --format=16 invalidfiles/vms_data.h5
 
 
 

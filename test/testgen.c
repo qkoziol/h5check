@@ -187,9 +187,10 @@ const H5Z_class_t H5Z_BOGUS[1] = {{
 * of an argument.
 */
 
-static size_t filter_bogus(unsigned int UNUSED flags, size_t UNUSED cd_nelmts,
-const unsigned int UNUSED *cd_values, size_t nbytes,size_t UNUSED *buf_size,
-void UNUSED **buf)
+static size_t 
+filter_bogus(unsigned int UNUSED flags, size_t UNUSED cd_nelmts,
+    const unsigned int UNUSED *cd_values, size_t nbytes,size_t UNUSED *buf_size,
+    void UNUSED **buf)
 {
     return nbytes;
 }
@@ -214,7 +215,8 @@ void UNUSED **buf)
  */
 static const char *multi_letters = "msbrglo";
 
-hid_t h5_fileaccess(char *driver)
+hid_t 
+h5_fileaccess(char *driver)
 {
     hid_t fapl = -1; /* property list */
     herr_t ret;
@@ -353,7 +355,7 @@ hid_t h5_fileaccess(char *driver)
     }
 
     return fapl;
-}
+} /* h5_fileaccess() */
 
 
 
@@ -386,7 +388,7 @@ static void h5_fixname(char *fullname, hid_t fapl)
     if (suffix) 
 	    strcat(fullname, suffix);
 
-}
+} /* h5_fixname() */
 
 
 /*
@@ -394,7 +396,8 @@ static void h5_fixname(char *fullname, hid_t fapl)
 * superblock.
 */
 
-static hid_t alt_superblock(void)
+static hid_t 
+alt_superblock(void)
 {
     hid_t fcpl; /* property list */
     herr_t  ret;
@@ -428,15 +431,15 @@ static hid_t alt_superblock(void)
     VRFY((ret>=0), "H5Pset_istore_k");
 
     return fcpl;
-}
+} /* alt_superblock() */
 
 
 
 /*
 * This function creates a file. It returns a file handle.
 */
-
-static hid_t create_file(char *name, char *driver, char *superblock)
+static hid_t 
+create_file(char *name, char *driver, char *superblock)
 {
     hid_t fid, fapl, fcpl; /* HDF5 IDs */
     char fname[64]; /* file name */
@@ -449,7 +452,6 @@ static hid_t create_file(char *name, char *driver, char *superblock)
     /* definition of access property list */
     if ((fapl = h5_fileaccess(driver))<0)
         fapl = H5P_DEFAULT;
-
 
     /* definition of creation property list */
     if (!strcmp(superblock, "alternate"))
@@ -489,15 +491,13 @@ static hid_t create_file(char *name, char *driver, char *superblock)
     VRFY((ret>=0), "H5Pclose");
 
     return fid;
-}
-
-
+} /* create_file() */
 
 /*
-* This function closes a file.
-*/
-
-static void close_file(hid_t fid, char *options)
+ * This function closes a file.
+ */
+static void 
+close_file(hid_t fid, char *options)
 {
     herr_t ret;
 
@@ -505,22 +505,21 @@ static void close_file(hid_t fid, char *options)
     ret = H5Fclose(fid);
     VRFY((ret>=0), "H5Fclose");
 
-}
-
-
+} /* close_file() */
 
 /*
-* This fuction generates several (empty) group structures according to 'option':
-* HIERARCHICAL creates a binary tree,
-* MULTIPATH creates a graph in which some groups at the same level can be
-* reached through multiple paths,
-* CYCLICAL  creates a graph in which some groups point to their parents or
-* grandparents. All pointers are implemented as HARDLINKS.
-* The names of the groups are generated using 'prefix'. The number of levels in
-* the group structure is specified by 'height'.
-*/
-
-static void gen_group_struct(hid_t parent_id, char* prefix, int height, int option)
+ * This fuction generates several (empty) group structures according to 'option':
+ * 	HIERARCHICAL: creates a binary tree,
+ * 	MULTIPATH: creates a graph in which some groups at the same level can be
+ * 		   reached through multiple paths,
+ * 	CYCLICAL: creates a graph in which some groups point to their parents or
+ * 		  grandparents. All pointers are implemented as HARDLINKS.
+ *
+ * The names of the groups are generated using 'prefix'. The number of levels in
+ * the group structure is specified by 'height'.
+ */
+static void 
+gen_group_struct(hid_t parent_id, char* prefix, int height, int option)
 {
     hid_t child_gid0, child_gid1; /* groups IDs */
     herr_t ret;
@@ -561,7 +560,6 @@ static void gen_group_struct(hid_t parent_id, char* prefix, int height, int opti
             break;
 
         case CYCLICAL:
-               
             /* a third entry in child_gid1 points to its grandparent. However, if
             grandparent is the root, the entry will point to child_gid1. */
             sprintf(child_name, "%s_%d", gname1, 2);
@@ -586,7 +584,7 @@ static void gen_group_struct(hid_t parent_id, char* prefix, int height, int opti
 
     ret = H5Gclose(child_gid1);
     VRFY((ret>=0), "H5Gclose");
-}
+} /* gen_group_struct() */
 
 
 
@@ -597,10 +595,9 @@ static void gen_group_struct(hid_t parent_id, char* prefix, int height, int opti
 * The names of the groups are generated using 'prefix'. The number of levels in
 * the group structure is specified by 'height'.
 */
-
-static void gen_group_datasets(hid_t parent_id, char* prefix, int height, int data_child)
+static void 
+gen_group_datasets(hid_t parent_id, char* prefix, int height, int data_child)
 {
-
     hid_t child_gid0, child_gid1, gid; /* groups IDs */
     hid_t dset_id, dspace_id;
     hsize_t dims[RANK];
@@ -679,22 +676,19 @@ static void gen_group_datasets(hid_t parent_id, char* prefix, int height, int da
 
    ret = H5Gclose(child_gid1);
    VRFY((ret>=0), "H5Gclose");
-}
-
-
+} /* gen_group_datasets() */
 
 /*
-* This function generates a recursive nesting of 'height' groups. The names of
-* the groups are generated using 'prefix'. The generated structure tests the format
-* validation of a large number of groups.
-*/
-
-static void gen_linear_rec(hid_t parent_id, char *prefix, unsigned int height)
+ * This function generates a recursive nesting of 'height' groups. The names of
+ * the groups are generated using 'prefix'. The generated structure tests the format
+ * validation of a large number of groups.
+ */
+static void 
+gen_linear_rec(hid_t parent_id, char *prefix, unsigned int height)
 {
     hid_t child_gid; /* group ID */
-    herr_t ret;
-
     char gname[64]; /* group name */
+    herr_t ret;
 
     /* appending level to the name prefix */
     sprintf(gname, "%s_%d", prefix, height);
@@ -710,17 +704,15 @@ static void gen_linear_rec(hid_t parent_id, char *prefix, unsigned int height)
     /* close group */
     ret = H5Gclose(child_gid);
     VRFY((ret>=0), "H5Gclose");
-}
-
-
+} /* gen_linear_rec() */
 
 /*
-* This function generates NUM_GROUPS empty groups at the root and a recursive
-* nesting of NUM_GROUPS within one group. The generated structure tests
-* the format validation of a large number of groups.
-*/
-
-static void gen_linear(hid_t fid)
+ * This function generates NUM_GROUPS empty groups at the root and a recursive
+ * nesting of NUM_GROUPS within one group. The generated structure tests
+ * the format validation of a large number of groups.
+ */
+static void 
+gen_linear(hid_t fid)
 {
 
     hid_t gid; /* group ID */
@@ -749,18 +741,16 @@ static void gen_linear(hid_t fid)
     one group */
     gen_linear_rec(fid, "rec_group", NUM_GROUPS);
 
-}
-
-
+} /* gen_linear() */
 
 /*
-*
-* This function generates a dataset per allowed dimensionality, i.e. one
-* dataset is 1D, another one is 2D, and so on, up to dimension H5S_MAX_RANK.
-* The option 'fill_dataset' determines if data is to be written in the datasets.
-*/
-
-static void gen_rank_datasets(hid_t oid, int fill_dataset)
+ *
+ * This function generates a dataset per allowed dimensionality, i.e. one
+ * dataset is 1D, another one is 2D, and so on, up to dimension H5S_MAX_RANK.
+ * The option 'fill_dataset' determines if data is to be written in the datasets.
+ */
+static void 
+gen_rank_datasets(hid_t oid, int fill_dataset)
 {
 
     hid_t dset_id, dspace_id; /* HDF5 IDs */
@@ -821,18 +811,17 @@ static void gen_rank_datasets(hid_t oid, int fill_dataset)
         VRFY((ret>=0), "H5Sclose");
 
     }
-}
-
+} /* gen_rank_datasets() */
 
 
 /*
-*
-* This function generates a dataset per basic datatype , i.e. one dataset is char,
-* another one is int, and so on. The option 'fill_dataset' determines whether data is
-* to be written into the dataset.
-*/
-
-static void gen_basic_types(hid_t oid, int fill_dataset)
+ *
+ * This function generates a dataset per basic datatype , i.e. one dataset is char,
+ * another one is int, and so on. The option 'fill_dataset' determines whether data is
+ * to be written into the dataset.
+ */
+static void 
+gen_basic_types(hid_t oid, int fill_dataset)
 {
 
     hid_t dset_id, dspace_id; /* HDF5 IDs */
@@ -927,17 +916,15 @@ static void gen_basic_types(hid_t oid, int fill_dataset)
     free(uchar_buffer);
     free(float_buffer);
     free(string_buffer);
-}
-
-
+} /* gen_basic_types() */
 
 /*
-*
-* This function generates a dataset with a compound datatype. The option
-* 'fill_dataset' determines whether data is to be written into the dataset.
-*/
-
-static void gen_compound(hid_t oid, int fill_dataset)
+ *
+ * This function generates a dataset with a compound datatype. The option
+ * 'fill_dataset' determines whether data is to be written into the dataset.
+ */
+static void 
+gen_compound(hid_t oid, int fill_dataset)
 {
     s1_t *s1;                   /* compound struct */
     hid_t dset_id, dspace_id;   /* dataset and dataspace IDs */
@@ -1037,17 +1024,15 @@ static void gen_compound(hid_t oid, int fill_dataset)
     /* close dataspace */
     ret = H5Sclose(dspace_id);
     VRFY((ret>=0), "H5Sclose");
-}
-
-
+} /* gen_compound() */
 
 /*
-*
-* This function generates a dataset with a VL datatype. The option
-* 'fill_dataset' determines whether data is to be written into the dataset.
-*/
-
-static void gen_vl(hid_t oid, int fill_dataset)
+ *
+ * This function generates a dataset with a VL datatype. The option
+ * 'fill_dataset' determines whether data is to be written into the dataset.
+ */
+static void 
+gen_vl(hid_t oid, int fill_dataset)
 {
     hid_t dset_id, dspace_id;   /* dataset and dataspace IDs */
     hid_t s1_tid, array_dt;     /* datatypes IDs */
@@ -1114,16 +1099,15 @@ static void gen_vl(hid_t oid, int fill_dataset)
     ret = H5Sclose(dspace_id);
     VRFY((ret>=0), "H5Sclose");
 
-}
-
+} /* gen_vl() */
 
 /*
-*
-* This function generates a dataset with an enumerated datatype. The option
-* 'fill_dataset' determines whether data is to be written into the dataset.
-*/
-
-static void gen_enum(hid_t oid, int fill_dataset)
+ *
+ * This function generates a dataset with an enumerated datatype. The option
+ * 'fill_dataset' determines whether data is to be written into the dataset.
+ */
+static void 
+gen_enum(hid_t oid, int fill_dataset)
 {
     hid_t	type, dspace_id, dset_id, ret;  /* HDF5 IDs */
     c_e1 val;
@@ -1188,16 +1172,16 @@ static void gen_enum(hid_t oid, int fill_dataset)
     /* close datatype */
     ret=H5Tclose(type);
     VRFY((ret>=0), "H5Tclose");
-}
+} /* gen_enum() */
 
 
 /*
-*
-* This function generates 1 group with 2 datasets and a compound datatype.
-* Then it creates a dataset containing references to these 4 objects.
-*/
-
-static void gen_reference(hid_t oid)
+ *
+ * This function generates 1 group with 2 datasets and a compound datatype.
+ * Then it creates a dataset containing references to these 4 objects.
+ */
+static void 
+gen_reference(hid_t oid)
 {
     hid_t		dset_id;	/* Dataset ID			*/
     hid_t		group;      /* Group ID             */
@@ -1318,16 +1302,14 @@ static void gen_reference(hid_t oid)
     /* Free memory buffers */
     free(wbuf);
 
-} 
-
-
+} /* gen_reference() */
 
 /*
-* This function is called by gen_filters in order to create a dataset with
-* the respective filters.
-*/
-
-static void gen_filter_internal(hid_t fid, const char *name, hid_t dcpl, hsize_t *dset_size)
+ * This function is called by gen_filters in order to create a dataset with
+ * the respective filters.
+ */
+static void 
+gen_filter_internal(hid_t fid, const char *name, hid_t dcpl, hsize_t *dset_size)
 {
     hid_t		dataset;        /* Dataset ID */
     hid_t		dxpl;           /* Dataset xfer property list ID */
@@ -1403,17 +1385,16 @@ static void gen_filter_internal(hid_t fid, const char *name, hid_t dcpl, hsize_t
     free(points);
     free (tconv_buf);
 
-}
-
+} /* gen_filter_internal() */
 
 
 /*
-* This function generates several datasets with different filters. Filters are used
-* individually and in combinations. The combination of filters in different order is
-* also tested.
-*/
-
-static void gen_filters(hid_t file)
+ * This function generates several datasets with different filters. Filters are used
+ * individually and in combinations. The combination of filters in different order is
+ * also tested.
+ */
+static void 
+gen_filters(hid_t file)
 {
 
     hid_t	dc;                 /* Dataset creation property list ID */
@@ -1658,14 +1639,14 @@ static void gen_filters(hid_t file)
     VRFY((ret>=0), "H5Pclose");
 
 #endif /* HAVE_SZIP */
-}
+} /* gen_filters() */
 
 
 /*
-* This function generates a dataset and a group with attributes. 
-*/
-
-static void gen_attr(hid_t fid1)
+ * This function generates a dataset and a group with attributes. 
+ */
+static void 
+gen_attr(hid_t fid1)
 {
     hid_t		dataset;	/* Dataset ID			*/
     hid_t		group;	    /* Group ID			    */
@@ -1759,16 +1740,17 @@ static void gen_attr(hid_t fid1)
     ret = H5Gclose(group);
     VRFY((ret>=0), "H5Gclose");
 
-}   /* test_attr_basic_write() */
+}   /* gen_attr() */
+/* test_attr_basic_write() */
 
 
 /*
-*
-* This function commits several time datatypes and creates a dataset with
-* one of the time datatypes. 
-*/
-
-static void gen_time(hid_t file_id)
+ *
+ * This function commits several time datatypes and creates a dataset with
+ * one of the time datatypes. 
+ */
+static void 
+gen_time(hid_t file_id)
 {
     hid_t       tid, sid, dsid;  /* identifiers */
     time_t      timenow, timethen;      /* Times */
@@ -1823,15 +1805,14 @@ static void gen_time(hid_t file_id)
 
     status = H5Sclose(sid);
     VRFY((status>=0), "H5Sclose");
-}
-
+} /* gen_time() */
 
 /*
-* This function creates 2 datasets using external files for raw data. The option
-* 'fill_dataset' determines whether data is to be written into the dataset.
-*/
-
-static void gen_external(hid_t file, int fill_dataset)
+ * This function creates 2 datasets using external files for raw data. The option
+ * 'fill_dataset' determines whether data is to be written into the dataset.
+ */
+static void 
+gen_external(hid_t file, int fill_dataset)
 {
     hid_t	dcpl=-1;		/*dataset creation properties	*/
     hid_t	space=-1;		/*data space			*/
@@ -1927,16 +1908,16 @@ static void gen_external(hid_t file, int fill_dataset)
     ret=H5Pclose(dcpl);
     VRFY((ret>=0), "H5Pclose");
 
-}
+} /* gen_external() */
 
 
 /*
-* This function creates a dataset using an array datatype. Each element of the
-* array is a compound datatype. The option 'fill_dataset' determines whether
-* data is to be written into the dataset.
-*/
-
-static void gen_array(hid_t fid1, int fill_dataset)
+ * This function creates a dataset using an array datatype. Each element of the
+ * array is a compound datatype. The option 'fill_dataset' determines whether
+ * data is to be written into the dataset.
+ */
+static void 
+gen_array(hid_t fid1, int fill_dataset)
 {
     typedef struct {        /* Typedef for compound datatype */
         int i;
@@ -2023,7 +2004,321 @@ static void gen_array(hid_t fid1, int fill_dataset)
 
     free(wdata);
 
-}
+} /* gen_array() */
+
+/* 
+ * This set of routines for generating external linked files are mainly copied
+ * from HDF5 library test/links.c
+ */
+
+/*
+ * This routine creates files with "dangling" external links.
+ */
+static void
+gen_ext_dangle(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
+{
+    char fname2[50];	/* file name */
+
+    /* Create dangling external links */
+    H5Lcreate_external("missing", "/missing", fid1, "no_file", H5P_DEFAULT, H5P_DEFAULT);
+    strcpy(fname2, ext_fname2);
+    strcat(fname2, ".h5");
+    H5Lcreate_external(fname2, "/missing", fid1, "no_object", H5P_DEFAULT, H5P_DEFAULT);
+
+} /* gen_ext_dangle() */
+
+/* 
+ * This routine creates files with external link to itself.
+ */
+static void
+gen_ext_self(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2, hid_t fid3, char *ext_fname3)
+{
+    hid_t lcpl_id;
+    hid_t gid, gid2;	/* group ids */
+    char fname1[50];
+    char fname3[50];
+
+    /* Create an lcpl with intermediate group creation set */
+    lcpl_id = H5Pcreate(H5P_LINK_CREATE);
+    H5Pset_create_intermediate_group(lcpl_id, 1);
+
+    /* Create a series of groups within the file: /A/B and /X/Y/Z */
+    gid = H5Gcreate2(fid1, "A/B", lcpl_id, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(gid);
+    gid = H5Gcreate2(fid1, "X/Y", lcpl_id, H5P_DEFAULT, H5P_DEFAULT);
+
+    H5Gclose(gid);
+    H5Pclose (lcpl_id);
+
+    strcpy(fname1, ext_fname1);
+    strcat(fname1, ".h5");
+
+    /* Create external link to own root group*/
+    H5Lcreate_external(fname1, "/X", fid1, "A/B/C", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Open object through external link */
+    gid = H5Gopen2(fid1, "A/B/C/", H5P_DEFAULT);
+
+    /* Create object through external link */
+    gid2 = H5Gcreate2(gid, "new_group", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Close created group */
+    H5Gclose(gid2);
+
+    /* Close object opened through external link */
+    H5Gclose(gid);
+
+
+    /* 
+     * Use this file as an intermediate file in a chain
+     * of external links that will go: file2 -> file1 -> file1 -> file3
+     */
+
+    /* Create in file2 with an external link to file1  */
+    H5Lcreate_external(fname1, "/A", fid2, "ext_link", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create file3 as a target */
+    gid = H5Gcreate2(fid3, "end", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(gid);
+
+    strcpy(fname3, ext_fname3);
+    strcat(fname3, ".h5");
+    /* Create in file1 an extlink pointing to file3 */
+    H5Lcreate_external(fname3, "/", fid1, "/X/Y/Z", H5P_DEFAULT, H5P_DEFAULT);
+} /* gen_ext_self() */
+
+/*
+ * This routine creates files with external links to objects that crossed
+ * several external file links.
+ */
+static void
+gen_ext_mult(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2, hid_t fid3, char *ext_fname3, hid_t fid4, char *ext_fname4)
+{
+    hid_t gid = (-1), gid2 = (-1);	/* Group IDs */
+    char fname1[50];
+    char fname2[50];
+    char fname3[50];
+
+    /* Create first file to point to */
+    /* fid=H5Fcreate("ext_mult1.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
+
+    /* Create object down a path */
+    gid = H5Gcreate2(fid1, "A", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(gid);
+
+    gid = H5Gcreate2(fid1, "A/B", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(gid);
+
+    gid = H5Gcreate2(fid1, "A/B/C", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(gid);
+
+    /* Create second file to point to */
+    /* fid=H5Fcreate("ext_mult2.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
+
+    /* Create external link down a path */
+    gid = H5Gcreate2(fid2, "D", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(gid);
+
+    gid = H5Gcreate2(fid2, "D/E", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    strcpy(fname1, "/");
+    strcat(fname1, ext_fname1);
+    strcat(fname1, ".h5");
+    /* Create external link to object in first file */
+    H5Lcreate_external(fname1, "/A/B/C", gid, "F", H5P_DEFAULT, H5P_DEFAULT);
+
+    H5Gclose(gid);
+
+    /* Create third file to point to */
+    /* fid=H5Fcreate("ext_mult3.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
+
+    /* Create external link down a path */
+    gid = H5Gcreate2(fid3, "G", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(gid);
+
+    gid = H5Gcreate2(fid3, "G/H", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    strcpy(fname2, ext_fname2);
+    strcat(fname2, ".h5");
+    /* Create external link to object in second file */
+    H5Lcreate_external(fname2, "/D/E/F", gid, "I", H5P_DEFAULT, H5P_DEFAULT);
+
+    H5Gclose(gid);
+
+    /* Create file with link to third file */
+    /* fid=H5Fcreate("ext_mult4.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
+
+    strcpy(fname3, ext_fname3);
+    strcat(fname3, ".h5");
+    H5Lcreate_external(fname3, "/G/H/I", fid4, "ext_link", H5P_DEFAULT, H5P_DEFAULT);
+
+    gid = H5Gopen2(fid4, "ext_link", H5P_DEFAULT);
+
+    /* Create object in external file */
+    gid2 = H5Gcreate2(gid, "new_group", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Close group in external file */
+    H5Gclose(gid2);
+
+    /* Close external object (lets first file close) */
+    H5Gclose(gid);
+
+} /* gen_ext_mult() */
+
+/* 
+ * This routine creates files with external links to objects that goes back
+ * and forth between two files a couple of times.
+ */
+static void
+gen_ext_pingpong(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
+{
+    hid_t gid = (-1);
+    char fname1[50];
+    char fname2[50];
+
+    /* Create first file */
+    /* fid=H5Fcreate("ext_ping1.h5", H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT); */
+
+    strcpy(fname2, ext_fname2);
+    strcat(fname2, ".h5");
+
+    /* Create external links for chain */
+    H5Lcreate_external(fname2, "/link2", fid1, "link1", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link4", fid1, "link3", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link6", fid1, "link5", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create final object */
+    gid = H5Gcreate2(fid1, "final", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create second file */
+    /* fid=H5Fcreate("ext_ping2.h5", H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT); */
+
+    strcpy(fname1, ext_fname1);
+    strcat(fname1, ".h5");
+
+    /* Create external links for chain */
+    H5Lcreate_external(fname1, "/link3", fid2, "link2", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/link5", fid2, "link4", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/final", fid2, "link6", H5P_DEFAULT, H5P_DEFAULT);
+
+} /* gen_ext_pingpong() */
+
+/*
+ * This routine creates files with too many external links to objects.
+ */
+static void
+gen_ext_toomany(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
+{
+    hid_t gid = (-1);
+    char fname1[50];
+    char fname2[50];
+
+    /* fid=H5Fcreate("ext_many1.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
+
+    strcpy(fname2, ext_fname2);
+    strcat(fname2, ".h5");
+
+    /* Create external links for chain */
+    H5Lcreate_external(fname2, "/link2", fid1, "link1", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link4", fid1, "link3", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link6", fid1, "link5", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link8", fid1, "link7", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link10", fid1, "link9", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link12", fid1, "link11", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link14", fid1, "link13", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/link16", fid1, "link15", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname2, "/final", fid1, "link17", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create second file */
+    /* fid=H5Fcreate("ext_many2.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
+
+    strcpy(fname1, ext_fname1);
+    strcat(fname1, ".h5");
+
+    /* Create external links for chain */
+    H5Lcreate_external(fname1, "/link3", fid2, "link2", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/link5", fid2, "link4", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/link7", fid2, "link6", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/link9", fid2, "link8", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/link11", fid2, "link10", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/link13", fid2, "link12", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/link15", fid2, "link14", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_external(fname1, "/link17", fid2, "link16", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create final object */
+    gid = H5Gcreate2(fid2, "final", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(gid);
+
+} /* end external_link_toomany() */
+
+/*
+ * This routine creates a file with various link types
+ */
+static void
+gen_ext_links(hid_t fid, char *ext_fname)
+{
+    hid_t gid = -1, gid2 = -1;          /* Group IDs */
+    hid_t sid = (-1);                   /* Dataspace ID */
+    hid_t did = (-1);                   /* Dataset ID */
+    hid_t tid = (-1);                   /* Datatype ID */
+
+    /* Create group */
+    gid = H5Gcreate2(fid, "/Group1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create nested group */
+    gid2 = H5Gcreate2(gid, "Group2", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Close groups */
+    H5Gclose(gid2);
+    H5Gclose(gid);
+
+    /* Create soft links to groups created */
+    H5Lcreate_soft("/Group1", fid, "/soft_one", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_soft("/Group1/Group2", fid, "/soft_two", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create dangling soft link */
+    H5Lcreate_soft("nowhere", fid, "/soft_dangle", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create hard links to all groups */
+    H5Lcreate_hard(fid, "/", fid, "hard_zero", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_hard(fid, "/Group1", fid, "hard_one", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_hard(fid, "/Group1/Group2", fid, "hard_two", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create loops w/hard links */
+    H5Lcreate_hard(fid, "/Group1", fid, "/Group1/hard_one", H5P_DEFAULT, H5P_DEFAULT);
+    H5Lcreate_hard(fid, "/", fid, "/Group1/Group2/hard_zero", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create dangling external link to non-existent file */
+    H5Lcreate_external("/foo.h5", "/group", fid, "/ext_dangle", H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create dataset in each group */
+    sid = H5Screate(H5S_SCALAR);
+    did = H5Dcreate2(fid, "/Dataset_zero", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Dclose(did);
+
+    did = H5Dcreate2(fid, "/Group1/Dataset_one", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Dclose(did);
+
+    did = H5Dcreate2(fid, "/Group1/Group2/Dataset_two", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Dclose(did);
+
+    H5Sclose(sid);
+
+    /* Create named datatype in each group */
+    tid = H5Tcopy(H5T_NATIVE_INT);
+    H5Tcommit2(fid, "/Type_zero", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Tclose(tid);
+
+    tid = H5Tcopy(H5T_NATIVE_INT);
+    H5Tcommit2(fid, "/Group1/Type_one", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    H5Tclose(tid);
+
+    tid = H5Tcopy(H5T_NATIVE_INT);
+    H5Tcommit2(fid, "/Group1/Group2/Type_two", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Tclose(tid);
+
+} /* gen_ext_links() */
 
 #if H5_LIBVERSION == 18 /* library release >= 1.8 */
 
@@ -2038,7 +2333,8 @@ static void gen_array(hid_t fid1, int fill_dataset)
  * fractal heap direct and indirect blocks.
  *
  */
-static void gen_newgrat(hid_t file_id)
+static void 
+gen_newgrat(hid_t file_id)
 {
     int         i;
     hid_t       gid;
@@ -2083,14 +2379,15 @@ static void gen_newgrat(hid_t file_id)
 
     ret = H5Tclose(type_id);
     VRFY((ret>=0), "H5Tclose");
-}
+} /* gen_newgrat() */
 
 /*
  * This function creates 1.8 format file that consists of
  * the shared message table.
  *
  */
-static void gen_sohm(hid_t file_id)
+static void 
+gen_sohm(hid_t file_id)
 {
     hid_t	type_id, space_id, group_id, attr_id;
     hsize_t     dims = 2;
@@ -2120,32 +2417,91 @@ static void gen_sohm(hid_t file_id)
 
     ret = H5Gclose(group_id);
     VRFY((ret >= 0), "H5Gclose");
-}
+} /* gen_sohm() */
 
 #endif /* H5_LIBVERSION == 18 */
 
+char *ext_fname[] = {
+    "ext_dangle1",	/* 0 */
+    "ext_dangle2",	/* 1 */
+    "ext_self1",	/* 2 */
+    "ext_self2",	/* 3 */
+    "ext_self3",	/* 4 */
+    "ext_mult1",	/* 5 */
+    "ext_mult2",	/* 6 */
+    "ext_mult3",	/* 7 */
+    "ext_mult4",	/* 8 */
+    "ext_pingpong1",	/* 9 */
+    "ext_pingpong2",	/* 10 */
+    "ext_toomany1",	/* 11 */
+    "ext_toomany2",	/* 12 */
+    "ext_links"		/* 13 */
+};
 
 /* main function of test generator */
 int main(int argc, char *argv[])
 {
 
     hid_t fid;
+    hid_t ext_fid1, ext_fid2, ext_fid3, ext_fid4;
 
     char *driver = "sec2";
     char *superblock = "standard";
 
-    char *fname[]={"root","linear","hierarchical","multipath","cyclical",
-        "rank_dsets_empty","rank_dsets_full","group_dsets","basic_types",
-        "compound","vl","enum","refer","array","filters","stdio","split",
-        "multi","family","log","attr","time","external_empty","external_full",
-        "alternate_sb", "new_grat", "sohm"}; /* file names */
+    /* file names */
+    char *fname[] = {
+	"root",
+	"linear",
+	"hierarchical",
+	"multipath",
+	"cyclical",
+	"rank_dsets_empty",
+	"rank_dsets_full",
+	"group_dsets",
+	"basic_types",
+	"compound",
+	"vl",
+	"enum",
+	"refer",
+	"array",
+	"filters",
+	"stdio",
+	"split",
+	"multi",
+	"family",
+	"log",
+	"attr",
+	"time",
+	"external_empty",
+	"external_full",
+	"alternate_sb", 
+	"new_grat", 
+	"sohm"
+    }; 
 
-    unsigned i=0;
+    char *ext_fname[] = {
+	"ext_dangle1",		/* 0 */
+	"ext_dangle2",		/* 1 */
+	"ext_self1",		/* 2 */
+	"ext_self2",		/* 3 */
+	"ext_self3",		/* 4 */
+	"ext_mult1",		/* 5 */
+	"ext_mult2",		/* 6 */
+	"ext_mult3",		/* 7 */
+	"ext_mult4",		/* 8 */
+	"ext_pingpong1",	/* 9 */
+	"ext_pingpong2",	/* 10 */
+	"ext_toomany1",		/* 11 */
+	"ext_toomany2",		/* 12 */
+	"ext_links"		/* 13 */
+    };
+
+    unsigned i = 0;
 
     /* initial message */
     printf("Generating test files for H5check...\n");
     fflush(stdout);
-    
+	
     /* root group is created along with the file */
     fid = create_file(fname[i++], driver, superblock);
     printf("just the root group\n");
@@ -2168,7 +2524,7 @@ int main(int argc, char *argv[])
     printf("a multipath structure\n");
     gen_group_struct(fid, GROUP_PREFIX, HEIGHT, MULTIPATH);
     close_file(fid, "");
-    
+	
     /* create a cyclical structure */
     fid = create_file(fname[i++], driver, superblock);
     printf("a cyclical structure\n");
@@ -2194,8 +2550,7 @@ int main(int argc, char *argv[])
     gen_group_datasets(fid, GROUP_PREFIX, HEIGHT, RIGHT);
     close_file(fid, "");
 
-    /* creates a file with datasets using different
-    basic datatypes */
+    /* creates a file with datasets using different basic datatypes */
     fid = create_file(fname[i++], driver, superblock);
     printf("datasets using different basic datatypes\n");
     gen_basic_types(fid, FULL);
@@ -2218,7 +2573,7 @@ int main(int argc, char *argv[])
     printf("a dataset using an enumerated datatype\n");
     gen_enum(fid, FULL);
     close_file(fid, "");
-    
+	
     /* create a file with a dataset using reference datatype */
     fid = create_file(fname[i++], driver, superblock);
     printf("a dataset using reference datatype\n");
@@ -2298,6 +2653,61 @@ int main(int argc, char *argv[])
     gen_group_datasets(fid, GROUP_PREFIX, HEIGHT, RIGHT);
     close_file(fid, "");
    
+    /*
+     * Generate testfiles for validating external links
+     */
+    /* create files with dangling external links */
+    ext_fid1 = create_file(ext_fname[0], driver, superblock);
+    ext_fid2 = create_file(ext_fname[1], driver, superblock);
+    printf("Dangling external links\n");
+    gen_ext_dangle(ext_fid1, ext_fname[0], ext_fid2, ext_fname[1]);
+    close_file(ext_fid1, "");
+    close_file(ext_fid2, "");
+    
+    /* create files with external links to self */
+    ext_fid1 = create_file(ext_fname[2], driver, superblock);
+    ext_fid2 = create_file(ext_fname[3], driver, superblock);
+    ext_fid3 = create_file(ext_fname[4], driver, superblock);
+    printf("External link to self\n");
+    gen_ext_self(ext_fid1, ext_fname[2], ext_fid2, ext_fname[3], ext_fid3, ext_fname[4]);
+    close_file(ext_fid1, "");
+    close_file(ext_fid2, "");
+    close_file(ext_fid3, "");
+
+    /* create files with external links across multiple files */
+    ext_fid1 = create_file(ext_fname[5], driver, superblock);
+    ext_fid2 = create_file(ext_fname[6], driver, superblock);
+    ext_fid3 = create_file(ext_fname[7], driver, superblock);
+    ext_fid4 = create_file(ext_fname[8], driver, superblock);
+    printf("External links across multiple files\n");
+    gen_ext_mult(ext_fid1, ext_fname[5], ext_fid2, ext_fname[6], ext_fid3, ext_fname[7], ext_fid4, ext_fname[8]);
+    close_file(ext_fid1, "");
+    close_file(ext_fid2, "");
+    close_file(ext_fid3, "");
+    close_file(ext_fid4, "");
+
+    /* create files with external links that go back and forth between 2 files */
+    ext_fid1 = create_file(ext_fname[9], driver, superblock);
+    ext_fid2 = create_file(ext_fname[10], driver, superblock);
+    printf("External links that go back and forth between 2 files\n");
+    gen_ext_pingpong(ext_fid1, ext_fname[9], ext_fid2, ext_fname[10]);
+    close_file(ext_fid1, "");
+    close_file(ext_fid2, "");
+
+    /* create files with too many external links to objects */
+    ext_fid1 = create_file(ext_fname[11], driver, superblock);
+    ext_fid2 = create_file(ext_fname[12], driver, superblock);
+    printf("Files with too many external links to objects\n");
+    gen_ext_toomany(ext_fid1, ext_fname[11], ext_fid2, ext_fname[12]);
+    close_file(ext_fid1, "");
+    close_file(ext_fid2, "");
+
+    /* create a file with various links */
+    ext_fid1 = create_file(ext_fname[13], driver, superblock);
+    printf("File with various links\n");
+    gen_ext_links(ext_fid1, ext_fname[13]);
+    close_file(ext_fid1, "");
+
 #if H5_LIBVERSION == 18 /* for library release > 1.8 */
 
     fid = create_file(fname[i++], driver, superblock);

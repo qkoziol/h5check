@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -12,134 +14,161 @@
 #include "h5_error.h"
 #include "h5_pline.h"
 
-int main(int argc, char **argv)
-{
-    ck_addr_t ss;
-    ck_addr_t gheap_addr;
-    FILE *inputfd;
-    driver_t *thefile;
-    global_shared_t *shared;
-    table_t *obj_table;
-    ck_err_t ret_err = 0;
+/* 
+ * The following coding for handling option is mainly copied from the HDF tools library 
+ */
+/*
+ * Command-line options: The user can specify short or long-named
+ * parameters. The long-named ones can be partially spelled. When
+ * adding more, make sure that they don't clash with each other.
+ *	option followed by ":" indicates that the option requires argument
+ */
+extern int opt_ind;
+extern const char *opt_arg;     
 
-    /* command line declarations */
-    int		argno;
-    const 	char *s = NULL;
-    char	*prog_name;
-    char	*fname;
-    char	*rest;
+static const char *s_opts = "o:v:f:hVe";
+static struct long_options l_opts[] = {
+    { "help", no_arg, 'h' },
+    { "hel", no_arg, 'h' },
+    { "he", no_arg, 'h' },
+    { "version", no_arg, 'V' },
+    { "versio", no_arg, 'V' },
+    { "versi", no_arg, 'V' },
+    { "vers", no_arg, 'V' },
+    { "external", no_arg, 'e' },
+    { "externa", no_arg, 'e' },
+    { "extern", no_arg, 'e' },
+    { "exter", no_arg, 'e' },
+    { "exte", no_arg, 'e' },
+    { "ext", no_arg, 'e' },
+    { "ex", no_arg, 'e' },
+    { "object", require_arg, 'o' },
+    { "objec", require_arg, 'o' },
+    { "obje", require_arg, 'o' },
+    { "obj", require_arg, 'o' },
+    { "ob", require_arg, 'o' },
+    { "verbose", require_arg, 'v' },
+    { "verbos", require_arg, 'v' },
+    { "verbo", require_arg, 'v' },
+    { "verb", require_arg, 'v' },
+    { "format", require_arg, 'f' },
+    { "forma", require_arg, 'f' },
+    { "form", require_arg, 'f' },
+    { "for", require_arg, 'f' },
+    { "fo", require_arg, 'f' },
+    { NULL, 0, '\0' }
+};
+
+int main(int argc, const char **argv)
+{
+    driver_t *thefile = NULL;
+    struct stat statbuf;
+    stat_info_t stat_info;
+    int  opt;
+    char *prog_name;
+    char *fname;
+    char *endptr;
+    ck_err_t ret_err = 0;
 	
-    if((prog_name=strrchr(argv[0], '/'))) 
+    if((prog_name = (char *)strrchr(argv[0], '/'))) 
 	prog_name++;
     else 
-	prog_name = argv[0];
+	prog_name = (char *)argv[0];
 
     g_verbose_num = DEFAULT_VERBOSE;
     g_format_num = DEFAULT_FORMAT;
     g_obj_addr = CK_ADDR_UNDEF;
+    g_follow_ext = FALSE;
 
-    for(argno=1; argno<argc && argv[argno][0]=='-'; argno++) {
-	if(!strcmp(argv[argno], "--help")) {
-	    usage(prog_name);
-	    leave(EXIT_SUCCESS);
-
-	} else if(!strcmp(argv[argno], "--version")) {
-	    print_version(prog_name);
-	    leave(EXIT_SUCCESS);
-
-	/* --verbose=n or --verbose or -vn */
-	} else if(!strncmp(argv[argno], "--verbose=", 10)) {
-	    g_verbose_num = strtol(argv[argno]+10, NULL, 0);
-	    printf("VERBOSE is true:verbose # = %d\n", g_verbose_num);
-	} else if(!strncmp(argv[argno], "--verbose", 9)) {
-	    g_verbose_num = DEFAULT_VERBOSE;
-	    printf("VERBOSE is true:no number provided, assume default verbose number.\n");
-	} else if(!strncmp(argv[argno], "-v", 2)) {
-	    if(argv[argno][2]) {
-		g_verbose_num = strtol(argv[argno]+2, NULL, 0);
-		printf("VERBOSE is true:verbose # = %d\n", g_verbose_num);
-	    } else {
-		usage(prog_name);
-		leave(EXIT_COMMAND_FAILURE);
-	    }
-
-	/* --format=n or --format or -fn */
-	} else if(!strncmp(argv[argno], "--format=", 9)) {
-	    g_format_num = strtol(argv[argno]+9, NULL, 0);
-	    printf("FORMAT is true:format version = %d\n", g_format_num);
-	} else if(!strncmp(argv[argno], "--format", 8)) {
-	    g_format_num = DEFAULT_FORMAT;
-	    printf("FORMAT is true:no number provided, assume default format version.\n");
-	} else if(!strncmp(argv[argno], "-f", 2)) {
-	    if(argv[argno][2]) {
-		g_format_num = strtol(argv[argno]+2, NULL, 0);
-		printf("FORMAT is true:format version = %d\n", g_format_num);
-	    } else {
-		usage(prog_name);
-		leave(EXIT_COMMAND_FAILURE);
-	    }
-
-	/* --object=a or --object or -oa */
-	} else if(!strncmp(argv[argno], "--object=", 9)) {
-	    g_obj_addr = strtoull(argv[argno]+9, NULL, 0);
-	    if(addr_defined(g_obj_addr))
-		printf("CHECK OBJECT_HEADER is true:object address =%llu\n", g_obj_addr);
-	    else {
-		printf("CHECK OBJECT_HEADER is true: but address in undefined, assume default validation\n");
-		g_obj_addr = CK_ADDR_UNDEF;
-	    }
-	} else if(!strncmp(argv[argno], "--object", 10))
-	    printf("CHECK OBJECT_HEADER is true:no address provided, assume default validation\n");
-	else if(!strncmp(argv[argno], "-o", 2)) {
-	    if(argv[argno][2]) {
-		s = argv[argno]+2;
-		g_obj_addr = strtoull(s, NULL, 0);
-		if(addr_defined(g_obj_addr))
-		    printf("CHECK OBJECT_HEADER is true:object address =%llu\n", g_obj_addr);
-		else {
-		    printf("CHECK OBJECT_HEADER is true: but address in undefined, assume default validation\n");
-		    g_obj_addr = CK_ADDR_UNDEF;
-		}
-	    } else {
-		usage(prog_name);
-		leave(EXIT_COMMAND_FAILURE);
-	    }
-
-	} else if(argv[argno][1] != '-') {
-	    for(s=argv[argno]+1; *s; s++) {
-		switch (*s) {
-		    case 'h':  /* --help */
-			usage(prog_name);
-			leave(EXIT_SUCCESS);
-		    case 'V':  /* --version */
-			print_version(prog_name);
-			leave(EXIT_SUCCESS);
-			break;
-		    default:
-			usage(prog_name);	
-			leave(EXIT_COMMAND_FAILURE);
-		}  /* end switch */
-	    }  /* end for */
-	} else
-	    printf("default is true, no option provided...assume default verbose and format\n");
-    }
-
-    if(argno >= argc) {
-	usage(prog_name);
+     /* no arguments */
+    if(argc == 1) {
+        usage(prog_name);
 	leave(EXIT_COMMAND_FAILURE);
     }
-    if(g_verbose_num > DEBUG_VERBOSE) {
-	printf("Invalid verbose # provided.  Default verbose is assumed.\n");
-	g_verbose_num = DEFAULT_VERBOSE;
+
+    /* parse command line options */
+    while((opt = get_option(argc, argv, s_opts, l_opts)) != EOF) {
+        switch ((char)opt) {
+        case 'h':
+	    usage(prog_name);
+	    leave(EXIT_COMMAND_SUCCESS);
+            break;
+
+        case 'V':
+	    print_version(prog_name);
+	    leave(EXIT_COMMAND_SUCCESS);
+            break;
+
+        case 'e':
+	    g_follow_ext = TRUE;
+            break;
+
+        case 'o':
+	    errno = 0;
+	    g_obj_addr = strtoull(opt_arg, &endptr, 0);
+	    if((errno != 0 && g_obj_addr == 0) || (*endptr != '\0')) {
+		printf("Invalid object address\n");
+		usage(prog_name);
+		leave(EXIT_COMMAND_FAILURE);
+	    }
+	    if(!addr_defined(g_obj_addr)) {
+		printf("Object header address is undefined\n");
+		usage(prog_name);
+		leave(EXIT_COMMAND_FAILURE);
+	    }
+	    printf("CHECK OBJECT_HEADER is true:object address =%llu\n", g_obj_addr);
+	    break;
+
+        case 'v':
+	    errno = 0;
+	    g_verbose_num = strtol(opt_arg, &endptr, 0);
+	    if((errno == ERANGE && (g_verbose_num == LONG_MAX || g_verbose_num == LONG_MIN)) ||
+	       (errno != 0 && g_verbose_num == 0) || (*endptr != '\0')) {
+		printf("Invalid verbose value\n");
+		usage(prog_name);
+		leave(EXIT_COMMAND_FAILURE);
+	    }
+	    if(g_verbose_num < 0 || g_verbose_num > 2) {
+		printf("Incorrect verbose value\n");
+		usage(prog_name);
+		leave(EXIT_COMMAND_FAILURE);
+	    }
+	    printf("VERBOSE is true:verbose # = %d\n", g_verbose_num);
+            break;
+
+        case 'f':
+	    errno = 0;
+	    g_format_num = strtol(opt_arg, &endptr, 0);
+	    if((errno == ERANGE && (g_format_num == LONG_MAX || g_format_num == LONG_MIN)) ||
+	       (errno != 0 && g_format_num == 0) || (*endptr != '\0')) {
+		printf("Invalid format value\n");
+		usage(prog_name);
+		leave(EXIT_COMMAND_FAILURE);
+	    }
+	    if(g_format_num != FORMAT_ONE_SIX && g_format_num != FORMAT_ONE_EIGHT) {
+		printf("Incorrect library release version.\n");
+		usage(prog_name);
+		leave(EXIT_COMMAND_FAILURE);
+	    }
+	    printf("FORMAT is true:format version = %d\n", g_format_num);
+            break;
+
+        case '?':
+        default:
+            usage(prog_name);
+            leave(EXIT_COMMAND_FAILURE);
+        }
     }
 
-    if(g_format_num != FORMAT_ONE_SIX && g_format_num != FORMAT_ONE_EIGHT) {
-	printf("Invalid library version provided.  Default library version is assumed.\n");
-	g_format_num = DEFAULT_FORMAT;
+    /* check for file name to be processed */
+    if(argc <= opt_ind) {
+        printf("Missing file name\n");
+        usage(prog_name);
+        leave(EXIT_COMMAND_FAILURE);
     }
 
+    fname = strdup(argv[opt_ind]);
     g_obj_api = FALSE;
-    fname = strdup(argv[argno]);
 
     if(g_format_num == FORMAT_ONE_SIX)
 	printf("\nVALIDATING %s according to library version 1.6.6 ", fname);
@@ -148,61 +177,13 @@ int main(int argc, char **argv)
     else
         printf("...invalid library release version...shouldn't happen.\n");
 
-    if(addr_defined(g_obj_addr))
+    if(addr_defined(g_obj_addr)) /* NO NEED TO CHECK FOR THIS LATER */
 	printf("at object header address %llu", g_obj_addr);
     printf("\n\n");
+    fflush(stdout);
 
-    if(table_init(&obj_table) < 0) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing hard link table", -1, NULL);
+    if((thefile = file_init(fname)) == NULL)
 	CK_INC_ERR_DONE
-    }
-
-    if((shared = calloc(1, sizeof(global_shared_t))) == NULL) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in allocating memory for shared", -1, NULL);
-	CK_INC_ERR_DONE
-    }
-
-    if(shared && obj_table)
-	shared->obj_table = obj_table;
-
-    /* Initially, use the SEC2 driver by default */
-    if((thefile = FD_open(fname, shared, SEC2_DRIVER)) == NULL) {
-	error_push(ERR_FILE, ERR_NONE_SEC, 
-	    "Failure in opening input file using the default driver. Validation discontinued.", -1, NULL);
-	CK_INC_ERR_DONE
-    }
-
-    /* superblock validation has to be all passed before proceeding further */
-    if(check_superblock(thefile) < 0) {
-	error_push(ERR_LEV_0, ERR_LEV_0A, 
-	    "Errors found when checking superblock. Validation stopped.", -1, NULL);
-	CK_INC_ERR_DONE
-    }
-
-    /* not using the default driver */
-    if(thefile->shared->driverid != SEC2_DRIVER) {
-	if(FD_close(thefile) < 0) {
-	    error_push(ERR_FILE, ERR_NONE_SEC, 
-		"Errors in closing input file using the default driver", -1, NULL);
-	    error_print(stderr, thefile);
-	    error_clear();
-	}
-
-	printf("Switching to new file driver...\n");
-	if((thefile = FD_open(fname, shared, shared->driverid)) == NULL) {
-	    error_push(ERR_FILE, ERR_NONE_SEC, "Errors in opening input file. Validation stopped.", -1, NULL);
-	    CK_INC_ERR_DONE
-        }
-    }
-
-    shared = NULL;
-    ss = FD_get_eof(thefile);
-    if(!addr_defined(ss) || ss < thefile->shared->stored_eoa) {
-	error_push(ERR_FILE, ERR_NONE_SEC, 
-	    "Invalid file size or file size less than superblock eoa. Validation stopped.", 
-	    -1, NULL);
-	CK_INC_ERR_DONE
-    }
 
     if(addr_defined(g_obj_addr) && g_obj_addr >= thefile->shared->stored_eoa) {
 	error_push(ERR_FILE, ERR_NONE_SEC, 
@@ -211,10 +192,33 @@ int main(int argc, char **argv)
 	CK_INC_ERR_DONE
     }
 
+    /* Initialize global filters */
     if(pline_init_interface() < 0) {
-	error_push(ERR_LEV_0, ERR_NONE_SEC, "Problems in initializing filters...later validation may be affected", 
+	error_push(ERR_LEV_0, ERR_NONE_SEC, "Problems in initializing filters", 
 	    -1, NULL);
-	CK_INC_ERR
+	CK_INC_ERR_DONE
+    }
+
+    if(stat(fname, &statbuf) < 0) {
+	error_push(ERR_LEV_1, ERR_LEV_1C, "Error in getting stat info", -1, NULL);
+	CK_INC_ERR_DONE
+    }
+    stat_info.st_dev = statbuf.st_dev;
+    stat_info.st_ino = statbuf.st_ino;
+    stat_info.st_mode = statbuf.st_mode;
+
+    /* Initialize global table of external linked files being visited */
+    g_ext_tbl = NULL;
+    if(g_follow_ext) {
+	if(table_init(&g_ext_tbl, TYPE_EXT_FILE) < 0) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing table for external linked files", -1, NULL);
+	    CK_INC_ERR_DONE
+	}
+	assert(g_ext_tbl);
+	if(table_insert(g_ext_tbl, &stat_info, TYPE_EXT_FILE) < 0) {
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in inserting external linked file to table", -1, NULL);
+	    CK_INC_ERR_DONE
+	}
     }
 
     /* errors should have been flushed already in check_obj_header() */
@@ -225,33 +229,17 @@ int main(int argc, char **argv)
 
 done:
     if(fname) free(fname);
-
-    if(thefile && thefile->shared)
-	(void) table_free(thefile->shared->obj_table);
-
     (void) pline_free();
+    if(g_ext_tbl) 
+	(void) table_free(g_ext_tbl);
 
-    if(thefile && thefile->shared) {
-	SM_master_table_t *tbl = thefile->shared->sohm_tbl;
-
-	if(thefile->shared->root_grp)
-	    free(thefile->shared->root_grp);
-
-        if(thefile->shared->sohm_tbl) {
-	    SM_master_table_t *tbl = thefile->shared->sohm_tbl;
-    
-            if(tbl->indexes) free(tbl->indexes);
-	    free(tbl);
-	}
-	if(thefile->shared->fa) 
-	    free_driver_fa(thefile->shared);
-	free(thefile->shared);
-    }
+    if(thefile != NULL)
+	free_file_shared(thefile);
 
     if(thefile != NULL && FD_close(thefile) < 0) {
-	error_push(ERR_FILE, ERR_NONE_SEC, "Errors in closing input file", -1, NULL);
-	CK_INC_ERR
-    }
+        error_push(ERR_FILE, ERR_NONE_SEC, "Errors in closing input file", -1, NULL);
+        ++ret_err;
+    }             
 
     if(ret_err) {
 	error_print(stderr, thefile);
@@ -263,6 +251,6 @@ done:
 	leave(EXIT_FORMAT_FAILURE);
     } else {
 	printf("No non-compliance errors found\n");
-	leave(EXIT_SUCCESS);
+	leave(EXIT_COMMAND_SUCCESS);
     }
-}
+} /* main */

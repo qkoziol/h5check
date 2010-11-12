@@ -34,6 +34,7 @@ h5checker_obj(char *fname, ck_addr_t obj_addr, int format_num, ck_errmsg_t *errb
 	printf("...invalid library release version...shouldn't happen.\n");
 	
 
+/* NEED: to work on this */
     if((shared = calloc(1, sizeof(global_shared_t))) == NULL) {
 	error_push(ERR_FILE, ERR_NONE_SEC,
 	    "Failure in memory allocation. Validation discontinued.", -1, NULL);
@@ -41,8 +42,8 @@ h5checker_obj(char *fname, ck_addr_t obj_addr, int format_num, ck_errmsg_t *errb
 	goto done;
     }
 
-    if(table_init(&obj_table) < 0) {
-	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing hard link table", -1, NULL);
+    if(table_init(&obj_table, TYPE_HARD_LINK) < 0) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing table for hard links", -1, NULL);
 	++g_obj_api_err;
     }
 

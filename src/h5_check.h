@@ -19,7 +19,7 @@
 #define DEFAULT_FORMAT		FORMAT_ONE_EIGHT
 
 /* exit status */
-#define         EXIT_SUCCESS		0
+#define         EXIT_COMMAND_SUCCESS	0
 #define         EXIT_COMMAND_FAILURE    1
 #define         EXIT_FORMAT_FAILURE     2
 
@@ -38,7 +38,6 @@
 typedef size_t                  ck_size_t;
 typedef unsigned long long      ck_hsize_t;
 
-/* NEED to check into this more */
 #define long_long   long long
 
 #define SUCCEED 0
@@ -55,12 +54,19 @@ typedef unsigned long long      ck_hsize_t;
 #define TRUE 1
 #endif
 
-/* for handling hard links */
-typedef struct obj_t {
-    ck_addr_t objno;
-    int	nlink;
-} obj_t;
+/* For handling objects */
+typedef struct stat_info_t {
+    dev_t st_dev;
+    ino_t st_ino;
+    mode_t st_mode;
+} stat_info_t;
 
+typedef struct obj_t {
+    union {
+	ck_addr_t addr;
+	stat_info_t stat;
+    } u;
+} obj_t;
 
 typedef struct table_t {
     size_t size;
@@ -68,7 +74,7 @@ typedef struct table_t {
     obj_t *objs;
 } table_t;
 
-/* for handling symbol table names */
+/* for handling names */
 typedef struct name_t {
     char *name;
     struct name_t *next;
@@ -325,6 +331,7 @@ typedef struct 	global_shared_t {
     void *sohm_tbl;	    	/* address of the master table of shared messages */
     void *fa;    	    	/* driver specific info */
     table_t  *obj_table;	/* Table for handling hard links */
+    char *extpath;		/* Path for searching target external linked file */
 } global_shared_t;
 
 /*
@@ -760,7 +767,6 @@ typedef struct OBJ_edf_t {
     OBJ_edf_entry_t *slot;              /*array of external file entries     */
 } OBJ_edf_t;
 
-
 /*
  * Group info message.
  */
@@ -772,8 +778,6 @@ typedef struct OBJ_edf_t {
 #define OBJ_CRT_GINFO_MIN_DENSE                 6
 #define OBJ_CRT_GINFO_EST_NUM_ENTRIES           4
 #define OBJ_CRT_GINFO_EST_NAME_LEN              8
-
-
 
 typedef struct OBJ_ginfo_t {
     /* "Old" format group info (not stored) */
@@ -789,16 +793,13 @@ typedef struct OBJ_ginfo_t {
     uint16_t    est_name_len;           /* Estimated length of entry name    */
 } OBJ_ginfo_t;
 
-
 /*
  * Data Storage: layout 
  */
 #define OBJ_LAYOUT_VERSION_1    1
 #define OBJ_LAYOUT_VERSION_2    2
 #define OBJ_LAYOUT_VERSION_3    3
-
 #define OBJ_LAYOUT_NDIMS        (OBJ_SDS_MAX_RANK+1)
-
 
 typedef enum DATA_layout_t {
     DATA_LAYOUT_ERROR    = -1,
@@ -807,7 +808,6 @@ typedef enum DATA_layout_t {
     DATA_CHUNKED         = 2,    /*slow and fancy                             */
     DATA_NLAYOUTS        = 3     /*this one must be last!                     */
 } DATA_layout_t;
-
 
 typedef struct OBJ_layout_contig_t {
     ck_addr_t     addr;                   /* File address of data              */
@@ -2046,6 +2046,19 @@ struct driver_class_t {
     char        *(*get_fname)(driver_t *file, ck_addr_t logi_addr);
 };
 
+#ifdef WORKING
+typedef struct fd_t {
+    int	driver_id;      	/* driver ID for this file   */
+    const driver_class_t *cls;  /* constant class info       */
+} fd_t;
+
+typedef struct file_t {
+    char *fname;		/* file name */
+    fd_t *lf;			/* file handle */
+    global_shared_t *shared;	/* shared info */
+} file_t;
+#endif
+
 struct driver_t {
     int			driver_id;      /* driver ID for this file   */
     global_shared_t	*shared;
@@ -2112,14 +2125,20 @@ void free_driver_fa(global_shared_t *shared);
 int     	g_verbose_num;
 int		g_format_num;
 ck_addr_t 	g_obj_addr;
+ck_bool_t	g_follow_ext;
 void            print_version(const char *);
 void            usage(char *);
 void            leave(int);
 
-/* for handling hard links */
-ck_err_t	table_init(table_t **);
-void 		table_free(table_t *table);
 
+
+table_t *g_ext_tbl;
+
+/* for handling names */
+int name_list_init(name_list_t **name_list);
+ck_bool_t name_list_search(name_list_t *nl, char *name);
+ck_err_t name_list_insert(name_list_t *nl, char *name);
+void name_list_dest(name_list_t *nl);
 
 /* Validation routines */
 ck_err_t        check_superblock(driver_t *);
@@ -2162,3 +2181,39 @@ int object_api(void);
 
 uint32_t checksum_metadata(const void *, ck_size_t, uint32_t);
 uint32_t checksum_lookup3(const void *, ck_size_t, uint32_t);
+
+driver_t *file_init(char *fname);
+void free_file_shared(driver_t *thefile);
+
+#define TYPE_HARD_LINK 1
+#define TYPE_EXT_FILE 2
+
+ck_err_t table_init(table_t **tbl, int type);
+ck_err_t table_insert(table_t *tbl, void *_id, int type);
+void table_free(table_t *tbl);
+
+/*
+ * Copied from the HDF tools library
+ */
+enum {
+    no_arg = 0,         /* doesn't take an argument     */
+    require_arg,        /* requires an argument         */
+    optional_arg        /* argument is optional         */
+};
+
+typedef struct long_options {
+    const char  *name;          /* name of the long option              */
+    int          has_arg;       /* whether we should look for an arg    */
+    char         shortval;      /* the shortname equivalent of long arg
+                                 * this gets returned from get_option   */
+} long_options;
+
+int get_option(int argc, const char **argv, const char *opts, const struct long_options *l_opts) ;
+
+#define MAX_PATH_LEN     1024
+#define DIR_SEPC        '/'
+#define DIR_SEPS        "/"
+#define CHECK_DELIMITER(SS)             (SS == DIR_SEPC)
+#define CHECK_ABSOLUTE(NAME)            (CHECK_DELIMITER(*NAME))
+#define GET_LAST_DELIMITER(NAME, ptr)   ptr = strrchr(NAME, DIR_SEPC);
+
