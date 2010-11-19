@@ -16,7 +16,10 @@ To build:
 Assuming gcc, gmake and h5cc are in your $PATH, just do
     % ./configure
     % gmake
-    
+
+To compile with large file support:
+    % gmake CFLAGS="-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_BSD_SOURCE"
+
 The default compiler and HDF5 library compiler are set to gcc and h5cc.
 If you want to use a different C compiler and/or h5cc command, do
     % make CC=gcc H5CC=$mypath/h5cc
@@ -24,7 +27,10 @@ If you want to use a different C compiler and/or h5cc command, do
 To set different compiler flags use CFLAGS variable, e.g.
      % env CFLAGS=-O2 ./configure
 This command will set the compiling to "gcc -O2".
-    
+
+To configure for large file support:
+     % env CFLAGS="-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_BSD_SOURCE" ./configure
+
 ============
 To run tests:
 ============
