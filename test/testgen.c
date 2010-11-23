@@ -2006,6 +2006,105 @@ gen_array(hid_t fid1, int fill_dataset)
 
 } /* gen_array() */
 
+#if H5_LIBVERSION == 18 /* library release >= 1.8 */
+
+#define NEW_DATASET_NAME    "DATASET_NAME"
+#define NEW_GROUP_NAME      "GROUP"
+#define NEW_ATTR_NAME       "ATTR"
+#define NEW_NUM_GRPS        35000
+#define NEW_NUM_ATTRS       100
+
+/*
+ * This function creates 1.8 format file that consists of
+ * fractal heap direct and indirect blocks.
+ *
+ */
+static void 
+gen_newgrat(hid_t file_id)
+{
+    int         i;
+    hid_t       gid;
+    hid_t       type_id, space_id, attr_id, dset_id;
+    char        gname[100];
+    char        attrname[100];
+    herr_t      ret;
+
+    for (i=1; i<=NEW_NUM_GRPS; i++) {
+        sprintf(gname, "%s%d", NEW_GROUP_NAME,i);
+        gid = H5Gcreate2(file_id, gname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        VRFY((gid>=0), "H5Gcreate2");
+        ret = H5Gclose(gid);
+        VRFY((ret>=0), "H5Gclose");
+    }
+
+    /* Create a datatype to commit and use */
+    type_id=H5Tcopy(H5T_NATIVE_INT);
+    VRFY((type_id>=0), "H5Tcopy");
+
+    /* Create dataspace for dataset */
+    space_id=H5Screate(H5S_SCALAR);
+    VRFY((space_id>=0), "H5Screate");
+
+    /* Create dataset */
+    dset_id = H5Dcreate2(file_id, NEW_DATASET_NAME, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((dset_id>=0), "H5Dcreate2");
+
+    for (i=1; i<=NEW_NUM_ATTRS; i++) {
+        sprintf(attrname, "%s%d", NEW_ATTR_NAME,i);
+        attr_id = H5Acreate2(dset_id, attrname, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT);
+        VRFY((attr_id>=0), "H5Acreate2");
+        ret=H5Aclose(attr_id);
+        VRFY((ret>=0), "H5Aclose");
+    }
+
+    ret = H5Dclose(dset_id);
+    VRFY((ret>=0), "H5Dclose");
+
+    ret = H5Sclose(space_id);
+    VRFY((ret>=0), "H5Sclose");
+
+    ret = H5Tclose(type_id);
+    VRFY((ret>=0), "H5Tclose");
+} /* gen_newgrat() */
+
+/*
+ * This function creates 1.8 format file that consists of
+ * the shared message table.
+ *
+ */
+static void 
+gen_sohm(hid_t file_id)
+{
+    hid_t	type_id, space_id, group_id, attr_id;
+    hsize_t     dims = 2;
+    int         wdata[2] = {7, 42};
+    herr_t      ret;
+
+
+    type_id = H5Tcopy(H5T_NATIVE_INT);
+    VRFY((type_id >= 0), "H5Tcopy");
+    space_id = H5Screate_simple(1, &dims, &dims);
+    VRFY((space_id >= 0), "H5Screate_simple");
+
+    group_id = H5Gcreate2(file_id, NEW_GROUP_NAME, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((group_id >= 0), "H5Gcreate2");
+    
+    attr_id = H5Acreate2(group_id, NEW_ATTR_NAME, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((attr_id >= 0), "H5Acreate2");
+    
+    ret = H5Awrite(attr_id, H5T_NATIVE_INT, wdata);
+    VRFY((ret >= 0), "H5Awrite");
+
+    ret = H5Aclose(attr_id);
+    VRFY((ret >= 0), "H5Aclose");
+
+    ret = H5Tclose(type_id);
+    VRFY((ret >= 0), "H5Tclose");
+
+    ret = H5Gclose(group_id);
+    VRFY((ret >= 0), "H5Gclose");
+} /* gen_sohm() */
+
 /* 
  * This set of routines for generating external linked files are mainly copied
  * from HDF5 library test/links.c
@@ -2320,105 +2419,6 @@ gen_ext_links(hid_t fid, char *ext_fname)
 
 } /* gen_ext_links() */
 
-#if H5_LIBVERSION == 18 /* library release >= 1.8 */
-
-#define NEW_DATASET_NAME    "DATASET_NAME"
-#define NEW_GROUP_NAME      "GROUP"
-#define NEW_ATTR_NAME       "ATTR"
-#define NEW_NUM_GRPS        35000
-#define NEW_NUM_ATTRS       100
-
-/*
- * This function creates 1.8 format file that consists of
- * fractal heap direct and indirect blocks.
- *
- */
-static void 
-gen_newgrat(hid_t file_id)
-{
-    int         i;
-    hid_t       gid;
-    hid_t       type_id, space_id, attr_id, dset_id;
-    char        gname[100];
-    char        attrname[100];
-    herr_t      ret;
-
-    for (i=1; i<=NEW_NUM_GRPS; i++) {
-        sprintf(gname, "%s%d", NEW_GROUP_NAME,i);
-        gid = H5Gcreate2(file_id, gname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        VRFY((gid>=0), "H5Gcreate2");
-        ret = H5Gclose(gid);
-        VRFY((ret>=0), "H5Gclose");
-    }
-
-    /* Create a datatype to commit and use */
-    type_id=H5Tcopy(H5T_NATIVE_INT);
-    VRFY((type_id>=0), "H5Tcopy");
-
-    /* Create dataspace for dataset */
-    space_id=H5Screate(H5S_SCALAR);
-    VRFY((space_id>=0), "H5Screate");
-
-    /* Create dataset */
-    dset_id = H5Dcreate2(file_id, NEW_DATASET_NAME, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    VRFY((dset_id>=0), "H5Dcreate2");
-
-    for (i=1; i<=NEW_NUM_ATTRS; i++) {
-        sprintf(attrname, "%s%d", NEW_ATTR_NAME,i);
-        attr_id = H5Acreate2(dset_id, attrname, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT);
-        VRFY((attr_id>=0), "H5Acreate2");
-        ret=H5Aclose(attr_id);
-        VRFY((ret>=0), "H5Aclose");
-    }
-
-    ret = H5Dclose(dset_id);
-    VRFY((ret>=0), "H5Dclose");
-
-    ret = H5Sclose(space_id);
-    VRFY((ret>=0), "H5Sclose");
-
-    ret = H5Tclose(type_id);
-    VRFY((ret>=0), "H5Tclose");
-} /* gen_newgrat() */
-
-/*
- * This function creates 1.8 format file that consists of
- * the shared message table.
- *
- */
-static void 
-gen_sohm(hid_t file_id)
-{
-    hid_t	type_id, space_id, group_id, attr_id;
-    hsize_t     dims = 2;
-    int         wdata[2] = {7, 42};
-    herr_t      ret;
-
-
-    type_id = H5Tcopy(H5T_NATIVE_INT);
-    VRFY((type_id >= 0), "H5Tcopy");
-    space_id = H5Screate_simple(1, &dims, &dims);
-    VRFY((space_id >= 0), "H5Screate_simple");
-
-    group_id = H5Gcreate2(file_id, NEW_GROUP_NAME, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    VRFY((group_id >= 0), "H5Gcreate2");
-    
-    attr_id = H5Acreate2(group_id, NEW_ATTR_NAME, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT);
-    VRFY((attr_id >= 0), "H5Acreate2");
-    
-    ret = H5Awrite(attr_id, H5T_NATIVE_INT, wdata);
-    VRFY((ret >= 0), "H5Awrite");
-
-    ret = H5Aclose(attr_id);
-    VRFY((ret >= 0), "H5Aclose");
-
-    ret = H5Tclose(type_id);
-    VRFY((ret >= 0), "H5Tclose");
-
-    ret = H5Gclose(group_id);
-    VRFY((ret >= 0), "H5Gclose");
-} /* gen_sohm() */
-
 #endif /* H5_LIBVERSION == 18 */
 
 char *ext_fname[] = {
@@ -2441,9 +2441,8 @@ char *ext_fname[] = {
 /* main function of test generator */
 int main(int argc, char *argv[])
 {
-
-    hid_t fid;
-    hid_t ext_fid1, ext_fid2, ext_fid3, ext_fid4;
+    hid_t fid;	/* file id */
+    hid_t ext_fid1, ext_fid2, ext_fid3, ext_fid4;	/* file ids  */
 
     char *driver = "sec2";
     char *superblock = "standard";
@@ -2479,6 +2478,7 @@ int main(int argc, char *argv[])
 	"sohm"
     }; 
 
+    /* file names for external linked tests */
     char *ext_fname[] = {
 	"ext_dangle1",		/* 0 */
 	"ext_dangle2",		/* 1 */
@@ -2653,6 +2653,19 @@ int main(int argc, char *argv[])
     gen_group_datasets(fid, GROUP_PREFIX, HEIGHT, RIGHT);
     close_file(fid, "");
    
+#if H5_LIBVERSION == 18 /* for library release > 1.8 */
+
+    fid = create_file(fname[i++], driver, superblock);
+    printf("1.8 group/attribute file\n");
+    gen_newgrat(fid);
+    close_file(fid, "");
+
+    /* use the parameter "superblock" to set SOHM property list */
+    fid = create_file(fname[i++], driver, "sohm");
+    printf("1.8 SOHM file\n");
+    gen_sohm(fid);
+    close_file(fid, "");
+
     /*
      * Generate testfiles for validating external links
      */
@@ -2707,19 +2720,6 @@ int main(int argc, char *argv[])
     printf("File with various links\n");
     gen_ext_links(ext_fid1, ext_fname[13]);
     close_file(ext_fid1, "");
-
-#if H5_LIBVERSION == 18 /* for library release > 1.8 */
-
-    fid = create_file(fname[i++], driver, superblock);
-    printf("1.8 group/attribute file\n");
-    gen_newgrat(fid);
-    close_file(fid, "");
-
-    /* use the parameter "superblock" to set SOHM property list */
-    fid = create_file(fname[i++], driver, "sohm");
-    printf("1.8 SOHM file\n");
-    gen_sohm(fid);
-    close_file(fid, "");
 
 #endif
 

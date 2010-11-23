@@ -69,6 +69,15 @@ TOOLPASS() {
 }
 
 
+# Arguments to TOOLPASS_EXIST():
+# $1: the file to be validated by h5check
+# $2: argument to h5check
+TOOLPASS_EXIST() {
+    if test -r $1; then
+	TOOLPASS $2 $1
+    fi
+}
+
 
 # Run a test that the tool should fail.  
 # It will print "PASS" and "FAIL" acoordingly.  
@@ -202,32 +211,27 @@ TOOLPASS root.h5
 TOOLPASS stdio.h5
 TOOLPASS time.h5
 TOOLPASS vl.h5
-# external links 
-TOOLPASS --exte ext_dangle1.h5
-TOOLPASS -e ext_dangle2.h5
-TOOLPASS -e ext_dangle2.h5
-TOOLPASS --exter ext_self1.h5
-TOOLPASS -e ext_self2.h5
-TOOLPASS --ex ext_self3.h5
-TOOLPASS -e ext_mult1.h5
-TOOLPASS -e ext_mult2.h5
-TOOLPASS -e ext_mult3.h5
-TOOLPASS -e ./ext_mult3.h5
-TOOLPASS -e ext_mult4.h5
-TOOLPASS -e ext_pingpong1.h5
-TOOLPASS -e ext_pingpong2.h5
-TOOLPASS -e ./ext_pingpong2.h5
-TOOLPASS --external ext_toomany1.h5
-TOOLPASS --external ext_toomany2.h5
-TOOLPASS --external ./ext_toomany2.h5
-TOOLPASS -e ext_links.h5
 # these 2 files are generated only when 1.8 library is used
-if test -r new_grat.h5; then
-TOOLPASS new_grat.h5
-fi
-if test -r sohm.h5; then
-TOOLPASS sohm.h5
-fi
+TOOLPASS_EXIST new_grat.h5
+TOOLPASS_EXIST sohm.h5
+# files for external links are generated only when 1.8 library is used
+TOOLPASS_EXIST ext_dangle1.h5 --exte
+TOOLPASS_EXIST ext_dangle2.h5 -e
+TOOLPASS_EXIST ext_self1.h5 --exter
+TOOLPASS_EXIST ext_self2.h5 -e
+TOOLPASS_EXIST ext_self3.h5 --ex
+TOOLPASS_EXIST ext_mult1.h5 -e
+TOOLPASS_EXIST ext_mult2.h5 -e
+TOOLPASS_EXIST ext_mult3.h5 -e
+TOOLPASS_EXIST ./ext_mult3.h5 -e
+TOOLPASS_EXIST ext_mult4.h5 -e
+TOOLPASS_EXIST ext_pingpong1.h5 -e
+TOOLPASS_EXIST ext_pingpong2.h5 -e
+TOOLPASS_EXIST ./ext_pingpong2.h5 -e
+TOOLPASS_EXIST ext_toomany1.h5 --external
+TOOLPASS_EXIST ext_toomany2.h5 --external
+TOOLPASS_EXIST ./ext_toomany2.h5 --external
+TOOLPASS_EXIST ext_links.h5 -e
 
 # future tests for non-default VFD files
 #TOOLPASS family00000.h5
