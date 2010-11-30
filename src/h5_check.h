@@ -953,7 +953,12 @@ typedef struct OBJ_comm_t {
 
 
 typedef uint32_t 	OBJ_msg_crt_idx_t;
-typedef uint64_t 	OBJ_fheap_id_t;
+#define OBJ_FHEAP_ID_LEN                        8
+typedef union {
+    uint8_t id[OBJ_FHEAP_ID_LEN];       /* Buffer to hold ID, for encoding/decoding */
+    uint64_t val;                       /* Value, for quick comparisons */
+} OBJ_fheap_id_t;
+
 
 typedef struct OBJ_mesg_loc_t {
     OBJ_msg_crt_idx_t 	index;            /* index within object header   */
@@ -1789,9 +1794,9 @@ typedef struct HF_hdr_t {
     ck_bool_t     huge_ids_direct; /* Flag to indicate that 'huge' object's offset & length are stored directly in heap ID */
     ck_size_t     tiny_max_len;      /* Max. size of tiny objects for this heap */    
     ck_bool_t     tiny_len_extended; /* Flag to indicate that 'tiny' object's length is stored in extended form (i.e. w/extra byte) */
-    unsigned char huge_id_size; /* Size of 'huge' heap IDs (in bytes) */
-    unsigned char heap_off_size; /* Size of heap offsets (in bytes) */    
-    unsigned char heap_len_size; /* Size of heap ID lengths (in bytes) */
+    uint8_t huge_id_size; /* Size of 'huge' heap IDs (in bytes) */
+    uint8_t heap_off_size; /* Size of heap offsets (in bytes) */    
+    uint8_t heap_len_size; /* Size of heap ID lengths (in bytes) */
 } HF_hdr_t;
 
 /* Size of managed indirect block entry for a child direct block */

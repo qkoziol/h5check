@@ -338,7 +338,7 @@ SM_message_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
 
     if(message->location == SM_IN_HEAP) {
         UINT32DECODE(raw, message->u.heap_loc.ref_count);
-        UINT64DECODE(raw, message->u.heap_loc.fheap_id);
+	memcpy(message->u.heap_loc.fheap_id.id, raw, (size_t)OBJ_FHEAP_ID_LEN);
     } else {
         assert(message->location == SM_IN_OH);
 
@@ -358,7 +358,8 @@ A_dense_btree2_name_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
 {
     A_dense_bt2_name_rec_t *nrecord = (A_dense_bt2_name_rec_t *)_nrecord;
 
-    UINT64DECODE(raw, nrecord->id);
+    memcpy(nrecord->id.id, raw, (size_t)OBJ_FHEAP_ID_LEN);
+    raw += OBJ_FHEAP_ID_LEN;
     nrecord->flags = *raw++;
     UINT32DECODE(raw, nrecord->corder)
     UINT32DECODE(raw, nrecord->hash)
@@ -372,7 +373,8 @@ A_dense_btree2_corder_decode(driver_t *file, const uint8_t *raw, void *_nrecord)
 {
     A_dense_bt2_corder_rec_t *nrecord = (A_dense_bt2_corder_rec_t *)_nrecord;
 
-    UINT64DECODE(raw, nrecord->id);
+    memcpy(nrecord->id.id, raw, (size_t)OBJ_FHEAP_ID_LEN);
+    raw += OBJ_FHEAP_ID_LEN;
     nrecord->flags = *raw++;
     UINT32DECODE(raw, nrecord->corder)
 
