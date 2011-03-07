@@ -153,7 +153,7 @@ const unsigned int *cd_values, size_t nbytes, size_t *buf_size, void **buf);
 
 #if H5_LIBVERSION == 18 /* library release >= 1.8 */
 
-#if H5_VERS_RELEASE < 4
+#if H5_VERS_RELEASE < 3
 #define H5Z_class2_t H5Z_class_t
 #endif
 
@@ -2666,6 +2666,7 @@ int main(int argc, char *argv[])
     gen_sohm(fid);
     close_file(fid, "");
 
+#if H5_VERS_RELEASE > 1
     /*
      * Generate testfiles for validating external links
      */
@@ -2720,7 +2721,7 @@ int main(int argc, char *argv[])
     printf("File with various links\n");
     gen_ext_links(ext_fid1, ext_fname[13]);
     close_file(ext_fid1, "");
-
+#endif
 #endif
 
     /* successful completion message */
