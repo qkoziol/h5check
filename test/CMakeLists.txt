@@ -23,7 +23,7 @@ FOREACH (h5_tfile ${HDF5CHECK_TEST_FILES})
   SET (dest "${PROJECT_BINARY_DIR}/${h5_tfile}")
 #  MESSAGE (STATUS " Copying ${PROJECT_SOURCE_DIR}/invalidfiles/${h5_tfile} ${dest}")
   ADD_CUSTOM_COMMAND (
-      TARGET     ${HDF5CHECK_UTILITY}
+      TARGET     testgen
       POST_BUILD
       COMMAND    ${CMAKE_COMMAND}
       ARGS       -E copy_if_different ${PROJECT_SOURCE_DIR}/invalidfiles/${h5_tfile} ${dest}
@@ -59,49 +59,135 @@ ADD_TEST (
     NAME h5checktest-clear-objects
     COMMAND    ${CMAKE_COMMAND}
         -E remove 
-#        *.bin full*.data
-         basic_types.h5
          alternate_sb.h5
+         alternate_sb.h5.txt
+         alternate_sb.h5.txt.err
          array.h5
+         array.h5.txt
+         array.h5.txt.err
          attr.h5
+         attr.h5.txt
+         attr.h5.txt.err
          basic_types.h5
+         basic_types.h5.txt
+         basic_types.h5.txt.err
          compound.h5
+         compound.h5.txt
+         compound.h5.txt.err
          cyclical.h5
+         cyclical.h5.txt
+         cyclical.h5.txt.err
          enum.h5
-         external_empty.h5
-         external_full.h5
-         filters.h5
-         group_dsets.h5
-         hierarchical.h5
-         linear.h5
-         log.h5
-         multipath.h5
-         rank_dsets_empty.h5
-         rank_dsets_full.h5
-         refer.h5
-         root.h5
-         stdio.h5
-         time.h5
-         vl.h5
-         new_grat.h5
-         sohm.h5
+         enum.h5.txt
+         enum.h5.txt.err
          ext_dangle1.h5
+         ext_dangle1.h5.txt
+         ext_dangle1.h5.txt.err
          ext_dangle2.h5
-         ext_self1.h5
-         ext_self2.h5
-         ext_self3.h5
-         ext_mult1.h5
-         ext_mult2.h5
-         ext_mult3.h5
-         ext_mult3.h5
-         ext_mult4.h5
-         ext_pingpong1.h5
-         ext_pingpong2.h5
-         ext_pingpong2.h5
-         ext_toomany1.h5
-         ext_toomany2.h5
-         ext_toomany2.h5
+         ext_dangle2.h5.txt
+         ext_dangle2.h5.txt.err
          ext_links.h5
+         ext_links.h5.txt
+         ext_links.h5.txt.err
+         ext_mult1.h5
+         ext_mult1.h5.txt
+         ext_mult1.h5.txt.err
+         ext_mult2.h5
+         ext_mult2.h5.txt
+         ext_mult2.h5.txt.err
+         ext_mult3.h5
+         ext_mult3.h5.txt
+         ext_mult3.h5.txt.err
+         ext_mult4.h5
+         ext_mult4.h5.txt
+         ext_mult4.h5.txt.err
+         ext_pingpong1.h5
+         ext_pingpong1.h5.txt
+         ext_pingpong1.h5.txt.err
+         ext_pingpong2.h5
+         ext_pingpong2.h5.txt
+         ext_pingpong2.h5.txt.err
+         ext_self1.h5
+         ext_self1.h5.txt
+         ext_self1.h5.txt.err
+         ext_self2.h5
+         ext_self2.h5.txt
+         ext_self2.h5.txt.err
+         ext_self3.h5
+         ext_self3.h5.txt
+         ext_self3.h5.txt.err
+         ext_toomany1.h5
+         ext_toomany1.h5.txt
+         ext_toomany1.h5.txt.err
+         ext_toomany2.h5
+         ext_toomany2.h5.txt
+         ext_toomany2.h5.txt.err
+         external_empty.h5
+         external_empty.h5.txt
+         external_empty.h5.txt.err
+         external_full.h5
+         external_full.h5.txt
+         external_full.h5.txt.err
+         family00000.h5
+         filters.h5
+         filters.h5.txt
+         filters.h5.txt.err
+         full_0.data
+         full_1.data
+         full_2.data
+         full_3.data
+         full_4.data
+         group_dsets.h5
+         group_dsets.h5.txt
+         group_dsets.h5.txt.err
+         hierarchical.h5
+         hierarchical.h5.txt
+         hierarchical.h5.txt.err
+         linear.h5
+         linear.h5.txt
+         linear.h5.txt.err
+         log.h5
+         log.h5.txt
+         log.h5.txt.err
+         logfile.txt
+         multi-b.h5
+         multi-g.h5
+         multi-l.h5
+         multi-o.h5
+         multi-r.h5
+         multi-s.h5
+         multipath.h5
+         multipath.h5.txt
+         multipath.h5.txt.err
+         new_grat.h5
+         new_grat.h5.txt
+         new_grat.h5.txt.err
+         rank_dsets_empty.h5
+         rank_dsets_empty.h5.txt
+         rank_dsets_empty.h5.txt.err
+         rank_dsets_full.h5
+         rank_dsets_full.h5.txt
+         rank_dsets_full.h5.txt.err
+         refer.h5
+         refer.h5.txt
+         refer.h5.txt.err
+         root.h5
+         root.h5.txt
+         root.h5.txt.err
+         sohm.h5
+         sohm.h5.txt
+         sohm.h5.txt.err
+         split-m.h5
+         split-r.h5
+         stdio.h5
+         stdio.h5.txt
+         stdio.h5.txt.err
+         time.h5
+         time.h5.txt
+         time.h5.txt.err
+         vl.h5
+         vl.h5.txt
+         vl.h5.txt.err
 )
 IF (NOT "${last_test}" STREQUAL "")
   SET_TESTS_PROPERTIES (h5checktest-clear-objects PROPERTIES DEPENDS ${last_test})
