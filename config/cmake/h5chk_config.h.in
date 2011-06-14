@@ -1,0 +1,221 @@
+/* src/h5chk_config.h.in.  Generated from configure.ac by autoheader.  */
+
+#ifndef H5CHK_CONFIG_H_
+#define H5CHK_CONFIG_H_
+
+/* Defined if HDF5CHECK was built with CMake AND build as a shared library */
+#cmakedefine H5CHECK_BUILT_AS_DYNAMIC_LIB @H5CHECK_BUILT_AS_DYNAMIC_LIB@
+
+/* Defined if HDF5CHECK was built with CMake AND build as a static library */
+#cmakedefine H5CHECK_BUILT_AS_STATIC_LIB @H5CHECK_BUILT_AS_STATIC_LIB@
+
+/* Define if building universal (internal helper macro) */
+#cmakedefine AC_APPLE_UNIVERSAL_BUILD @AC_APPLE_UNIVERSAL_BUILD@
+
+/* Define if machine is big endian */
+#cmakedefine HAVE_BIG_ENDIAN @HAVE_BIG_ENDIAN@
+
+/* Define to 1 if you have the <fcntl.h> header file. */
+#cmakedefine HAVE_FCNTL_H @HAVE_FCNTL_H@
+
+/* Define if support for deflate (zlib) filter is enabled */
+#cmakedefine HAVE_FILTER_DEFLATE @HAVE_FILTER_DEFLATE@
+
+/* Define if support for Fletcher32 checksum is enabled */
+#cmakedefine HAVE_FILTER_FLETCHER32 @HAVE_FILTER_FLETCHER32@
+
+/* Define if support for nbit filter is enabled */
+#cmakedefine HAVE_FILTER_NBIT @HAVE_FILTER_NBIT@
+
+/* Define if support for scaleoffset filter is enabled */
+#cmakedefine HAVE_FILTER_SCALEOFFSET @HAVE_FILTER_SCALEOFFSET@
+
+/* Define if support for shuffle filter is enabled */
+#cmakedefine HAVE_FILTER_SHUFFLE @HAVE_FILTER_SHUFFLE@
+
+/* Define if support for szip filter is enabled */
+#cmakedefine HAVE_FILTER_SZIP @HAVE_FILTER_SZIP@
+/* Define to 1 if you have the `GetConsoleScreenBufferInfo' function. */
+#cmakedefine HAVE_GETCONSOLESCREENBUFFERINFO @HAVE_GETCONSOLESCREENBUFFERINFO@
+
+/* Define to 1 if you have the `gethostname' function. */
+#cmakedefine HAVE_GETHOSTNAME @HAVE_GETHOSTNAME@
+
+/* Define to 1 if you have the `gettimeofday' function. */
+#cmakedefine HAVE_GETTIMEOFDAY @HAVE_GETTIMEOFDAY@
+
+/* Define to 1 if you have the `gettimeofday' function declared in time.h . */
+#cmakedefine HAVE_TIME_GETTIMEOFDAY @HAVE_TIME_GETTIMEOFDAY@
+
+/* Define to 1 if you have the `gettimeofday' function declared in sys/time.h . */
+#cmakedefine HAVE_SYS_TIME_GETTIMEOFDAY @HAVE_SYS_TIME_GETTIMEOFDAY@
+
+/* Define to 1 if you have the <inttypes.h> header file. */
+#cmakedefine HAVE_INTTYPES_H @HAVE_INTTYPES_H@
+
+/* Define to 1 if you have the `m' library (-lm). */
+#cmakedefine HAVE_LIBM @HAVE_LIBM@
+
+/* Define to 1 if you have the `sz' library (-lsz). */
+#cmakedefine HAVE_LIBSZ @HAVE_LIBSZ@
+
+/* Define to 1 if you have the `z' library (-lz). */
+#cmakedefine HAVE_LIBZ @HAVE_LIBZ@
+
+/* Define to 1 if your system has a GNU libc compatible `malloc' function, and
+   to 0 otherwise. */
+#cmakedefine HAVE_MALLOC @HAVE_MALLOC@
+
+/* Define to 1 if you have the <memory.h> header file. */
+#cmakedefine HAVE_MEMORY_H @HAVE_MEMORY_H@
+
+/* Define to 1 if you have the `memset' function. */
+#cmakedefine HAVE_MEMSET @HAVE_MEMSET@
+
+/* Define to 1 if you have the `pow' function. */
+#cmakedefine HAVE_POW @HAVE_POW@
+
+/* Define to 1 if your system has a GNU libc compatible `realloc' function,
+   and to 0 otherwise. */
+#cmakedefine HAVE_REALLOC @HAVE_REALLOC@
+
+/* Define to 1 if you have the `random' function. */
+#cmakedefine HAVE_RANDOM @HAVE_RANDOM@
+
+/* Define to 1 if you have the `rand_r' function. */
+#cmakedefine HAVE_RAND_R @HAVE_RAND_R@
+
+/* Define to 1 if you have the `snprintf' function. */
+#cmakedefine HAVE_SNPRINTF @HAVE_SNPRINTF@
+
+/* Define to 1 if you have the `srandom' function. */
+#cmakedefine HAVE_SRANDOM @HAVE_SRANDOM@
+
+/* Define to 1 if you have the `stat64' function. */
+#cmakedefine HAVE_STAT64 @HAVE_STAT64@
+
+/* Define if `struct stat' has the `st_blocks' field */
+#cmakedefine HAVE_STAT_ST_BLOCKS @H5_HAVE_STAT_ST_BLOCKS@
+
+/* Define to 1 if you have the <stddef.h> header file. */
+#cmakedefine HAVE_STDDEF_H @HAVE_STDDEF_H@
+
+/* Define to 1 if you have the <stdint.h> header file. */
+#cmakedefine HAVE_STDINT_H @HAVE_STDINT_H@
+
+/* Define to 1 if you have the <stdint.h> header file for Cplusplus. */
+#cmakedefine HAVE_STDINT_H_CXX @HAVE_STDINT_H_CXX@
+
+/* Define to 1 if you have the <stdlib.h> header file. */
+#cmakedefine HAVE_STDLIB_H @HAVE_STDLIB_H@
+
+/* Define to 1 if you have the `strdup' function. */
+#cmakedefine HAVE_STRDUP @HAVE_STRDUP@
+
+/* Define to 1 if you have the `strerror' function. */
+#cmakedefine HAVE_STRERROR @HAVE_STRERROR@
+
+/* Define to 1 if you have the <strings.h> header file. */
+#cmakedefine HAVE_STRINGS_H @HAVE_STRINGS_H@
+
+/* Define to 1 if you have the <string.h> header file. */
+#cmakedefine HAVE_STRING_H @HAVE_STRING_H@
+
+/* Define if `struct text_info' is defined */
+#cmakedefine HAVE_STRUCT_TEXT_INFO @HAVE_STRUCT_TEXT_INFO@
+
+/* Define if `struct timezone' is defined */
+#cmakedefine HAVE_STRUCT_TIMEZONE @HAVE_STRUCT_TIMEZONE@
+
+/* Define to 1 if `tm_zone' is a member of `struct tm'. */
+#cmakedefine HAVE_STRUCT_TM_TM_ZONE @HAVE_STRUCT_TM_TM_ZONE@
+
+/* Define to 1 if you have the `strrchr' function. */
+#cmakedefine HAVE_STRRCHR @HAVE_STRRCHR@
+
+/* Define to 1 if you have the `strstr' function. */
+#cmakedefine HAVE_STRSTR @HAVE_STRSTR@
+
+/* Define to 1 if you have the `strtol' function. */
+#cmakedefine HAVE_STRTOL @HAVE_STRTOL@
+
+/* Define to 1 if you have the <sys/stat.h> header file. */
+#cmakedefine HAVE_SYS_STAT_H @HAVE_SYS_STAT_H@
+
+/* Define to 1 if you have the <sys/types.h> header file. */
+#cmakedefine HAVE_SYS_TYPES_H @HAVE_SYS_TYPES_H@
+
+/* Define to 1 if you have the <szlib.h> header file. */
+#cmakedefine HAVE_SZLIB_H @HAVE_SZLIB_H@
+
+/* Define to 1 if you have the <unistd.h> header file. */
+#cmakedefine HAVE_UNISTD_H @HAVE_UNISTD_H@
+
+/* Define to 1 if you have the <zlib.h> header file. */
+#cmakedefine HAVE_ZLIB_H @HAVE_ZLIB_H@
+
+/* Define to a type to use for `error_t' if it is not otherwise available. */
+#cmakedefine error_t @error_t@
+
+/* Define to a type to use for `mode_t' if it is not otherwise available. */
+#cmakedefine mode_t @mode_t@
+
+/* Name of package */
+#define PACKAGE "@HDF5CHECK_PACKAGE@"
+
+/* Define to the address where bug reports for this package should be sent. */
+#define PACKAGE_BUGREPORT "@HDF5CHECK_PACKAGE_BUGREPORT@"
+
+/* Define to the full name of this package. */
+#define PACKAGE_NAME "@HDF5CHECK_PACKAGE_NAME@"
+
+/* Define to the full name and version of this package. */
+#define PACKAGE_STRING "@HDF5CHECK_PACKAGE_STRING@"
+
+/* Define to the one symbol short name of this package. */
+#define PACKAGE_TARNAME "@HDF5CHECK_PACKAGE_TARNAME@"
+
+/* Define to the home page for this package. */
+#define PACKAGE_URL "@HDF5CHECK_PACKAGE_URL@"
+
+/* Define to the version of this package. */
+#define VERSION "@HDF5CHECK_PACKAGE_VERSION@"
+
+/* Define to 1 if you have the ANSI C header files. */
+#cmakedefine STDC_HEADERS @STDC_HEADERS@
+
+/* Define to 1 if your <sys/time.h> declares `struct tm'. */
+#cmakedefine TM_IN_SYS_TIME @TM_IN_SYS_TIME@
+
+/* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
+   significant byte first (like Motorola and SPARC, unlike Intel). */
+#if defined AC_APPLE_UNIVERSAL_BUILD
+# if defined __BIG_ENDIAN__
+#  define WORDS_BIGENDIAN 1
+# endif
+#else
+# ifndef WORDS_BIGENDIAN
+#  undef WORDS_BIGENDIAN
+# endif
+#endif
+
+/* Define to empty if `const' does not conform to ANSI C. */
+/* #undef const */
+
+/* Define to rpl_malloc if the replacement function should be used. */
+/* #undef malloc */
+
+/* Define to `long int' if <sys/types.h> does not define. */
+/* #undef off_t */
+
+/* Define to rpl_realloc if the replacement function should be used. */
+/* #undef realloc */
+
+/* Define to `unsigned int' if <sys/types.h> does not define. */
+/* #undef size_t */
+
+/* Define to a function implementing strtoull */
+#cmakedefine strtoull @strtoull@
+
+
+#endif

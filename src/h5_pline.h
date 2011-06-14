@@ -1,5 +1,8 @@
+#ifndef H5_PLINE_H__
+#define H5_PLINE_H__
+
 /* Current version of the Z_class_t struct */
-#define	Z_CLASS_T_VERS 	(1)
+#define  Z_CLASS_T_VERS   (1)
 
 /* Return values for filter callback function */
 typedef enum Z_cb_return_t {
@@ -9,30 +12,30 @@ typedef enum Z_cb_return_t {
     Z_CB_NO     = 2
 } Z_cb_return_t;
 
-typedef 		int 		Z_filter_t;
-typedef ck_size_t 	(*Z_func_t)(unsigned int flags, ck_size_t cd_nelmts, const unsigned int cd_values[],
-			      ck_size_t nbytes, ck_size_t *buf_size, void **buf);
+typedef     int     Z_filter_t;
+typedef ck_size_t   (*Z_func_t)(unsigned int flags, ck_size_t cd_nelmts, const unsigned int cd_values[],
+            ck_size_t nbytes, ck_size_t *buf_size, void **buf);
 
 typedef Z_cb_return_t (*Z_filter_func_t)(Z_filter_t filter, void* buf, ck_size_t buf_size, void* op_data);
 
 
 typedef struct Z_class_t { 
-    int 	version;                /* Version number of the H5Z_class_t struct */
-    Z_filter_t 	id;            		/* Filter ID number                          */
-    Z_func_t 	filter;          	/* The actual filter function                */
+    int   version;                /* Version number of the H5Z_class_t struct */
+    Z_filter_t   id;                /* Filter ID number                          */
+    Z_func_t   filter;            /* The actual filter function                */
 } Z_class_t; 
 
 /* Structure for filter callback property */
 typedef struct Z_cb_t {
-    Z_filter_func_t 	func;
-    void*              	op_data;
+    Z_filter_func_t   func;
+    void*                op_data;
 } Z_cb_t;
 
 /* Deflate filter */
-Z_class_t Z_DEFLATE[1];
+H5CHKDLLVAR Z_class_t Z_DEFLATE[1];
 
 /* Shuffle filter */
-Z_class_t Z_SHUFFLE[1];
+H5CHKDLLVAR Z_class_t Z_SHUFFLE[1];
 
 #define Z_SHUFFLE_USER_NPARMS    0       /* Number of parameters that users can set */
 #define Z_SHUFFLE_TOTAL_NPARMS   1       /* Total number of parameters for filter */
@@ -40,12 +43,12 @@ Z_class_t Z_SHUFFLE[1];
 
 
 /* Fletcher32 filter */
-Z_class_t Z_FLETCHER32[1];
+H5CHKDLLVAR Z_class_t Z_FLETCHER32[1];
 
 #define FLETCHER_LEN       4
 
 /* szip filter */
-Z_class_t Z_SZIP[1];
+H5CHKDLLVAR Z_class_t Z_SZIP[1];
 
 #define Z_SZIP_PARM_MASK      0       /* "User" parameter for option mask */
 #define Z_SZIP_PARM_PPB       1       /* "User" parameter for pixels-per-block */
@@ -57,7 +60,7 @@ Z_class_t Z_SZIP[1];
 /* 
  * nbit filter 
  */
-Z_class_t Z_NBIT[1];
+H5CHKDLLVAR Z_class_t Z_NBIT[1];
 
 #define Z_NBIT_ATOMIC          1     /* Atomic datatype class: integer/floating-point */
 #define Z_NBIT_ARRAY           2     /* Array datatype class */
@@ -71,7 +74,7 @@ Z_class_t Z_NBIT[1];
 /* 
  * scaleoffset filter 
  */
-Z_class_t Z_SCALEOFFSET[1];
+H5CHKDLLVAR Z_class_t Z_SCALEOFFSET[1];
 
 typedef enum Z_SO_scale_type_t {
     Z_SO_FLOAT_DSCALE = 0,
@@ -118,9 +121,9 @@ enum Z_scaleoffset_type {
  * General filter defines
  */
 
-#define Z_FLAG_INVMASK        	0xff00  /*invocation flag mask          */
-#define Z_FLAG_REVERSE  	0x0100  /*reverse direction; read       */
-#define Z_FLAG_SKIP_EDC   	0x0200  /*skip EDC filters for read     */
+#define Z_FLAG_INVMASK          0xff00  /*invocation flag mask          */
+#define Z_FLAG_REVERSE    0x0100  /*reverse direction; read       */
+#define Z_FLAG_SKIP_EDC     0x0200  /*skip EDC filters for read     */
 
 /* Filter IDs */
 #define Z_FILTER_ERROR        (-1)    /*no filter                     */
@@ -149,11 +152,19 @@ typedef enum Z_EDC_t {
     Z_NO_EDC          = 2     /* must be the last */
 } Z_EDC_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Function prototypes */
-ck_err_t pline_init_interface(void);
-void pline_free(void);
-ck_err_t filter_pline(const OBJ_filter_t *, unsigned, unsigned * /*in,out*/,
+H5CHKDLL ck_err_t pline_init_interface(void);
+H5CHKDLL void pline_free(void);
+H5CHKDLL ck_err_t filter_pline(const OBJ_filter_t *, unsigned, unsigned * /*in,out*/,
     Z_EDC_t, Z_cb_t, ck_size_t * /*in,out*/,
     ck_size_t * /*in,out*/, void ** /*in,out*/);
 
+#ifdef __cplusplus
+}
+#endif
 
+#endif  /* !H5_PLINE_H__ */

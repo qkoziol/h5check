@@ -1,0 +1,38 @@
+#-----------------------------------------------------------------------------
+# HDF5CHECK Config file for compiling against hdf5check install directory
+#-----------------------------------------------------------------------------
+GET_FILENAME_COMPONENT (SELF_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+GET_FILENAME_COMPONENT(_IMPORT_PREFIX "${SELF_DIR}" PATH)
+GET_FILENAME_COMPONENT(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+GET_FILENAME_COMPONENT(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+
+#-----------------------------------------------------------------------------
+# User Options
+#-----------------------------------------------------------------------------
+SET (HDF_ENABLE_PARALLEL @HDF_ENABLE_PARALLEL@)
+SET (BUILD_SHARED_LIBS    @BUILD_SHARED_LIBS@)
+SET (HDF_PACKAGE_EXTLIBS @HDF_PACKAGE_EXTLIBS@)
+
+#-----------------------------------------------------------------------------
+# Directories
+#-----------------------------------------------------------------------------
+SET (HDF5CHECK_INCLUDE_DIR "${_IMPORT_PREFIX}/include" )
+
+#-----------------------------------------------------------------------------
+# Version Strings
+#-----------------------------------------------------------------------------
+SET (HDF5CHECK_VERSION_STRING @HDF5CHECK_VERSION_STRING@)
+SET (HDF5CHECK_VERSION_MAJOR  @HDF5CHECK_VERSION_MAJOR@)
+SET (HDF5CHECK_VERSION_MINOR  @HDF5CHECK_VERSION_MINOR@)
+
+#-----------------------------------------------------------------------------
+# Don't include targets if this file is being picked up by another
+# project which has already built hdf5 as a subproject
+#-----------------------------------------------------------------------------
+IF (NOT TARGET "hdf5check")
+  IF (HDF_PACKAGE_EXTLIBS)
+    INCLUDE (${SELF_DIR}/../hdf5/hdf5-targets.cmake)
+  ENDIF (HDF_PACKAGE_EXTLIBS)
+  INCLUDE (${SELF_DIR}/hdf5check-targets.cmake)
+ENDIF (NOT TARGET "hdf5check")
+

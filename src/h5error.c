@@ -1,7 +1,12 @@
 #include "h5_check.h"
 #include "h5_error.h"
 
-static	int	nerrors=0;	/* number of errors found */
+/* the current error stack */
+ERR_t  ERR_stack_g[1];
+
+#define  ERR_get_my_stack()  (ERR_stack_g+0)
+
+static  int  nerrors=0;  /* number of errors found */
 static  const char *get_prim_err(primary_err_t);
 static  const char *get_sec_err(secondary_err_t);
 
@@ -11,8 +16,8 @@ static  const   primary_err_mesg_t primary_err_mesg_g[] = {
         {ERR_LEV_0,     "Disk Format Level 0-File Metadata"},
         {ERR_LEV_1,     "Disk Format Level 1-File Infrastructure"},
         {ERR_LEV_2,     "Disk Format Level 2-Data Objects"},
-        {ERR_FILE,  	"File Handling"},
-        {ERR_INTERNAL, 	"Internal Error"},
+        {ERR_FILE,    "File Handling"},
+        {ERR_INTERNAL,   "Internal Error"},
 };
 
 static  const   secondary_err_mesg_t secondary_err_mesg_g[] = {
@@ -63,18 +68,18 @@ static  const   secondary_err_mesg_t secondary_err_mesg_g[] = {
 void
 error_push(primary_err_t prim_err, secondary_err_t sec_err, const char *desc, ck_addr_t logical_addr, int *badinfo)
 {
-	
+  
     ERR_t *estack = ERR_get_my_stack();
     char *new_func;
     char *new_desc;
-    int	desc_len, func_len;
+    int  desc_len, func_len;
 
     /*
      * Don't fail if arguments are bad.  Instead, substitute some default
      * value.
      */
     if(!desc) 
-	desc = "No description given";
+  desc = "No description given";
 
     /*
      * Push the error if there's room.  Otherwise just forget it.
@@ -85,13 +90,13 @@ error_push(primary_err_t prim_err, secondary_err_t sec_err, const char *desc, ck
         estack->slot[estack->nused].sec_err = sec_err;
         estack->slot[estack->nused].desc = desc;
         estack->slot[estack->nused].logical_addr = logical_addr;
-	if(badinfo != NULL) {
-	    estack->slot[estack->nused].err_info.reported = REPORTED;
-	    estack->slot[estack->nused].err_info.badinfo = *badinfo;
-	} else {
-	    estack->slot[estack->nused].err_info.reported = NOT_REP;
-	    estack->slot[estack->nused].err_info.badinfo = -1;
-	}
+  if(badinfo != NULL) {
+      estack->slot[estack->nused].err_info.reported = REPORTED;
+      estack->slot[estack->nused].err_info.badinfo = *badinfo;
+  } else {
+      estack->slot[estack->nused].err_info.reported = NOT_REP;
+      estack->slot[estack->nused].err_info.badinfo = -1;
+  }
         estack->nused++;
     }
 }
@@ -101,63 +106,63 @@ error_push(primary_err_t prim_err, secondary_err_t sec_err, const char *desc, ck
 ck_err_t
 error_clear(void)
 {
-    int	i;
+    int  i;
     ERR_t *estack = ERR_get_my_stack();
 
     for(i = estack->nused-1; i >=0; --i) {
 /* NEED CHECK: INTO THIS LATER */
 #if 0
-	free((void *)estack->slot[i].func_name);
-	free((void *)estack->slot[i].desc);
+  free((void *)estack->slot[i].func_name);
+  free((void *)estack->slot[i].desc);
 #endif
     }
     if(estack) 
-	estack->nused = 0;
+  estack->nused = 0;
     return(0);
 }
 
 void
 error_print(FILE *stream, driver_t *file)
 {
-    int	i;
-    const char	*prim_str = NULL;
-    const char	*sec_str = NULL;
+    int  i;
+    const char  *prim_str = NULL;
+    const char  *sec_str = NULL;
     ERR_t   *estack = ERR_get_my_stack();
-    char		*fname;
+    char    *fname;
 
     if(!stream) 
-	stream = stderr; 
+  stream = stderr; 
     nerrors++;
     if(g_verbose_num) {
-	fprintf(stream, "***Error***\n");
-	for(i = estack->nused-1; i >=0; --i) {
-	    int sec_null = 0;
-	    fprintf(stream, "%s", estack->slot[i].desc);
-	    if((int)estack->slot[i].logical_addr != -1) {
+  fprintf(stream, "***Error***\n");
+  for(i = estack->nused-1; i >=0; --i) {
+      int sec_null = 0;
+      fprintf(stream, "%s", estack->slot[i].desc);
+      if((int)estack->slot[i].logical_addr != -1) {
 #ifdef TEMP
-		fname = FD_get_fname(file, estack->slot[i].logical_addr);
-		fprintf(stream, "\n  file=%s;", fname);
+    fname = FD_get_fname(file, estack->slot[i].logical_addr);
+    fprintf(stream, "\n  file=%s;", fname);
 #endif
-		fprintf(stream, " at addr %llu",
-		    (unsigned long long)estack->slot[i].logical_addr);
-		if(estack->slot[i].err_info.reported)
-		    fprintf(stream, "; Value decoded: %d",
-			estack->slot[i].err_info.badinfo);
-	    }
-	    fprintf(stream, "\n");
+    fprintf(stream, " at addr %llu",
+        (unsigned long long)estack->slot[i].logical_addr);
+    if(estack->slot[i].err_info.reported)
+        fprintf(stream, "; Value decoded: %d",
+      estack->slot[i].err_info.badinfo);
+      }
+      fprintf(stream, "\n");
 
 #ifdef TEMP
-	    prim_str = get_prim_err(estack->slot[i].prim_err);
-	    sec_str = get_sec_err(estack->slot[i].sec_err);
-	    if(estack->slot[i].sec_err == ERR_NONE_SEC)
-		sec_null = 1;
-	    if(sec_null)
-		fprintf(stream, "  %s\n", prim_str);
-	    else
-		fprintf(stream, "  %s-->%s\n", prim_str, sec_str);
+      prim_str = get_prim_err(estack->slot[i].prim_err);
+      sec_str = get_sec_err(estack->slot[i].sec_err);
+      if(estack->slot[i].sec_err == ERR_NONE_SEC)
+    sec_null = 1;
+      if(sec_null)
+    fprintf(stream, "  %s\n", prim_str);
+      else
+    fprintf(stream, "  %s-->%s\n", prim_str, sec_str);
 #endif
-	}
-	fprintf(stream, "***End of Error messages***\n");
+  }
+  fprintf(stream, "***End of Error messages***\n");
     }
 }
 
@@ -168,8 +173,8 @@ get_prim_err(primary_err_t n)
     const char *ret_value="Invalid primary error number";
 
     for(i=0; i < NELMTS(primary_err_mesg_g); i++)
-	if(primary_err_mesg_g[i].err_code == n)
-	    return(primary_err_mesg_g[i].str);
+  if(primary_err_mesg_g[i].err_code == n)
+      return(primary_err_mesg_g[i].str);
 
     return(ret_value);
 }
@@ -181,8 +186,8 @@ get_sec_err(secondary_err_t n)
     const char *ret_value="Invalid secondary error number";
 
     for(i=0; i < NELMTS(secondary_err_mesg_g); i++)
-	if(secondary_err_mesg_g[i].err_code == n)
-	    return(secondary_err_mesg_g[i].str);
+  if(secondary_err_mesg_g[i].err_code == n)
+      return(secondary_err_mesg_g[i].str);
 
     return(ret_value);
 }
@@ -201,7 +206,7 @@ process_errors(ck_errmsg_t *errbuf)
 
     errbuf->nused = estack->nused;
     for(i = estack->nused-1; i >=0; --i) {
-	errbuf->slot[i].desc = strdup(estack->slot[i].desc);
-	errbuf->slot[i].addr = estack->slot[i].logical_addr;
+  errbuf->slot[i].desc = strdup(estack->slot[i].desc);
+  errbuf->slot[i].addr = estack->slot[i].logical_addr;
     }
 }

@@ -1,0 +1,30 @@
+#-----------------------------------------------------------------------------
+# HDF5CHECK Config file for compiling against hdf5check build directory
+#-----------------------------------------------------------------------------
+GET_FILENAME_COMPONENT (SELF_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+
+#-----------------------------------------------------------------------------
+# User Options
+#-----------------------------------------------------------------------------
+SET (HDF_ENABLE_PARALLEL @HDF_ENABLE_PARALLEL@)
+SET (BUILD_SHARED_LIBS    @BUILD_SHARED_LIBS@)
+
+#-----------------------------------------------------------------------------
+# Directories
+#-----------------------------------------------------------------------------
+SET (HDF5CHECK_INCLUDE_DIR "@HDF5CHECK_INCLUDES_BUILD_TIME@")
+
+#-----------------------------------------------------------------------------
+# Version Strings
+#-----------------------------------------------------------------------------
+SET (HDF5CHECK_VERSION_STRING @HDF5CHECK_VERSION_STRING@)
+SET (HDF5CHECK_VERSION_MAJOR  @HDF5CHECK_VERSION_MAJOR@)
+SET (HDF5CHECK_VERSION_MINOR  @HDF5CHECK_VERSION_MINOR@)
+
+#-----------------------------------------------------------------------------
+# Don't include targets if this file is being picked up by another
+# project which has already build hdf5 as a subproject
+#-----------------------------------------------------------------------------
+IF (NOT TARGET "hdf5check")
+  INCLUDE (${SELF_DIR}/hdf5check-targets.cmake)
+ENDIF (NOT TARGET "hdf5check")
