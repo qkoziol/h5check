@@ -495,7 +495,7 @@ vector_cmp(unsigned n, const ck_hsize_t *v1, const ck_hsize_t *v2)
                         v2++;
                     }
 
-    done:
+done:
     return(ret_value);
 } /* vector_cmp() */
 
@@ -524,7 +524,7 @@ table_init(table_t **obj_table, int type)
     }
     *obj_table = tb;
 
-    done:
+done:
     return(ret_value);
 } /* table_init() */
 
@@ -560,7 +560,7 @@ table_search(table_t *obj_table, void *_id, int type)
             }
         }
 
-    done:
+done:
     return(ret_value);
 } /* table_search() */
 
@@ -616,7 +616,7 @@ table_insert(table_t *obj_table, void *_id, int type)
         break;
     }
 
-    done:
+done:
     return(ret_value);
 
 } /* table_insert() */
@@ -649,7 +649,7 @@ name_list_init(name_list_t **name_list)
         nl->head = nl->tail = NULL;
     *name_list = nl;
 
-    done:
+done:
     return(ret_value);
 } /* name_list_init() */
 
@@ -674,7 +674,7 @@ name_list_search(name_list_t *nl, char *symname)
         ptr = ptr->next;
     }
 
-    done:
+done:
     return(ret_value);
 } /* name_list_search() */
 
@@ -701,7 +701,7 @@ name_list_insert(name_list_t *nl, char *name)
         nl->tail = name_ptr;
     }
 
-    done:
+done:
     return(ret_value);
 } /* name_list_insert() */
 
@@ -787,7 +787,7 @@ get_driver_class(int driver_id)
 
     ret_value = driver;
 
-    done:
+done:
     if(ret_value == NULL && driver)
         free(driver);
     return(ret_value);
@@ -819,7 +819,7 @@ get_driver_info(int driver_id, global_shared_t *shared)
     } else
         error_push(ERR_LEV_0, ERR_LEV_0B, "Unsupported file driver", -1, NULL);
 
-    done:
+done:
     return(driverinfo);
 } /* get_driver_info() */
 
@@ -970,7 +970,7 @@ sec2_open(const char *name, global_shared_t UNUSED *shared, int UNUSED driver_id
     file->name = strdup(name);
     ret_value = (driver_t *)file;
 
-    done:
+done:
     return(ret_value);
 } /* sec2_open() */
 
@@ -1029,7 +1029,7 @@ sec2_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/)
                         CK_SET_RET(FAIL)
             }
 
-    done:
+done:
     return(ret_value);
 } /* sec2_read() */
 
@@ -1194,7 +1194,7 @@ multi_open(const char *name, global_shared_t *shared, int driver_id)
 
     if(ret_value == SUCCEED)
         ret_ptr = (driver_t *)file;
-    done:
+done:
     if(ret_value < 0 && file) {
         ALL_MEMBERS(mt) {
             if(file->memb[mt]) 
@@ -1232,7 +1232,7 @@ multi_close(driver_t *_file)
         CK_SET_RET_DONE(FAIL)
     }
 
-    done:
+done:
     ALL_MEMBERS(mt) {
         if(file->fa.memb_name[mt]) 
             free(file->fa.memb_name[mt]);
@@ -1331,7 +1331,7 @@ multi_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/)
         CK_SET_RET_DONE(FAIL)
     }
 
-    done:
+done:
     return(ret_value);
 } /* multi_read() */
 
@@ -1508,7 +1508,7 @@ family_open(const char *name, global_shared_t *shared, int driver_id)
 
     if(ret_value == SUCCEED)
         ret_ptr = (driver_t *)file;
-    done:
+done:
     if(ret_value < 0 && file) {
         unsigned nerrors = 0;
         unsigned u;     
@@ -1550,7 +1550,8 @@ family_close(driver_t *_file)
 
     if(nerrors)
         CK_SET_RET_DONE(FAIL)
-        done:
+
+done:
     if(file) {
         if (file->memb) 
             free(file->memb);
@@ -1604,7 +1605,7 @@ family_read(driver_t *_file, ck_addr_t addr, size_t size, void *_buf/*out*/)
         size -= req;
     }
 
-    done:
+done:
     return(ret_value);
 } /* family_read() */
 
@@ -1636,7 +1637,7 @@ family_get_eof(driver_t *_file)
     eof += ((unsigned)i)*file->fa.memb_size;
     ret_value = MAX(eof, file->eoa);
 
-    done:
+done:
     return(ret_value);
 } /* family_get_eof() */
 
@@ -1787,7 +1788,7 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
             mesg->nelem *= mesg->size[i];
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = (void*)mesg;
     else if(mesg)
@@ -1872,7 +1873,7 @@ OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     else
         mesg->corder_bt2_addr = CK_ADDR_UNDEF;
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg)
@@ -1902,7 +1903,7 @@ OBJ_linfo_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_linfo_copy() */
 
@@ -2409,7 +2410,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
             CK_SET_RET_DONE(FAIL)
     }
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_dt_decode_helper() */
 
@@ -2447,7 +2448,7 @@ OBJ_dt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_add
         CK_SET_RET_DONE(FAIL)
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = dt;
     else if(dt) {
@@ -2480,7 +2481,7 @@ OBJ_dt_copy(void *_src, void *_dest)
         dest = (OBJ_type_t *) _dest;
     } /* end if */
 
-    done:
+done:
     ret_ptr = dest;
     return(ret_ptr);
 } /* OBJ_dt_copy() */
@@ -2582,7 +2583,7 @@ dtype_copy(OBJ_type_t *old_dt)
 
     } /* end switch */
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = new_dt;
     else if(new_dt) {
@@ -2694,7 +2695,7 @@ OBJ_fill_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, 
     else
         mesg->size = (-1);
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = (void*)mesg;
     else if(mesg) {
@@ -2840,7 +2841,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         } 
     } /* end else */
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = (void*)mesg;
     else if(mesg) {
@@ -2883,7 +2884,8 @@ OBJ_fill_copy(void *_src, void *_dest)
 
     /* Set return value */
     ret_value = dest;
-    done:
+    
+done:
     if(!ret_value && dest) {
         if(dest->buf) free(dest->buf);
         if(!_dest) free(dest);
@@ -3114,7 +3116,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
             lnk->u.ud.udata = NULL;
     } /* end switch */
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = lnk;
     else if(lnk) {
@@ -3176,7 +3178,7 @@ OBJ_link_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     if(NULL == ret_value)
         if(dest) {
             if(dest->name && dest->name != src->name)
@@ -3294,7 +3296,7 @@ OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
         }
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg) {
@@ -3366,7 +3368,7 @@ OBJ_edf_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     if(NULL == ret_value) {
         if(dest && NULL == _dest) {
             if(dest->slot) {
@@ -3554,7 +3556,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
         } /* end switch */
     } /* version 3 */
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg) {
@@ -3598,7 +3600,7 @@ OBJ_layout_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     if(ret_value == NULL)
         if(dest && _dest == NULL)
             free(dest);
@@ -3649,7 +3651,7 @@ OBJ_bogus_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
         CK_SET_RET(FAIL)
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg)
@@ -3731,7 +3733,7 @@ OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
         mesg->est_name_len = OBJ_CRT_GINFO_EST_NAME_LEN;
     } 
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg)
@@ -3761,7 +3763,7 @@ OBJ_ginfo_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_ginfo_copy() */
 
@@ -3909,7 +3911,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
         }
     }  /* end for */
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = pline;
     else if(pline)
@@ -3992,7 +3994,7 @@ OBJ_filter_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     if(ret_value == NULL)
         if(dest && _dest == NULL)
             OBJ_filter_free(dest);
@@ -4204,7 +4206,7 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         memcpy(attr->data, p, attr->data_size);
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = attr;
 
@@ -4261,7 +4263,7 @@ OBJ_attr_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     if(ret_value == NULL) {
         if(dest && _dest == NULL)
             OBJ_attr_free(dest);
@@ -4317,7 +4319,7 @@ OBJ_comm_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         CK_SET_RET_DONE(FAIL)
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg) {
@@ -4354,7 +4356,7 @@ OBJ_comm_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     if(ret_value == NULL)
         if(dest && _dest == NULL) {
             if(dest->s) free(dest->s);
@@ -4430,7 +4432,7 @@ OBJ_mdt_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, c
     }
     *mesg = the_time;
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg)
@@ -4502,7 +4504,7 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
         CK_SET_RET(FAIL)
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = (void *)mesg;
     else if(mesg) 
@@ -4531,7 +4533,7 @@ OBJ_shmesg_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_shmesg_copy() */
 
@@ -4583,7 +4585,7 @@ OBJ_cont_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 
     cont->chunkno = 0;
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = cont;
     else if(cont)
@@ -4634,7 +4636,7 @@ OBJ_group_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
         CK_SET_RET(FAIL)
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = stab;
     else if(stab)
@@ -4664,7 +4666,7 @@ OBJ_group_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_group_copy() */
 
@@ -4715,7 +4717,7 @@ OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     }
     *mesg = (time_t)tmp_time;
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg)
@@ -4745,7 +4747,7 @@ OBJ_mdt_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_mdt_copy() */
 
@@ -4815,7 +4817,7 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
         CK_SET_RET(FAIL)
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = (void *)mesg;
     else if(mesg)
@@ -4845,7 +4847,7 @@ OBJ_btreek_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_btreek_copy() */
 
@@ -4916,7 +4918,7 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf,
     /* Copy encoded driver info into buffer */
     memcpy(mesg->buf, buf, mesg->len);
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = (void *)mesg;
     else if(mesg) {
@@ -4956,7 +4958,7 @@ OBJ_drvinfo_copy(void *_src, void *_dest)
 
     ret_value = dest;   /* set return value */
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_drvinfo_copy() */
 
@@ -5039,7 +5041,7 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     else
         ainfo->corder_bt2_addr = CK_ADDR_UNDEF;
 
-    done:
+done:
     if (ret_value == SUCCEED)
         ret_ptr = ainfo;
     else if(ainfo)
@@ -5066,7 +5068,7 @@ OBJ_ainfo_copy(void *_src, void *_dest)
     *dest = *src;  /* copy */
     ret_value = dest;   /* set return value */
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_ainfo_copy() */
 
@@ -5119,7 +5121,7 @@ OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, 
     /* Get ref. count for object */
     UINT32DECODE(p, *refcount)
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = refcount;
     else if(refcount)
@@ -5149,7 +5151,7 @@ OBJ_refcount_copy(void *_src, void *_dest)
     /* set return value */
     ret_value = dest;   
 
-    done:
+done:
     return(ret_value);
 } /* OBJ_refcount_copy() */
 
@@ -5195,7 +5197,7 @@ dtype_alloc(ck_addr_t logical)
     /* Assign return value */
     ret_value = dt;
 
-    done:
+done:
     if(ret_value == NULL && dt)
         dtype_free(dt);
 
@@ -5266,7 +5268,7 @@ gp_ent_decode(global_shared_t *shared, const uint8_t **pp, GP_entry_t *ent)
 
     *pp = p_ret + GP_SIZEOF_ENTRY(shared);
 
-    done:
+done:
     return(ret_value);
 
 } /* gp_ent_decode() */
@@ -5291,7 +5293,7 @@ gp_ent_decode_vec(global_shared_t *shared, const uint8_t **pp, GP_entry_t *ent, 
                     "Symbol table node:Unable to decode node entries", -1, NULL);
             CK_SET_RET_DONE(FAIL);
         }
-    done:
+done:
     return(ret_value);
 } /* gp_ent_decode_vec() */
 
@@ -5937,7 +5939,7 @@ check_superblock(driver_t *file)
         }
     }
 
-    done:
+done:
     if(oh) 
         free_obj_header(oh);
     return(ret_value);
@@ -6077,7 +6079,7 @@ check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *
                 ++ret_other_err;
     } /* end for */
 
-    done:
+done:
     if(buf) free(buf);
     if(sym) {
         if(sym->entry) free(sym->entry);
@@ -6256,7 +6258,7 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
         rt_key = NULL;
     }  /* end for */
 
-    done:
+done:
     if(buf) free(buf);
     if(buffer) free(buffer);
     if(lt_key) free(lt_key);
@@ -6412,7 +6414,7 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
         }
     } /* end while */
 
-    done:
+done:
     if(!ret_err && ret_heap_chunk)
         *ret_heap_chunk = (uint8_t *)heap_chunk;
     else {
@@ -6602,7 +6604,7 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
     else
         heap->nused = 1;
 
-    done:
+done:
     if((ret_value == SUCCEED) && ret_heap_chunk) {
         *ret_heap_chunk = (uint8_t *)heap;
     } else {
@@ -6748,7 +6750,7 @@ G_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_udata)
          */
     } /* mesg */
 
-    done:
+done:
     if(mesg) message_type_g[OBJ_LINK_ID]->free(mesg);
     if(mesg_ptr) free(mesg_ptr);
     if(tmp_name) free(tmp_name);
@@ -6800,7 +6802,7 @@ A_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_udata)
         }
     }
 
-    done:
+done:
     if(mesg_ptr) free(mesg_ptr);
     return(ret_value);
 } /* A_dense_ck_fh_msg_cb() */
@@ -7135,7 +7137,7 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
         }  /* end switch on id */
     }  /* end for nmesgs */
 
-    done:
+done:
     /* flush out errors if any */
     if(ret_err && !object_api()) {
         error_print(stderr, file);
@@ -7192,7 +7194,7 @@ find_in_ohdr(driver_t *file, OBJ_t *oh, int type_id)
         }
     }
 
-    done:
+done:
     return(ret_value);
 } /* find_in_ohdr() */
 
@@ -7283,7 +7285,7 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
         }
     }
 
-    done:
+done:
     if(ret_value == SUCCEED)
         ret_ptr = mesg;
     else if(mesg)
@@ -7368,7 +7370,7 @@ OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *typ
         CK_SET_RET_DONE(NULL)
     }
 
-    done:
+done:
     if(fhdr)
         (void) HF_close(fhdr);
 
@@ -7434,7 +7436,7 @@ OBJ_sds_copy(void *_src, void *_dest)
     /* Set return value */
     ret_value = dest;
 
-    done:
+done:
     if(ret_value == NULL)
         if(dest && _dest == NULL)
             OBJ_sds_free(dest);
@@ -7472,7 +7474,8 @@ OBJ_alloc_msgs(OBJ_t *oh, ck_size_t min_alloc)
 
     /* Set new object header info to zeros */
     memset(&oh->mesg[old_alloc], 0, (oh->alloc_nmesgs - old_alloc) * sizeof(OBJ_mesg_t));
-    done:
+
+done:
     return(ret_value);
 } /* OBJ_alloc_msgs() */
 
@@ -7921,7 +7924,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
         }  /* end for */
     }  /* end while(addr_defined(chunk_addr)) */
 
-    done:
+done:
     if(ret_err && !object_api()) {
         error_print(stderr, file);
         error_clear();
@@ -8024,7 +8027,7 @@ checksum_lookup3(const void *key, ck_size_t length, uint32_t initval)
 
     lookup3_final(a, b, c);
 
-    done:
+done:
     return(c);
 } /* checksum_lookup3() */
 
@@ -8113,7 +8116,7 @@ file_init(char *fname)
 
     ret_value = thefile;
 
-    done:
+done:
     if(ret_value == NULL) {
         if(thefile == NULL && shared) { /* NEED to make this "shared" better */
             if(shared->obj_table) (void) table_free(shared->obj_table);
@@ -8172,7 +8175,7 @@ validate_ext_file(char *ext_fname)
     else if(check_obj_header(ext_file, ext_file->shared->root_grp->header, NULL) < 0)
         ++ret_other_err;
 
-    done:
+done:
     if(ext_file) {
         free_file_shared(ext_file);
         if(FD_close(ext_file) < 0) {
@@ -8218,7 +8221,7 @@ build_name(char *prefix, char *file_name, char **full_name/*out*/)
     /* Add the external link's filename to the prefix supplied */
     strcat(*full_name, file_name);
 
-    done:
+done:
     return(ret_value);
 } /* build_name() */
 
@@ -8284,7 +8287,7 @@ build_extpath(const char *name, char **extpath/*out*/)
         *extpath = full_path;
     } 
 
-    done:
+done:
     /* Release resources */
     if(cwdpath) free(cwdpath);
     if(new_name) free(new_name);

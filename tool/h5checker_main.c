@@ -212,7 +212,7 @@ int main(int argc, const char **argv)
     else
         check_obj_header(thefile, thefile->shared->root_grp->header, NULL);
 
-    done:
+done:
     if(fname) free(fname);
     (void) pline_free();
     if(g_ext_tbl) 
