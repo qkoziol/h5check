@@ -129,7 +129,8 @@ error_print(FILE *stream, driver_t *file)
 	stream = stderr; 
     nerrors++;
     if(g_verbose_num) {
-	fprintf(stream, "***Error***\n");
+	if(estack->nused > 0)
+	    fprintf(stream, "***Error***\n");
 	for(i = estack->nused-1; i >=0; --i) {
 	    int sec_null = 0;
 	    fprintf(stream, "%s", estack->slot[i].desc);
@@ -157,7 +158,8 @@ error_print(FILE *stream, driver_t *file)
 		fprintf(stream, "  %s-->%s\n", prim_str, sec_str);
 #endif
 	}
-	fprintf(stream, "***End of Error messages***\n");
+	if(estack->nused > 0)
+	    fprintf(stream, "***End of Error messages***\n");
     }
 }
 

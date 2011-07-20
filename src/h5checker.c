@@ -13,45 +13,45 @@ const char *opt_arg; 	/* flag argument (or value)                 */
 static ck_bool_t table_search(table_t *tbl, void *_id, int type);
 
 /* Validation routines */
-static ck_err_t check_btree(driver_t *, ck_addr_t, unsigned, uint8_t *, name_list_t *, void *, void *);
-static ck_err_t check_sym(driver_t *, ck_addr_t, uint8_t *, name_list_t *);
-static ck_err_t check_lheap(driver_t *, ck_addr_t, uint8_t **);
+static ck_err_t check_btree(driver_t *file, ck_addr_t btree_addr, key_info_t *key_info,
+    name_list_t *name_list, void *lt_key, void *rt_key);
+static ck_err_t check_sym(driver_t *file, ck_addr_t sym_addr, key_info_t *key_info, name_list_t *name_list);
+static ck_err_t check_lheap(driver_t *file, ck_addr_t lheap_addr, key_info_t *key_info);
 
 #ifdef NOTUSED
 static ck_err_t check_gheap(driver_t *, ck_addr_t, uint8_t **);
 #endif
 
-static 	ck_addr_t locate_super_signature(driver_t *);
-static  ck_err_t gp_ent_decode(global_shared_t *, const uint8_t **, GP_entry_t *);
-static  ck_err_t gp_ent_decode_vec(global_shared_t *, const uint8_t **, GP_entry_t *, unsigned);
-static OBJ_type_t *dtype_alloc(ck_addr_t);
-static ck_err_t dtype_free(void *); 
+static 	ck_addr_t locate_super_signature(driver_t *file);
+static  ck_err_t gp_ent_decode(global_shared_t *shared, const uint8_t **pp, GP_entry_t *ent);
+static  ck_err_t gp_ent_decode_vec(global_shared_t *shared, const uint8_t **pp, GP_entry_t *ent, unsigned n);
+static OBJ_type_t *dtype_alloc(ck_addr_t logical);
+static ck_err_t dtype_free(void *mesg); 
 static OBJ_type_t *dtype_copy(OBJ_type_t *old_dt);
 
-static ck_err_t OBJ_alloc_msgs(OBJ_t *, ck_size_t);
+static ck_err_t OBJ_alloc_msgs(OBJ_t *oh, ck_size_t min_alloc);
 
 void free_obj_header(OBJ_t *oh);
-static int find_in_ohdr(driver_t *, OBJ_t *, int);
+static int find_in_ohdr(driver_t *file, OBJ_t *oh, int type_id);
 
-static void *OBJ_shared_read(driver_t *, OBJ_shared_t *, const obj_class_t *);
-static void *OBJ_shared_decode(driver_t *, const uint8_t *, const obj_class_t *, const uint8_t *, ck_addr_t);
-static ck_err_t decode_validate_messages(driver_t *, OBJ_t *);
+static void *OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *type);
+static void *OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, const uint8_t *start, ck_addr_t base);
+static ck_err_t decode_validate_messages(driver_t *file, OBJ_t *oh);
 static ck_err_t validate_ext_file(char *ext_fname);
-
 
 /*
  *  Virtual file drivers
  */
-static void set_driver_id(int */*out*/, char *);
-static driver_class_t *get_driver_class(int);
-static void *get_driver_info(int, global_shared_t *);
-static ck_err_t	decode_driver(global_shared_t *, const uint8_t *);
+static void set_driver_id(int *driverid/*out*/, char *driver_name);
+static driver_class_t *get_driver_class(int driver_id);
+static void *get_driver_info(int driver_id, global_shared_t *shared);
+static ck_err_t	decode_driver(global_shared_t *shared, const uint8_t *buf);
 
-static driver_t *sec2_open(const char *, global_shared_t *, int);
-static ck_err_t	sec2_read(driver_t *, ck_addr_t, size_t, void */*out*/);
-static ck_err_t sec2_close(driver_t *);
-static ck_addr_t sec2_get_eof(driver_t *);
-static char *sec2_get_fname(driver_t *, ck_addr_t);
+static driver_t *sec2_open(const char *name, global_shared_t *shared, int driver_id);
+static ck_err_t	sec2_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/);
+static ck_err_t sec2_close(driver_t *file);
+static ck_addr_t sec2_get_eof(driver_t *file);
+static char *sec2_get_fname(driver_t *file, ck_addr_t logi_addr);
 
 static const driver_class_t sec2_g = {
     "sec2",  		/* name                 */
@@ -63,17 +63,17 @@ static const driver_class_t sec2_g = {
     sec2_get_fname,	/* get file name	*/
 };
 
-static ck_err_t multi_decode_driver(global_shared_t *, const unsigned char *);
+static ck_err_t multi_decode_driver(global_shared_t *shared, const unsigned char *buf);
 static void multi_free_fa(global_shared_t *shared);
-static driver_t *multi_open(const char *, global_shared_t *, int);
-static ck_err_t multi_close(driver_t *);
-static ck_err_t multi_read(driver_t *, ck_addr_t, size_t, void */*out*/);
+static driver_t *multi_open(const char *name, global_shared_t *shared, int driver_id);
+static ck_err_t multi_close(driver_t *file);
+static ck_err_t multi_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/);
 static ck_addr_t multi_get_eof(driver_t *file);
 static char *multi_get_fname(driver_t *file, ck_addr_t logi_addr);
 
-static void set_multi_driver_properties(driver_multi_fapl_t **, driver_mem_t *, const char **, ck_addr_t *);
+static void set_multi_driver_properties(driver_multi_fapl_t **fa, driver_mem_t map[], const char *memb_name[], ck_addr_t memb_addr[]);
 static ck_err_t	compute_next(driver_multi_t *file);
-static ck_err_t open_members(driver_multi_t *file, global_shared_t *);
+static ck_err_t open_members(driver_multi_t *file, global_shared_t *shared);
 
 static const driver_class_t multi_g = {
     "multi",                   	/* name          */
@@ -85,11 +85,11 @@ static const driver_class_t multi_g = {
     multi_get_fname,	 	/* get file name */
 };
 
-static ck_err_t family_decode_driver(global_shared_t *, const unsigned char *);
+static ck_err_t family_decode_driver(global_shared_t *shared, const unsigned char *buf);
 static void family_free_fa(global_shared_t *shared);
-static driver_t *family_open(const char *, global_shared_t *, int);
-static ck_err_t family_close(driver_t *);
-static ck_err_t family_read(driver_t *, ck_addr_t, size_t, void */*out*/);
+static driver_t *family_open(const char *name, global_shared_t *shared, int driver_id);
+static ck_err_t family_close(driver_t *file);
+static ck_err_t family_read(driver_t *file, ck_addr_t addr, size_t size, void *buf/*out*/);
 static ck_addr_t family_get_eof(driver_t *file);
 static char *family_get_fname(driver_t *file, ck_addr_t logi_addr);
 
@@ -117,9 +117,9 @@ static const obj_class_t OBJ_NIL[1] = {{
     NULL	/* free method 		*/
 }};
 
-static void *OBJ_sds_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void *OBJ_sds_copy(void *_mesg, void *_dest);
-static ck_err_t OBJ_sds_free(void *); 
+static ck_err_t OBJ_sds_free(void *mesg); 
 
 /* Simple Database: 0x0001 */
 static const obj_class_t OBJ_SDS[1] = {{
@@ -129,7 +129,7 @@ static const obj_class_t OBJ_SDS[1] = {{
     OBJ_sds_free	/* free method 		*/
 }};
 
-static void *OBJ_linfo_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static ck_err_t G_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_msg_udata);
 static void *OBJ_linfo_copy(void *_src, void *_dst);
 static ck_err_t OBJ_linfo_free(void *_mesg);
@@ -142,8 +142,8 @@ static const obj_class_t OBJ_LINFO[1] = {{
     OBJ_linfo_free	/* free method 		*/
 }};
 
-static void *OBJ_dt_decode (driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
-static ck_err_t OBJ_dt_decode_helper(driver_t *, const uint8_t **, OBJ_type_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_dt_decode (driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
+static ck_err_t OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const uint8_t *start, ck_addr_t base);
 static void *OBJ_dt_copy(void *_src, void *_dst);
 static ck_err_t OBJ_dt_free(void *_mesg);
 
@@ -155,7 +155,7 @@ static const obj_class_t OBJ_DT[1] = {{
     OBJ_dt_free		/* free method 		*/
 }};
 
-static void  *OBJ_fill_old_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void  *OBJ_fill_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_fill_copy(void *_src, void *_dest);
 static ck_err_t OBJ_fill_free(void *_mesg); 
 
@@ -167,7 +167,7 @@ static const obj_class_t OBJ_FILL_OLD[1] = {{
     OBJ_fill_free		/* free method 		*/
 }};
 
-static void  *OBJ_fill_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void  *OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 
 /* Data Storage - Fill Value: 0x0005 */
 static const obj_class_t OBJ_FILL[1] = {{
@@ -177,7 +177,7 @@ static const obj_class_t OBJ_FILL[1] = {{
     OBJ_fill_free	/* free method 		*/
 }};
 
-static void  *OBJ_link_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void  *OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_link_copy(void *_src, void *_dest);
 static ck_err_t OBJ_link_free(void *_mesg); 
 
@@ -189,9 +189,9 @@ static const obj_class_t OBJ_LINK[1] = {{
     OBJ_link_free	/* free method 		*/
 }};
 
-static void *OBJ_edf_decode(driver_t *, const uint8_t *p, const uint8_t *, ck_addr_t);
+static void *OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_edf_copy(void *_src, void *_dest);
-static ck_err_t OBJ_edf_free(void *); 
+static ck_err_t OBJ_edf_free(void *mesg); 
 
 /* Data Storage - External Data Files: 0x0007 */
 static const obj_class_t OBJ_EDF[1] = {{
@@ -202,7 +202,7 @@ static const obj_class_t OBJ_EDF[1] = {{
 }};
 
 
-static void *OBJ_ginfo_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_ginfo_copy(void *_src, void *_dest);
 static ck_err_t OBJ_ginfo_free(void *_mesg); 
 
@@ -214,7 +214,7 @@ static const obj_class_t OBJ_GINFO[1] = {{
     OBJ_ginfo_free	/* free method 		*/
 }};
 
-static void *OBJ_layout_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_layout_copy(void *_src, void *_dest);
 static ck_err_t OBJ_layout_free(void *_mesg); 
 
@@ -226,8 +226,8 @@ static const obj_class_t OBJ_LAYOUT[1] = {{
     OBJ_layout_free	/* free method 		*/
 }};
 
-static void *OBJ_bogus_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
-static ck_err_t OBJ_bogus_free(void *); 
+static void *OBJ_bogus_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
+static ck_err_t OBJ_bogus_free(void *mesg); 
 
 /* Bogus Message 0x0009 */
 static const obj_class_t OBJ_BOGUS[1] = {{
@@ -237,7 +237,7 @@ static const obj_class_t OBJ_BOGUS[1] = {{
     OBJ_bogus_free	/* free method 		*/
 }};
 
-static void *OBJ_filter_decode (driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_filter_decode (driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_filter_copy(void *_src, void *_dest);
 static ck_err_t OBJ_filter_free(void *_mesg); 
 
@@ -249,7 +249,7 @@ static const obj_class_t OBJ_FILTER[1] = {{
     OBJ_filter_free	/* free method 		*/
 }};
 
-static void *OBJ_attr_decode (driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_attr_decode (driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_attr_copy(void *_src, void *_dest);
 static ck_err_t OBJ_attr_free(void *_mesg); 
 
@@ -262,7 +262,7 @@ static const obj_class_t OBJ_ATTR[1] = {{
 }};
 
 
-static void *OBJ_comm_decode(driver_t *, const uint8_t *p, const uint8_t *, ck_addr_t);
+static void *OBJ_comm_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_comm_copy(void *_src, void *_dest);
 static ck_err_t OBJ_comm_free(void *_mesg); 
 
@@ -275,7 +275,7 @@ static const obj_class_t OBJ_COMM[1] = {{
 }};
 
 
-static void *OBJ_mdt_old_decode(driver_t *, const uint8_t *p, const uint8_t *, ck_addr_t);
+static void *OBJ_mdt_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_mdt_copy(void *_src, void *_dest);
 static ck_err_t OBJ_mdt_old_free(void *_mesg); 
 
@@ -292,7 +292,7 @@ static const obj_class_t OBJ_MDT_OLD[1] = {{
 }};
 
 
-static void *OBJ_shmesg_decode (driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_shmesg_decode (driver_t *file, const uint8_t *buf, const uint8_t *start, ck_addr_t base);
 static void * OBJ_shmesg_copy(void *_src, void *_dest);
 static ck_err_t OBJ_shmesg_free(void *_mesg); 
 
@@ -306,8 +306,8 @@ static const obj_class_t OBJ_SHMESG[1] = {{
 
 
 
-static void *OBJ_cont_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
-static ck_err_t OBJ_cont_free(void *); 
+static void *OBJ_cont_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
+static ck_err_t OBJ_cont_free(void *mesg); 
 
 /* Object Header Continuation: 0x0010 */
 static const obj_class_t OBJ_CONT[1] = {{
@@ -318,7 +318,7 @@ static const obj_class_t OBJ_CONT[1] = {{
 }};
 
 
-static void *OBJ_group_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_group_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_group_copy(void *_src, void *_dest);
 static ck_err_t OBJ_group_free(void *_mesg); 
 
@@ -331,7 +331,7 @@ static const obj_class_t OBJ_GROUP[1] = {{
 }};
 
 
-static void *OBJ_mdt_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static ck_err_t OBJ_mdt_free(void *_mesg); 
 
 /* Object Modification Date & Time: 0x0012 */
@@ -342,9 +342,9 @@ static const obj_class_t OBJ_MDT[1] = {{
     OBJ_mdt_free	/* free method 		*/
 }};
 
-static void *OBJ_btreek_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_addr_t base);
 static void * OBJ_btreek_copy(void *_src, void *_dest);
-static ck_err_t OBJ_btreek_free(void *); 
+static ck_err_t OBJ_btreek_free(void *mesg); 
 
 /* Non-default v1 B-tree 'K' values: 0x0013 */
 static const obj_class_t OBJ_BTREEK[1] = {{
@@ -355,9 +355,9 @@ static const obj_class_t OBJ_BTREEK[1] = {{
 }};
 
 
-static void *OBJ_drvinfo_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_addr_t base);
 static void * OBJ_drvinfo_copy(void *_src, void *_dest);
-static ck_err_t OBJ_drvinfo_free(void *); 
+static ck_err_t OBJ_drvinfo_free(void *mesg); 
 
 /* Driver Info settings: 0x0014 */
 static const obj_class_t OBJ_DRVINFO[1] = {{
@@ -368,10 +368,10 @@ static const obj_class_t OBJ_DRVINFO[1] = {{
 }};
 
 
-static void *OBJ_ainfo_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static ck_err_t A_dense_ck_fh_msg_cb(driver_t *file, const void *_record, void *_ck_msg_udata);
 static void * OBJ_ainfo_copy(void *_src, void *_dest);
-static ck_err_t OBJ_ainfo_free(void *); 
+static ck_err_t OBJ_ainfo_free(void *mesg); 
 
 /* Attribute Information : 0x0015 */
 static const obj_class_t OBJ_AINFO[1] = {{
@@ -381,9 +381,9 @@ static const obj_class_t OBJ_AINFO[1] = {{
     OBJ_ainfo_free	/* free method 		*/
 }};
 
-static void *OBJ_refcount_decode(driver_t *, const uint8_t *, const uint8_t *, ck_addr_t);
+static void *OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base);
 static void * OBJ_refcount_copy(void *_src, void *_dest);
-static ck_err_t OBJ_refcount_free(void *); 
+static ck_err_t OBJ_refcount_free(void *mesg); 
 
 /* Object's Reference Count: 0x0016 */
 static const obj_class_t OBJ_REFCOUNT[1] = {{
@@ -432,9 +432,9 @@ const obj_class_t *const message_type_g[] = {
 /* end header messages */
 
 /* group node (symbol table node) */
-static ck_size_t gp_node_sizeof_rkey(global_shared_t *, unsigned);
-static ck_err_t gp_node_decode_key(global_shared_t *, unsigned, const uint8_t **, void **_key);
-static int gp_node_cmp_key(global_shared_t *shared, unsigned UNUSED ndims, uint8_t *, void *_lt_key, void *_rt_key);
+static ck_size_t gp_node_sizeof_rkey(global_shared_t *shared, key_info_t *key_info);
+static ck_err_t gp_node_decode_key(global_shared_t *shared, key_info_t *key_info, const uint8_t **p, void **_key);
+static int gp_node_cmp_key(global_shared_t *shared, key_info_t *key_info, void *_lt_key, void *_rt_key);
 
 BT_class_t BT_SNODE[1] = {
     BT_SNODE_ID,               	/* id                   */
@@ -445,9 +445,9 @@ BT_class_t BT_SNODE[1] = {
 };
 
 /* chunked raw data node */
-static size_t raw_node_sizeof_rkey(global_shared_t *, unsigned);
-static ck_err_t raw_node_decode_key(global_shared_t *shared, unsigned ndims, const uint8_t **p, void **_key);
-static int raw_node_cmp_key(global_shared_t *shared, unsigned ndims, uint8_t *UNUSED heap_chunk, void *_lt_key, void *_rt_key);
+static size_t raw_node_sizeof_rkey(global_shared_t *shared, key_info_t *key_info);
+static ck_err_t raw_node_decode_key(global_shared_t *shared, key_info_t *key_info, const uint8_t **p, void **_key);
+static int raw_node_cmp_key(global_shared_t *shared, key_info_t *key_info, void *_lt_key, void *_rt_key);
 
 static BT_class_t BT_ISTORE[1] = {
     BT_ISTORE_ID,             	/* id                   */
@@ -462,12 +462,13 @@ static const BT_class_t *const node_key_g[] = {
     BT_ISTORE	/* raw data chunk node */
 };
 
-
 ck_addr_t
 get_logical_addr(const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     ck_addr_t	diff;
 
+    if(start == NULL || base == -1)
+	return(-1);
     diff = p - start;
     return(base + diff);
 } /* get_logical_addr() */
@@ -1667,7 +1668,7 @@ family_get_fname(driver_t *_file, ck_addr_t logi_addr)
 
 /* Dataspace */
 static void *
-OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_sds_extent_t *mesg = NULL;
     unsigned i;              
@@ -1680,14 +1681,14 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
 
     if((mesg = calloc(1, sizeof(OBJ_sds_extent_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Dataspace Message:Internal allocation error", logical, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
 
     /* version adjusted if error for further continuation */
@@ -1707,7 +1708,7 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
 	}
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     mesg->rank = *p++;
     if(mesg->rank > OBJ_SDS_MAX_RANK) {
        badinfo = mesg->rank;
@@ -1716,7 +1717,7 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     }
 
     /* Get dataspace flags for later */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     flags = *p++;
 
     if((version == OBJ_SDS_VERSION_1) && (flags > 0x3)) {  
@@ -1730,7 +1731,7 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     }
 
     if(version >= OBJ_SDS_VERSION_2) {
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         mesg->type = (OBJ_sds_class_t)*p++;
 	if((mesg->type != OBJ_SDS_SCALAR) && 
 	   (mesg->type != OBJ_SDS_SIMPLE) && 
@@ -1749,7 +1750,7 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     if(version == OBJ_SDS_VERSION_1)
         p += 4; /*reserved*/
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if(mesg->rank > 0) {
 	if((mesg->size = (ck_hsize_t *)malloc(sizeof(ck_hsize_t) * (ck_size_t)mesg->rank))==NULL) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Dataspace Message:Internal allocation error", 
@@ -1759,7 +1760,7 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
         for(i = 0; i < mesg->rank; i++)
 	    DECODE_LENGTH(file->shared, p, mesg->size[i]);
 
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         if(flags & OBJ_SDS_VALID_MAX) {
              if((mesg->max = (ck_hsize_t *)malloc(sizeof(ck_hsize_t) * (ck_size_t)mesg->rank))==NULL) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, "Dataspace Message:Internal allocation error", 
@@ -1804,7 +1805,7 @@ OBJ_sds_free(void *_mesg)
 
 /* Link Info */
 static void *
-OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_linfo_t 	*mesg=NULL;  
     unsigned char 	index_flags;
@@ -1823,7 +1824,7 @@ OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     }
 
     /* Version of message */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_LINFO_VERSION) {
 	badinfo = version;
@@ -1910,7 +1911,7 @@ OBJ_linfo_free(void *_mesg)
 
 /* Datatype */
 static ck_err_t
-OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const uint8_t *start, ck_addr_t base)
 {
     unsigned        	flags, version, tmp;
     unsigned        	i, j;
@@ -1924,7 +1925,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
     assert(pp && *pp);
     assert(dt && dt->shared);
 
-    logical = get_logical_addr(*pp, start_buf, logi_base);
+    logical = get_logical_addr(*pp, start, base);
     UINT32DECODE(*pp, flags);
     version = (flags>>4) & 0x0f;
 
@@ -2205,12 +2206,16 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
 		}
 
                 /* Decode the field's datatype information */
-                if(OBJ_dt_decode_helper(file, pp, temp_type, start_buf, logi_base) < 0) {
+                if(OBJ_dt_decode_helper(file, pp, temp_type, start, base) < 0) {
                     for (j = 0; j <= i; j++) {
-                        free(dt->shared->u.compnd.memb[j].name);
-			dtype_free(dt->shared->u.compnd.memb[i].type);
+                        if(dt->shared->u.compnd.memb[j].name)
+			    free(dt->shared->u.compnd.memb[j].name);
+			if(dt->shared->u.compnd.memb[j].type)
+			    dtype_free(dt->shared->u.compnd.memb[j].type);
 		    }
-                    free(dt->shared->u.compnd.memb);
+		    if(temp_type) dtype_free(temp_type);
+                    if(dt->shared->u.compnd.memb)
+			free(dt->shared->u.compnd.memb);
                     error_push(ERR_LEV_2, ERR_LEV_2A2d,
 		      "Datatype Message:Unable to decode Compound member type", logical, NULL);
 		    CK_SET_RET_DONE(FAIL)
@@ -2262,7 +2267,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
 		CK_SET_RET_DONE(FAIL)
 	    }
 
-            if(OBJ_dt_decode_helper(file, pp, dt->shared->parent, start_buf, logi_base) < 0) {
+            if(OBJ_dt_decode_helper(file, pp, dt->shared->parent, start, base) < 0) {
 		error_push(ERR_LEV_2, ERR_LEV_2A2d, 
 		    "Datatype Message:Unable to decode enumeration parent type", logical, NULL);
 		CK_SET_RET_DONE(FAIL)
@@ -2346,7 +2351,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
 		CK_SET_RET_DONE(FAIL)
 	    }
 
-            if(OBJ_dt_decode_helper(file, pp, dt->shared->parent, start_buf, logi_base) < 0) {
+            if(OBJ_dt_decode_helper(file, pp, dt->shared->parent, start, base) < 0) {
 	       error_push(ERR_LEV_2, ERR_LEV_2A2d, 
 		  "Datatype Message:Unable to decode variable-length parent type", logical, NULL);
 	       CK_SET_RET_DONE(FAIL)
@@ -2386,7 +2391,7 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
 		  "Datatype Message:Array:Internal allocation error", logical, NULL);
 		CK_SET_RET_DONE(FAIL)
 	    }
-            if(OBJ_dt_decode_helper(file, pp, dt->shared->parent, start_buf, logi_base) < 0) {
+            if(OBJ_dt_decode_helper(file, pp, dt->shared->parent, start, base) < 0) {
 	       error_push(ERR_LEV_2, ERR_LEV_2A2d, 
 		  "Datatype Message:Unable to decode Array parent type", logical, NULL);
 	       CK_SET_RET_DONE(FAIL)
@@ -2408,7 +2413,7 @@ done:
 
 /* Datatype */
 static void *
-OBJ_dt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_dt_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_type_t	*dt=NULL;
     void    	*ret_ptr=NULL;
@@ -2418,7 +2423,7 @@ OBJ_dt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_add
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if((dt = calloc(1, sizeof(OBJ_type_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	    "Datatype Message:Internal allocation error", logical, NULL);
@@ -2434,7 +2439,7 @@ OBJ_dt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_add
 	CK_SET_RET_DONE(FAIL)
     }
 
-    if(OBJ_dt_decode_helper(file, &p, dt, start_buf, logi_base) < 0) {
+    if(OBJ_dt_decode_helper(file, &p, dt, start, base) < 0) {
 	/* should have errors already pushed onto the error stack from decode_helper() */
 	CK_SET_RET_DONE(FAIL)
     }
@@ -2647,7 +2652,7 @@ OBJ_dt_free(void *_mesg)
 
 /* Data Storage - Fill Value (old) */
 static void *
-OBJ_fill_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_fill_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_fill_t 	*mesg=NULL;            /* Decoded fill value message */
     ck_addr_t   logical;
@@ -2658,7 +2663,7 @@ OBJ_fill_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, 
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if((mesg = calloc(1, sizeof(OBJ_fill_t))) == NULL) {
         error_push(ERR_INTERNAL, ERR_NONE_SEC,
           "Fill Value (old) Message:Internal allocation error", logical, NULL);
@@ -2700,7 +2705,7 @@ done:
 
 /* Data Storage - Fill Value */
 static void *
-OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_fill_t  *mesg=NULL;
     void        *ret_ptr=NULL;
@@ -2712,14 +2717,14 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if((mesg = calloc(1, sizeof(OBJ_fill_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	  "Fill Value Message:Internal allocation error", logical, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     mesg->version = version = *p++;
 
     /* version is adjusted if error for further continuation */
@@ -2741,7 +2746,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 
     if(version < OBJ_FILL_VERSION_3) {
        /* Space allocation time */
-       logical = get_logical_addr(p, start_buf, logi_base);
+       logical = get_logical_addr(p, start, base);
        mesg->alloc_time = (fill_alloc_time_t)*p++;
        if((mesg->alloc_time != FILL_ALLOC_TIME_EARLY) &&
 	  (mesg->alloc_time != FILL_ALLOC_TIME_LATE) &&
@@ -2752,7 +2757,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	}
 
         /* Fill value write time */
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         mesg->fill_time = (fill_time_t)*p++;
 	if((mesg->fill_time != FILL_TIME_ALLOC) &&
 	   (mesg->fill_time != FILL_TIME_NEVER) &&
@@ -2762,7 +2767,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	}
 
         /* Whether fill value is defined */
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         mesg->fill_defined = *p++;
 	if((mesg->fill_defined != 0) && (mesg->fill_defined != 1)) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2f, "Fill Value Message:Invalid Fill Value Defined", logical, NULL);
@@ -2771,7 +2776,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 
         /* Only decode fill value information if one is defined */
         if(mesg->fill_defined) {
-	    logical = get_logical_addr(p, start_buf, logi_base);
+	    logical = get_logical_addr(p, start, base);
             INT32DECODE(p, mesg->size);
             if(mesg->size > 0) {
 	       CHECK_OVERFLOW(mesg->size, ssize_t, ck_size_t);
@@ -2787,7 +2792,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	unsigned flags;
 
         /* Flags */
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         flags = *p++;
 
         /* Check for unknown flags */
@@ -2813,7 +2818,7 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
             mesg->size = (-1);
         } else if(flags & OBJ_FILL_FLAG_HAVE_VALUE) {
             /* Fill value size */
-	    logical = get_logical_addr(p, start_buf, logi_base);
+	    logical = get_logical_addr(p, start, base);
             UINT32DECODE(p, mesg->size);
 
             /* Fill value */
@@ -2900,7 +2905,7 @@ OBJ_fill_free(void *_mesg)
 
 /* Link Message */
 static void *
-OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_link_t *lnk=NULL;    	/* Pointer to link message */
     ck_size_t len;          	/* Length of a string in the message */
@@ -2914,7 +2919,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if(g_format_num == FORMAT_ONE_SIX) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Unsupported message", logical, NULL);
 	CK_SET_RET_DONE(FAIL)
@@ -2927,7 +2932,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     }
 
     /* decode */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_LINK_VERSION) {
 	badinfo = version;
@@ -2936,7 +2941,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     }
 
     /* Get the encoding flags for the link */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     link_flags = *p++;
     if(link_flags & ~OBJ_LINK_ALL_FLAGS) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad Flag Value", logical, NULL);
@@ -2944,7 +2949,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     }
 
     /* Check for non-default link type */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if(link_flags & OBJ_LINK_STORE_LINK_TYPE) {
         /* Get the type of the link */
         lnk->type = *p++;
@@ -2957,7 +2962,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         lnk->type = L_TYPE_HARD;
 
     /* Get the link creation time from the file */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if(link_flags & OBJ_LINK_STORE_CORDER) {
         INT64DECODE(p, lnk->corder);
         lnk->corder_valid = TRUE;
@@ -2968,7 +2973,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     } /* end else */
 
     /* Check for non-default name character set */ 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if(link_flags & OBJ_LINK_STORE_NAME_CSET) {
         /* Get the link name's character set */
         lnk->cset = (DT_cset_t)*p++;   
@@ -2981,7 +2986,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         lnk->cset = DT_CSET_ASCII;
     
     /* Get the length of the link's name */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     switch(link_flags & OBJ_LINK_NAME_SIZE) {
         case 0:     /* 1 byte size */
 	    len = *p++;
@@ -3016,16 +3021,15 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     memcpy(lnk->name, p, len);
     lnk->name[len] = '\0';
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     p += len;
 
     /* Get the appropriate information for each type of link */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     switch(lnk->type) {
         case L_TYPE_HARD:
             /* Get the address of the object the link points to */
             addr_decode(file->shared, &p, &(lnk->u.hard.addr));
-/* printf("lnk->u.hard.addr =%llu\n", lnk->u.hard.addr); */
             break;
 
         case L_TYPE_SOFT:
@@ -3040,7 +3044,6 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 		CK_SET_RET_DONE(FAIL)
 	    }
             memcpy(lnk->u.soft.name, p, len);
-/* printf("lnk->u.soft.name=%s\n", lnk->u.soft.name); */
             lnk->u.soft.name[len] = '\0';
             p += len;
             break;
@@ -3053,7 +3056,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	    }
 
             /* A UD link.  Get the user-supplied data */
-	    logical = get_logical_addr(p, start_buf, logi_base);
+	    logical = get_logical_addr(p, start, base);
             UINT16DECODE(p, len)
             lnk->u.ud.size = len;
             if(len > 0) {
@@ -3062,7 +3065,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 		    CK_SET_RET_DONE(FAIL)
 		}
 
-		logical = get_logical_addr(p, start_buf, logi_base);
+		logical = get_logical_addr(p, start, base);
                 memcpy(lnk->u.ud.udata, p, len);
 		if(lnk->type == L_TYPE_EXTERNAL) { /* external link */
 		    uint8_t *s; 
@@ -3097,8 +3100,6 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 			    logical, &badinfo);
 			CK_SET_RET(FAIL)
 		    }
-/* printf("External link name = %s\n", obj_name); */
-/* printf("External link file= %s\n", file_name); */
 
 		} else
 		    p += len;
@@ -3202,7 +3203,7 @@ OBJ_link_free(void *_mesg)
 
 /* Data Storage - External Data Files */
 static void *
-OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_edf_t   *mesg=NULL;
     int         version, badinfo;
@@ -3215,7 +3216,7 @@ OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if((mesg = calloc(1, sizeof(OBJ_edf_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	    "External Data Files Message:Internal allocation error", logical, NULL);
@@ -3223,7 +3224,7 @@ OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     }
 
     /* Version */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_EDF_VERSION) {
        badinfo = version;
@@ -3235,7 +3236,7 @@ OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     p += 3;
 
     /* Number of slots */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     UINT16DECODE(p, mesg->nalloc);
     assert(mesg->nalloc>0);
     UINT16DECODE(p, mesg->nused);
@@ -3255,7 +3256,7 @@ OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     }
 
     /* Decode the file list */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     mesg->slot = calloc(mesg->nalloc, sizeof(OBJ_edf_entry_t));
     if(NULL == mesg->slot) {
        error_push(ERR_INTERNAL, ERR_NONE_SEC, 
@@ -3396,7 +3397,7 @@ OBJ_edf_free(void *_mesg)
 
 /* Data Storage - Layout */
 static void *
-OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_layout_t *mesg = NULL;
     unsigned u;
@@ -3409,7 +3410,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
 
     if((mesg = calloc(1, sizeof(OBJ_layout_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Layout Message:Internal allocation error", logical, NULL);
@@ -3417,7 +3418,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
     }
 
     /* Version. 1 when space allocated; 2 when space allocation is delayed */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     mesg->version = version = *p++;
 
     /* version is adjusted if error for further continuation */
@@ -3432,7 +3433,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
         unsigned        ndims;    /* Num dimensions in chunk */
 
         /* Dimensionality */
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         ndims = *p++;
 	/* this is not specified in the format specification ??? */
         if(ndims > OBJ_LAYOUT_NDIMS) {
@@ -3443,7 +3444,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 	}
 
         /* Layout class */
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         mesg->type = (DATA_layout_t)*p++;
 
         if((DATA_CONTIGUOUS != mesg->type) && (DATA_CHUNKED != mesg->type) && (DATA_COMPACT != mesg->type)) {
@@ -3478,7 +3479,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
         }
 
        	if (mesg->type == DATA_COMPACT) {
-	    logical = get_logical_addr(p, start_buf, logi_base);
+	    logical = get_logical_addr(p, start, base);
             UINT32DECODE(p, mesg->u.compact.size);
 	    if(mesg->u.compact.size > 0) {
 		if(NULL == (mesg->u.compact.buf=malloc(mesg->u.compact.size))) {
@@ -3492,7 +3493,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
         }
     } else {  /* version 3 */
         /* Layout class */
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         mesg->type = (DATA_layout_t)*p++;
 
         /* Interpret the rest of the message according to the layout class */
@@ -3504,7 +3505,7 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 
             case DATA_CHUNKED:
                 /* Dimensionality */
-		logical = get_logical_addr(p, start_buf, logi_base);
+		logical = get_logical_addr(p, start, base);
                 mesg->u.chunk.ndims = *p++;
                 if(mesg->u.chunk.ndims>OBJ_LAYOUT_NDIMS) {
 		   badinfo = mesg->u.chunk.ndims;
@@ -3616,7 +3617,7 @@ OBJ_layout_free(void *_mesg)
 
 /* Bogus Message */
 static void *
-OBJ_bogus_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_bogus_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_bogus_t *mesg = NULL;
     ck_addr_t	logical;
@@ -3632,7 +3633,7 @@ OBJ_bogus_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
     }
 
     /* decode */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     UINT32DECODE(p, mesg->u);
 
     /* Validate the bogus info */
@@ -3662,7 +3663,7 @@ OBJ_bogus_free(void *_mesg)
 
 /* Group Info Message */
 static void *
-OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_ginfo_t         *mesg=NULL;  		/* Pointer to group information message */
     unsigned char       flags;          	/* Flags for encoding group info */
@@ -3685,7 +3686,7 @@ OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_GINFO_VERSION) {
 	badinfo = version;
@@ -3696,7 +3697,7 @@ OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
 
 
     /* Get the flags for the group */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     flags = *p++;
     if(flags & ~OBJ_GINFO_ALL_FLAGS) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2k, "Group Info Message:Bad flag value", logical, NULL);
@@ -3769,7 +3770,7 @@ OBJ_ginfo_free(void *_mesg)
 
 /* Data Storage - Filter Pipeline */
 static void *
-OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_filter_t *pline = NULL;
     unsigned version;
@@ -3782,7 +3783,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
 
    /* Decode */
    if((pline = calloc(1, sizeof(OBJ_filter_t))) == NULL) {
@@ -3791,7 +3792,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 	CK_SET_RET_DONE(FAIL)	
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
     
     /* version is adjusted if error for further continuation */
@@ -3812,7 +3813,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 	}
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     pline->nused = *p++;
     if((pline->nused > OBJ_MAX_NFILTERS) || (pline->nused <= 0)) {
 	badinfo = pline->nused;
@@ -3833,7 +3834,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
 
     for(i = 0; i < pline->nused; i++) {
         UINT16DECODE(p, pline->filter[i].id);
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
 
 	/* Length of filter name */
         if (version > OBJ_FILTER_VERSION_1 && pline->filter[i].id < OBJ_FILTER_RESERVED)
@@ -3850,7 +3851,7 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck
         UINT16DECODE(p, pline->filter[i].flags);
         UINT16DECODE(p, pline->filter[i].cd_nelmts);
 
-	logical = get_logical_addr(p, start_buf, logi_base);
+	logical = get_logical_addr(p, start, base);
         if(name_length) {
 	    ck_size_t 	actual_name_length;          /* Actual length of name */
 
@@ -4016,7 +4017,7 @@ OBJ_filter_free(void *_mesg)
 
 /* Attribute */
 static void *
-OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_attr_t      	*attr = NULL;
     OBJ_sds_extent_t   	*extent;           /* extent dimensionality information  */
@@ -4033,27 +4034,27 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if((attr = calloc(1, sizeof(OBJ_attr_t))) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	    "Attribute Message:Internal allocation error", logical, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
 
     version = *p++;
 
     /* version is adjusted if error for further continuation */
     if(g_format_num == FORMAT_ONE_SIX) {
-	if (version != OBJ_ATTR_VERSION_1 && version != OBJ_ATTR_VERSION_2) {
+	if(version != OBJ_ATTR_VERSION_1 && version != OBJ_ATTR_VERSION_2) {
 	    badinfo = version;
 	    version = OBJ_ATTR_VERSION_2;
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Bad version number", logical, &badinfo);
 	    CK_SET_RET(FAIL)
 	}
     } else {
-	if (version < OBJ_ATTR_VERSION_1 || version > OBJ_ATTR_VERSION_LATEST) {
+	if(version < OBJ_ATTR_VERSION_1 || version > OBJ_ATTR_VERSION_LATEST) {
 	    badinfo = version;
 	    version = OBJ_ATTR_VERSION_LATEST;
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Bad version number", logical, &badinfo);
@@ -4061,13 +4062,13 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	}
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
 
     /* version 1 does not support flags; it is reserved and set to zero */
     /* version 2 & 3 used this flag to indicate data type and/or space are shared or not shared */
     if(version >= OBJ_ATTR_VERSION_2) {
 	flags = *p++;
-	if (flags & (unsigned)~OBJ_ATTR_FLAG_ALL) {
+	if(flags & (unsigned)~OBJ_ATTR_FLAG_ALL) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Unknown flag", logical, NULL);
 	    CK_SET_RET(FAIL)
 	}
@@ -4078,7 +4079,7 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
      * Decode the sizes of the parts of the attribute.  The sizes stored in
      * the file are exact but the parts are aligned on 8-byte boundaries.
      */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     UINT16DECODE(p, name_len); /*including null*/
     UINT16DECODE(p, attr->dt_size);
     UINT16DECODE(p, attr->ds_size);
@@ -4088,7 +4089,7 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
         encoding = *p++;
 
     /* Decode and store the name */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     attr->name = NULL;
     if((attr->name = strdup((const char *)p)) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Attribute Message:Internal allocation error", -1, NULL);
@@ -4107,13 +4108,13 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     else
         p += name_len;
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
 	
     /* decode the attribute datatype */
     if(flags & OBJ_ATTR_FLAG_TYPE_SHARED) {
 	
         /* Get the shared information */
-        if(NULL == (dt_shared = OBJ_shared_decode(file, p, OBJ_DT, start_buf, logi_base))) {
+        if(NULL == (dt_shared = OBJ_shared_decode(file, p, OBJ_DT, start, base))) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, 
 		"Attribute Message:Errors found when decoding shared datatype", logical, NULL);
 	    CK_SET_RET_DONE(FAIL)
@@ -4125,7 +4126,7 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	    CK_SET_RET_DONE(FAIL)
 	}
     } else {
-	if((attr->dt = (OBJ_DT->decode)(file, p, start_buf, logi_base)) == NULL) {
+	if((attr->dt = (OBJ_DT->decode)(file, p, start, base)) == NULL) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, 
 		"Attribute Message:Errors found when decoding datatype description", logical, NULL);
 	    CK_SET_RET_DONE(FAIL)
@@ -4137,18 +4138,18 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     else
         p += attr->dt_size;
 
-    if ((attr->ds = calloc(1, sizeof(OBJ_space_t)))==NULL) {
+    if((attr->ds = calloc(1, sizeof(OBJ_space_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	  "Attribute Message:Internal allocation error", -1, NULL);
 	CK_SET_RET_DONE(FAIL)
     }
 
     /* decode the attribute dataspace */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if(flags & OBJ_ATTR_FLAG_SPACE_SHARED) {
 	
         /* Get the shared information */
-        if(NULL == (sds_shared = OBJ_shared_decode(file, p, OBJ_SDS, start_buf, logi_base))) {
+        if(NULL == (sds_shared = OBJ_shared_decode(file, p, OBJ_SDS, start, base))) {
 	   error_push(ERR_LEV_2, ERR_LEV_2A2m, 
 		"Attribute Message:Errors found when decoding shared dataspace", 
 		logical, NULL);
@@ -4161,7 +4162,7 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	    CK_SET_RET_DONE(FAIL)
 	}
     } else {
-	if((extent = (OBJ_SDS->decode)(file, p, start_buf, logi_base))==NULL) {
+	if((extent = (OBJ_SDS->decode)(file, p, start, base))==NULL) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2m, 
 		"Attribute Message:Errors found when decoding dataspace description", 
 		logical, NULL);
@@ -4185,7 +4186,7 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
     attr->data_size = attr->ds->extent.nelem * attr->dt->shared->size;
     ASSIGN_OVERFLOW(attr->data_size,attr->ds->extent.nelem*attr->dt->shared->size,ck_size_t,size_t);
     /* Go get the data */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     if(attr->data_size) {
 	if((attr->data = malloc(attr->data_size))==NULL) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
@@ -4280,7 +4281,7 @@ OBJ_attr_free(void *_mesg)
 
 /* Object Comment */
 static void *
-OBJ_comm_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_comm_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_comm_t  *mesg=NULL;
     int		len;
@@ -4301,7 +4302,7 @@ OBJ_comm_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     strcpy(mesg->s, (const char*)p);
     if(mesg->s[len] != '\0') {
 	error_push(ERR_LEV_2, ERR_LEV_2A2n, 
@@ -4371,7 +4372,7 @@ OBJ_comm_free(void *_mesg)
 
 /* Object Modification Date & Time (OLD) */
 static void *
-OBJ_mdt_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_mdt_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     time_t      *mesg=NULL;
     time_t	the_time;
@@ -4391,7 +4392,7 @@ OBJ_mdt_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, c
     } 
 
     /* decode */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     for(i = 0; i < 14; i++) {
 	if(!isdigit(p[i])) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A2o, 
@@ -4443,7 +4444,7 @@ OBJ_mdt_old_free(void *_mesg)
 
 /* Shared message table Message */
 static void *
-OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_addr_t base)
 {
     OBJ_shmesg_table_t  *mesg=NULL; 
     ck_addr_t		logical;
@@ -4467,7 +4468,7 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
     }
 
     /* Retrieve version, table address, and number of indexes */
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     mesg->version = *buf++;
     if (mesg->version != SHAREDHEADER_VERSION) {
 	badinfo = mesg->version;
@@ -4476,7 +4477,7 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
 	CK_SET_RET(FAIL)
     }
 
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     addr_decode(file->shared, &buf, &(mesg->addr));
     if(mesg->addr == CK_ADDR_UNDEF) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2p, "Shared Message Table Message:Undefined address",
@@ -4484,7 +4485,7 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
 	CK_SET_RET(FAIL)
     }
     
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     mesg->nindexes = *buf++;
     /* nindexes < 256--1 byte to hold nindexes */
     if((mesg->nindexes <= 0) && (mesg->nindexes > OBJ_SHMESG_MAX_NINDEXES)) {
@@ -4538,7 +4539,7 @@ OBJ_shmesg_free(void *_mesg)
 
 /* Object Header Continutaion */
 static void *
-OBJ_cont_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_cont_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_cont_t 	*cont = NULL;
     ck_addr_t	logical;
@@ -4555,7 +4556,7 @@ OBJ_cont_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	CK_SET_RET_DONE(FAIL)
     }
 	
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     addr_decode(file->shared, &p, &(cont->addr));
 
     if(cont->addr == CK_ADDR_UNDEF) {
@@ -4564,7 +4565,7 @@ OBJ_cont_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_a
 	CK_SET_RET(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     DECODE_LENGTH(file->shared, p, cont->size);
 
     if(cont->size < 0) {
@@ -4596,7 +4597,7 @@ OBJ_cont_free(void *_mesg)
 
 /* Symbol Table Message */
 static void *
-OBJ_group_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_group_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_stab_t  	*stab=NULL;
     ck_addr_t		logical;
@@ -4612,14 +4613,14 @@ OBJ_group_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     addr_decode(file->shared, &p, &(stab->btree_addr));
     if(stab->btree_addr == CK_ADDR_UNDEF) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2r, "Symbol Table Message:Undefined version 1 btree address", logical, NULL);
 	CK_SET_RET(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     addr_decode(file->shared, &p, &(stab->heap_addr));
     if(stab->heap_addr == CK_ADDR_UNDEF) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2r, "Symbol Table Message:Undefined local heap address", logical, NULL);
@@ -4672,7 +4673,7 @@ OBJ_group_free(void *_mesg)
 
 /* Object Modification Time */
 static void *
-OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     time_t      *mesg=NULL;
     uint32_t    tmp_time;    
@@ -4684,7 +4685,7 @@ OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     assert(file);
     assert(p);
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_MTIME_VERSION) {
 	badinfo = version;
@@ -4697,7 +4698,7 @@ OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_ad
     p+=3;
 
     /* Get the time_t from the file */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     UINT32DECODE(p, tmp_time);
 
     if((mesg=calloc(1, sizeof(time_t))) == NULL) {
@@ -4753,7 +4754,7 @@ OBJ_mdt_free(void *_mesg)
 
 /* Non-default v1 B-tree 'K' values message */
 static void *
-OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_addr_t base)
 {
     OBJ_btreek_t  	*mesg=NULL;   
     ck_addr_t		logical;
@@ -4777,7 +4778,7 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     version = *buf++;
     if(version != OBJ_BTREEK_VERSION) {
 	badinfo = version;
@@ -4785,7 +4786,7 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
 	CK_SET_RET(FAIL)
     }
 
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     UINT16DECODE(buf, mesg->btree_k[BT_ISTORE_ID]);
     if(mesg->btree_k[BT_ISTORE_ID] <= 0) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2t, 
@@ -4793,14 +4794,14 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, 
 	CK_SET_RET(FAIL)
     }
 
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     UINT16DECODE(buf, mesg->btree_k[BT_SNODE_ID]);
     if(mesg->btree_k[BT_SNODE_ID] <= 0) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2t, "B-tree 'K' Values Message:Invalid value for Group Internal Node K", logical, NULL);
 	    CK_SET_RET(FAIL)
     }
 
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     UINT16DECODE(buf, mesg->sym_leaf_k);
     if(mesg->sym_leaf_k <= 0) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2t, "B-tree 'K' Values Message:Invalid value for Group Leaf Node K", logical, NULL);
@@ -4853,7 +4854,7 @@ OBJ_btreek_free(void *_mesg)
 
 /* Driver Info Message */
 static void *
-OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_addr_t base)
 {
     OBJ_drvinfo_t  	*mesg=NULL;
     ck_addr_t		logical;
@@ -4878,7 +4879,7 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf,
     }
 
      /* Version of message */
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     version = *buf++;
     if(version != OBJ_DRVINFO_VERSION) {
 	badinfo = version;
@@ -4892,7 +4893,7 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start_buf,
     buf += 8;
 
     /* Decode Driver Information Size */
-    logical = get_logical_addr(buf, start_buf, logi_base);
+    logical = get_logical_addr(buf, start, base);
     UINT16DECODE(buf, mesg->len);
     if(mesg->len <=0) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2u, "Driver Info Message:Invalid driver information size", logical, NULL);
@@ -4967,7 +4968,7 @@ OBJ_drvinfo_free(void *_mesg)
 
 /* Attribute Info Message */
 static void *
-OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_ainfo_t 	*ainfo=NULL;  /* Attribute info */
     unsigned char 	flags;        /* Flags for encoding attribute info */
@@ -4993,7 +4994,7 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_AINFO_VERSION) {
 	badinfo = version;
@@ -5003,7 +5004,7 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_
 
 
     /* Get the flags for the message */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     flags = *p++;
     if(flags & ~OBJ_AINFO_ALL_FLAGS) {
 	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad flag value", logical, &badinfo);
@@ -5074,7 +5075,7 @@ OBJ_ainfo_free(void *_mesg)
 
 /* Object Reference Count Message */
 static void *
-OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_refcount_t 	*refcount=NULL;  /* Reference count */
     int			badinfo;
@@ -5100,7 +5101,7 @@ OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start_buf, 
     }
 
     /* Version of message */
-    logical = get_logical_addr(p, start_buf, logi_base);
+    logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_REFCOUNT_VERSION) {
 	badinfo = version;
@@ -5326,14 +5327,14 @@ addr_decode(global_shared_t *shared, const uint8_t **pp/*in,out*/, ck_addr_t *ad
 
 /* size of the key for a group node (symbol table node) */
 static size_t
-gp_node_sizeof_rkey(global_shared_t *shared, unsigned UNUSED ndims)
+gp_node_sizeof_rkey(global_shared_t *shared, key_info_t UNUSED *key_info)
 {
-    return (SIZEOF_SIZE(shared));       /*the name offset */
+    return(SIZEOF_SIZE(shared));       /*the name offset */
 } /* gp_node_sizeof_rkey() */
 
 /* decode the key for group node (symbol table node) */
 static ck_err_t
-gp_node_decode_key(global_shared_t *shared, unsigned UNUSED ndims, const uint8_t **p/*in,out*/, void **_key)
+gp_node_decode_key(global_shared_t *shared, key_info_t *key_info, const uint8_t **p/*in,out*/, void **_key)
 {
     GP_node_key_t *key;
 
@@ -5348,13 +5349,17 @@ gp_node_decode_key(global_shared_t *shared, unsigned UNUSED ndims, const uint8_t
     }
 
     DECODE_LENGTH(shared, *p, key->offset);
+    if(key->offset > key_info->heap_size) {
+	if(key) free(key);
+	return(FAIL);
+    }
 
     *_key = key;
     return(SUCCEED);
 } /* gp_node_decode_key() */
 
 static int
-gp_node_cmp_key(global_shared_t *shared, unsigned UNUSED ndims, uint8_t *heap_chunk, void *_lt_key, void *_rt_key)
+gp_node_cmp_key(global_shared_t *shared, key_info_t *key_info, void *_lt_key, void *_rt_key)
 {
     GP_node_key_t *lt_key = (GP_node_key_t *)_lt_key;
     GP_node_key_t *rt_key = (GP_node_key_t *)_rt_key;
@@ -5363,11 +5368,11 @@ gp_node_cmp_key(global_shared_t *shared, unsigned UNUSED ndims, uint8_t *heap_ch
 
     assert(lt_key);
     assert(rt_key);
-    assert(heap_chunk);
+    assert(key_info->heap_chunk);
 
-    if(heap_chunk) {
-	s1 = (char *)(heap_chunk + HL_SIZEOF_HDR(shared) + lt_key->offset);
-	s2 = (char *)(heap_chunk + HL_SIZEOF_HDR(shared) + rt_key->offset);
+    if(key_info->heap_chunk) {
+	s1 = (char *)(key_info->heap_chunk + HL_SIZEOF_HDR(shared) + lt_key->offset);
+	s2 = (char *)(key_info->heap_chunk + HL_SIZEOF_HDR(shared) + rt_key->offset);
 
 	/* Set return value */
 	ret_value = strcmp(s1, s2);
@@ -5381,23 +5386,23 @@ gp_node_cmp_key(global_shared_t *shared, unsigned UNUSED ndims, uint8_t *heap_ch
 
 /* size of the key for a chunked raw data node (indexed storage node) */
 static size_t
-raw_node_sizeof_rkey(global_shared_t *shared, unsigned ndims)
+raw_node_sizeof_rkey(global_shared_t *shared, key_info_t *key_info)
 {
     size_t 	nbytes;
 
     assert(shared);
-    assert(ndims>0 && ndims<=OBJ_LAYOUT_NDIMS);
+    assert(key_info->ndims > 0 && key_info->ndims <= OBJ_LAYOUT_NDIMS);
 
-    nbytes = 4 +           /*storage size          */
-	     4 +           /*filter mask           */
-             ndims*8;      /*dimension indices     */
+    nbytes = 4 +           		/* storage size          */
+	     4 +           		/* filter mask           */
+             key_info->ndims * 8;      	/* dimension indices     */
 
     return(nbytes);
 } /* end raw_node_sizeof_rkey() */
 
 /* decode the key for chunked raw data node */
 static ck_err_t
-raw_node_decode_key(global_shared_t *shared, unsigned ndims, const uint8_t **p/*in, out*/, void **_key)
+raw_node_decode_key(global_shared_t *shared, key_info_t *key_info, const uint8_t **p/*in, out*/, void **_key)
 {
     RAW_node_key_t *key;
     unsigned  u;
@@ -5406,8 +5411,8 @@ raw_node_decode_key(global_shared_t *shared, unsigned ndims, const uint8_t **p/*
     assert(shared);
     assert(p);
     assert(*p);
-    assert(ndims>0);
-    assert(ndims<=OBJ_LAYOUT_NDIMS);
+    assert(key_info->ndims > 0);
+    assert(key_info->ndims <= OBJ_LAYOUT_NDIMS);
 
     /* decode */
     if((key = calloc(1, sizeof(RAW_node_key_t))) == NULL) {
@@ -5418,7 +5423,7 @@ raw_node_decode_key(global_shared_t *shared, unsigned ndims, const uint8_t **p/*
     
     UINT32DECODE(*p, key->nbytes);
     UINT32DECODE(*p, key->filter_mask);
-    for (u = 0; u < ndims; u++)
+    for (u = 0; u < key_info->ndims; u++)
 	UINT64DECODE(*p, key->offset[u]);
 
     *_key = key;
@@ -5426,7 +5431,7 @@ raw_node_decode_key(global_shared_t *shared, unsigned ndims, const uint8_t **p/*
 } /* end of raw_node_decode_key() */
 
 static int
-raw_node_cmp_key(global_shared_t *shared, unsigned ndims, uint8_t *UNUSED heap_chunk, void *_lt_key, void *_rt_key)
+raw_node_cmp_key(global_shared_t *shared, key_info_t *key_info, void *_lt_key, void *_rt_key)
 {
     RAW_node_key_t *lt_key = (RAW_node_key_t *)_lt_key;
     RAW_node_key_t *rt_key = (RAW_node_key_t *)_rt_key;
@@ -5434,11 +5439,11 @@ raw_node_cmp_key(global_shared_t *shared, unsigned ndims, uint8_t *UNUSED heap_c
 
     assert(lt_key);
     assert(rt_key);
-    assert(ndims > 0);
-    assert(ndims <= OBJ_LAYOUT_NDIMS);
+    assert(key_info->ndims > 0);
+    assert(key_info->ndims <= OBJ_LAYOUT_NDIMS);
 
     /* Compare the offsets but ignore the other fields */
-    ret_value = vector_cmp(ndims, lt_key->offset, rt_key->offset);
+    ret_value = vector_cmp(key_info->ndims, lt_key->offset, rt_key->offset);
 
     return(ret_value);
 } /* raw_node_cmp_key() */
@@ -5492,7 +5497,7 @@ locate_super_signature(driver_t *file)
 ck_err_t
 check_superblock(driver_t *file)
 {
-    uint8_t		*p, *start_buf;
+    uint8_t		*p, *start;
     uint8_t		buf[MAX_SUPERBLOCK_SIZE];
     size_t		fixed_size = SUPERBLOCK_FIXED_SIZE;
     size_t		variable_size, remain_size;
@@ -5540,9 +5545,9 @@ check_superblock(driver_t *file)
     } 
     /* superblock signature already checked */
     p = buf + HDF_SIGNATURE_LEN;
-    start_buf = buf;
+    start = buf;
 
-    logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+    logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
     super_vers = *p++;
 
     /* if super_vers is wrong, it would be adjusted accordingly for validation to continue */
@@ -5565,7 +5570,7 @@ check_superblock(driver_t *file)
 	CK_SET_RET_DONE(FAIL)
     }
 
-    logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+    logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 
     /* Determine the size of the variable-length part of the superblock */
     variable_size = SUPERBLOCK_VARLEN_SIZE(super_vers);
@@ -5589,7 +5594,7 @@ check_superblock(driver_t *file)
     if(super_vers == SUPERBLOCK_VERSION_0 || super_vers == SUPERBLOCK_VERSION_1) {
 	if(debug_verbose())
 	    printf("Validating version 0/1 superblock...\n");
-     	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+     	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	freespace_vers = *p++;
 
 	if(freespace_vers != FREESPACE_VERSION) {
@@ -5599,7 +5604,7 @@ check_superblock(driver_t *file)
 	    CK_SET_RET(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	root_sym_vers = *p++;
 	if(root_sym_vers != OBJECTDIR_VERSION) {
 	    badinfo = root_sym_vers;
@@ -5612,7 +5617,7 @@ check_superblock(driver_t *file)
 	/* skip over reserved byte */
 	p++;
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	shared_head_vers = *p++;
 	if(shared_head_vers != SHAREDHEADER_VERSION) {
 	    badinfo = shared_head_vers;
@@ -5621,7 +5626,7 @@ check_superblock(driver_t *file)
 	    CK_SET_RET(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	lshared->size_offsets = *p++;
 	if(lshared->size_offsets != 2 && lshared->size_offsets != 4 &&
             lshared->size_offsets != 8 && lshared->size_offsets != 16 && 
@@ -5631,7 +5636,7 @@ check_superblock(driver_t *file)
 		CK_SET_RET(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	lshared->size_lengths = *p++;
 	if(lshared->size_lengths != 2 && lshared->size_lengths != 4 &&
             lshared->size_lengths != 8 && lshared->size_lengths != 16 && 
@@ -5643,7 +5648,7 @@ check_superblock(driver_t *file)
 	/* skip over reserved byte */
 	p++;
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	UINT16DECODE(p, lshared->gr_leaf_node_k);
 	if (lshared->gr_leaf_node_k <= 0) {
 	    error_push(ERR_LEV_0, ERR_LEV_0A, 
@@ -5651,7 +5656,7 @@ check_superblock(driver_t *file)
 	    CK_SET_RET(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	UINT16DECODE(p, lshared->btree_k[BT_SNODE_ID]);
 	if(lshared->btree_k[BT_SNODE_ID] <= 0) {
 	    error_push(ERR_LEV_0, ERR_LEV_0A, 
@@ -5659,7 +5664,7 @@ check_superblock(driver_t *file)
 	    CK_SET_RET(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
     	UINT32DECODE(p, lshared->file_consist_flg);
 	if(lshared->file_consist_flg > 255) { /* 2 to the power 8 */
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Invalid value for file consistency flags.", logical, NULL);
@@ -5675,7 +5680,7 @@ check_superblock(driver_t *file)
      	 * storage B-tree internal 'K' value
      	 */
     	if(super_vers > SUPERBLOCK_VERSION_0) {
-	    logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	    logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	    UINT16DECODE(p, lshared->btree_k[BT_ISTORE_ID]);
 	    p += 2;   /* reserved */
 	    if (lshared->btree_k[BT_ISTORE_ID] == 0) {
@@ -5687,7 +5692,7 @@ check_superblock(driver_t *file)
 	    lshared->btree_k[BT_ISTORE_ID] = BT_ISTORE_K;
 
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 
 	/* Determine the remaining size of the superblock for V0 and V1 */
 	remain_size = SUPERBLOCK_REMAIN_SIZE(super_vers, lshared);
@@ -5697,7 +5702,7 @@ check_superblock(driver_t *file)
 	    CK_SET_RET_DONE(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	if(FD_read(file, LOGI_SUPER_BASE+fixed_size+variable_size, remain_size, p) == FAIL) {
 	    error_push(ERR_FILE, ERR_NONE_SEC, 
 		"Superblock v.0/1:Unable to read in the remaining size portion of the superblock", logical, NULL);
@@ -5711,7 +5716,7 @@ check_superblock(driver_t *file)
 	    CK_SET_RET(FAIL)
 	} 
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
     	addr_decode(lshared, (const uint8_t **)&p, &lshared->extension_addr);
 	if(addr_defined(lshared->extension_addr)) {
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Address of global Free-space Index should be undefined", 
@@ -5719,7 +5724,7 @@ check_superblock(driver_t *file)
 	    CK_SET_RET(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
     	addr_decode(lshared, (const uint8_t **)&p, &lshared->stored_eoa);
 	if(!addr_defined(lshared->stored_eoa) || lshared->base_addr >= lshared->stored_eoa) {
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Invalid End of File Address", logical, NULL);
@@ -5733,7 +5738,7 @@ check_superblock(driver_t *file)
 		"Superblock v.0/1:Internal allocation error", -1, NULL);
 	    CK_SET_RET_DONE(FAIL)
 	}
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	if(gp_ent_decode(lshared, (const uint8_t **)&p, root_ent/*out*/) < 0) {
 	    if(root_ent) free(root_ent);
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Unable to read root symbol table entry", logical, NULL);
@@ -5811,7 +5816,7 @@ check_superblock(driver_t *file)
 
 	if(debug_verbose())
 	    printf("Validating version 2 superblock...\n");
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	lshared->size_offsets = *p++;
 	if(lshared->size_offsets != 2 && lshared->size_offsets != 4 &&
             lshared->size_offsets != 8 && lshared->size_offsets != 16 && 
@@ -5820,7 +5825,7 @@ check_superblock(driver_t *file)
 		CK_SET_RET(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	lshared->size_lengths = *p++;
 	if(lshared->size_lengths != 2 && lshared->size_lengths != 4 &&
             lshared->size_lengths != 8 && lshared->size_lengths != 16 && 
@@ -5829,7 +5834,7 @@ check_superblock(driver_t *file)
 		CK_SET_RET(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	lshared->file_consist_flg = *p++;
 	if(lshared->file_consist_flg & ~SUPER_ALL_FLAGS) {
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.2:Invalid file consistency flags.", logical, NULL);
@@ -5843,7 +5848,7 @@ check_superblock(driver_t *file)
 	    CK_SET_RET_DONE(FAIL)
 	}
 
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	if(FD_read(file, LOGI_SUPER_BASE+fixed_size+variable_size, remain_size, p) == FAIL) {
 	    error_push(ERR_FILE, ERR_NONE_SEC, 
 		"Superblock v.2:Unable to read in the remaining size portion of the superblock", logical, NULL);
@@ -5851,15 +5856,15 @@ check_superblock(driver_t *file)
 	}
 	/* Base address */
 	addr_decode(lshared, (const uint8_t **)&p, &lshared->base_addr/*out*/);
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 
 	/* superblock extension address */
     	addr_decode(lshared, (const uint8_t **)&p, &lshared->extension_addr/*out*/);
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 
 	/* end of file address */
     	addr_decode(lshared, (const uint8_t **)&p, &lshared->stored_eoa);
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	if((lshared->stored_eoa == CK_ADDR_UNDEF) || (lshared->base_addr >= lshared->stored_eoa)) {
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.2:Invalid End of File Address", logical, NULL);
 	    CK_SET_RET(FAIL)
@@ -5872,7 +5877,7 @@ check_superblock(driver_t *file)
 	}
 	lshared->root_grp = root_ent;
     	addr_decode(lshared, (const uint8_t **)&p, &lshared->root_grp->header);
-	logical = get_logical_addr(p, start_buf, LOGI_SUPER_BASE);
+	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 
 	computed_chksum = checksum_metadata(buf, (ck_size_t)(p - buf), 0);
         UINT32DECODE(p, read_chksum);
@@ -5939,7 +5944,7 @@ done:
  * Validate  SNOD
  */
 static ck_err_t
-check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *name_list) 
+check_sym(driver_t *file, ck_addr_t sym_addr, key_info_t *key_info, name_list_t *name_list) 
 {
     size_t 	size = 0;
     uint8_t	*buf = NULL;
@@ -6016,7 +6021,7 @@ check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *
     if (gp_ent_decode_vec(file->shared, (const uint8_t **)&p, sym->entry, sym->nsyms) < 0)
 	CK_INC_ERR_DONE
 
-    if(!heap_chunk) {
+    if(!key_info->heap_chunk) {
 	if(debug_verbose())
 	    printf("Warning: Symbol table node: invalid heap address--name not validated\n");
     }
@@ -6026,7 +6031,7 @@ check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *
     for(u = 0, ent = sym->entry; u < sym->nsyms; u++, ent++) {
 	char *s1, *s2, *sym_name;
 
-	sym_name = (char *)(heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off);
+	sym_name = (char *)(key_info->heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off);
 	if(name_list && name_list_search(name_list, sym_name)) {
 	    error_push(ERR_LEV_1, ERR_LEV_1C, "Symbol table node entry:Duplicate name", sym_addr, NULL);
 		CK_INC_ERR
@@ -6036,9 +6041,9 @@ check_sym(driver_t *file, ck_addr_t sym_addr, uint8_t *heap_chunk, name_list_t *
 		CK_INC_ERR
 	    }
 
-	if(u && heap_chunk) {
-	    s1 = (char *)(heap_chunk + HL_SIZEOF_HDR(file->shared) + prev_ent->name_off);
-	    s2 = (char *)(heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off);
+	if(u && key_info->heap_chunk) {
+	    s1 = (char *)(key_info->heap_chunk + HL_SIZEOF_HDR(file->shared) + prev_ent->name_off);
+	    s2 = (char *)(key_info->heap_chunk + HL_SIZEOF_HDR(file->shared) + ent->name_off);
 
 	    if(strcmp(s1, s2) >= 0) {
 		error_push(ERR_LEV_1, ERR_LEV_1C, "Symbol table node entry:Name out of order", sym_addr, NULL);
@@ -6093,7 +6098,7 @@ done:
  * Validate version 1 B-tree
  */
 static ck_err_t
-check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_chunk, name_list_t *name_list, void *lt_key, void *rt_key)
+check_btree(driver_t *file, ck_addr_t btree_addr, key_info_t *key_info, name_list_t *name_list, void *lt_key, void *rt_key)
 {
     ck_err_t ret_value = SUCCEED;
     ck_err_t ret_err = 0;	/* error from this routine */
@@ -6106,7 +6111,7 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
     ck_addr_t   right_sib;  /*address of left sibling */
     size_t	hdr_size, key_size, key_ptr_size;
     ck_addr_t	child;
-    uint8_t	*start_buf;
+    uint8_t	*start = NULL;
     ck_addr_t	logical;
     int		badinfo;
 
@@ -6126,12 +6131,12 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
 
     if(FD_read(file, btree_addr, hdr_size, buf) < 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1A1, 
-	    "version 1 B-tree:Unable to read B-tree header", logical, NULL);
+	    "version 1 B-tree:Unable to read B-tree header", btree_addr, NULL);
 	CK_INC_ERR_DONE
     }
 
-    start_buf = buf;
-    logical = get_logical_addr(p, start_buf, btree_addr);
+    start = buf;
+    logical = get_logical_addr(p, start, btree_addr);
     p = buf;
 
     /* magic number */
@@ -6142,7 +6147,7 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
 	printf("FOUND version 1 btree signature.\n");
 
     p += 4;
-    logical = get_logical_addr(p, start_buf, btree_addr);
+    logical = get_logical_addr(p, start, btree_addr);
     nodetype = *p++;
     if((nodetype != 0) && (nodetype != 1)) {
 	badinfo = nodetype;
@@ -6150,7 +6155,7 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
 	CK_INC_ERR
     }
 
-    logical = get_logical_addr(p, start_buf, btree_addr);
+    logical = get_logical_addr(p, start, btree_addr);
     nodelev = *p++;
     if(nodelev < 0) {
 	badinfo = nodelev;
@@ -6159,7 +6164,7 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
 	CK_INC_ERR
     }
 
-    logical = get_logical_addr(p, start_buf, btree_addr);
+    logical = get_logical_addr(p, start, btree_addr);
     UINT16DECODE(p, entries);
 
     if(entries > ((2*file->shared->btree_k[nodetype])+1)) {
@@ -6168,14 +6173,14 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
 	CK_INC_ERR
     }
 
-    logical = get_logical_addr(p, start_buf, btree_addr);
+    logical = get_logical_addr(p, start, btree_addr);
     addr_decode(file->shared, (const uint8_t **)&p, &left_sib/*out*/);
 
-    logical = get_logical_addr(p, start_buf, btree_addr);
+    logical = get_logical_addr(p, start, btree_addr);
     addr_decode(file->shared, (const uint8_t **)&p, &right_sib/*out*/);
 
     /* the remaining node size: key + child pointer */
-    key_size = node_key_g[nodetype]->get_sizeof_rkey(file->shared, ndims);
+    key_size = node_key_g[nodetype]->get_sizeof_rkey(file->shared, key_info);
     key_ptr_size = (entries)*SIZEOF_ADDR(file->shared) + (entries+1)*key_size;
 
 #ifdef BUG_CHECK
@@ -6201,46 +6206,48 @@ check_btree(driver_t *file, ck_addr_t btree_addr, unsigned ndims, uint8_t *heap_
     }
 
     /* SNOD */
-    if(!nodetype && !heap_chunk) {
+    if(!nodetype && !key_info->heap_chunk) {
 	if(debug_verbose())
 	    printf("Warning: Version 1 B-tree: invalid heap address--name not validated\n");
     }
 
-    p = start_buf = buffer;
+    p = start = buffer;
 		
     for(u = 0; u < entries; u++) {
 	/* decode left key */
 	if(lt_key == NULL &&
-	   node_key_g[nodetype]->decode(file->shared, ndims, (const uint8_t **)&p, &lt_key) == FAIL) {
+	   node_key_g[nodetype]->decode(file->shared, key_info, (const uint8_t **)&p, &lt_key) == FAIL) {
 		error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree:Errors when decoding left key", 
 		       logical, NULL);
 		CK_INC_ERR
 	}
 
-	logical = get_logical_addr(p, start_buf, btree_addr+hdr_size);
+	logical = get_logical_addr(p, start, btree_addr+hdr_size);
 
        	/* Decode child address */
   	addr_decode(file->shared, (const uint8_t **)&p, &child/*out*/);
 
 	/* decode right key */
 	if(rt_key == NULL &&
-	   node_key_g[nodetype]->decode(file->shared, ndims, (const uint8_t **)&p, &rt_key) < 0) {
+	   node_key_g[nodetype]->decode(file->shared, key_info, (const uint8_t **)&p, &rt_key) < 0) {
 
 		error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree:Errors when decoding right key", 
 			logical, NULL);
 		CK_INC_ERR
 	}
 
-	if(node_key_g[nodetype]->cmp(file->shared, ndims, heap_chunk, lt_key, rt_key) >= 0) {
-	    error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree:left & right keys are out of order", logical, NULL);
-	    CK_INC_ERR
+	if(lt_key && rt_key) {
+	    if(node_key_g[nodetype]->cmp(file->shared, key_info, lt_key, rt_key) >= 0) {
+		error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree:left & right keys are out of order", logical, NULL);
+		CK_INC_ERR
+	    }
 	}
     
 	if(nodelev > 0) {
-	    if(check_btree(file, child, ndims, heap_chunk, name_list, NULL, NULL) < 0)
+	    if(check_btree(file, child, key_info, name_list, NULL, NULL) < 0)
 		++ret_other_err;
 	} else if(!nodetype) /* SNOD */
-	    if(check_sym(file, child, heap_chunk, name_list) < 0)
+	    if(check_sym(file, child, key_info, name_list) < 0)
 		++ret_other_err;
 
 	if(lt_key) free(lt_key);
@@ -6270,7 +6277,7 @@ done:
  * Validate local heap
  */
 static ck_err_t
-check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
+check_lheap(driver_t *file, ck_addr_t lheap_addr, key_info_t *key_info)
 {
     uint8_t	hdr[52];
     size_t	hdr_size, data_seg_size;
@@ -6278,7 +6285,7 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
     size_t	size_free_block, saved_offset;
     uint8_t	*heap_chunk=NULL;
     ck_addr_t	addr_data_seg;
-    uint8_t	*start_buf = NULL;
+    uint8_t	*start = NULL;
     ck_addr_t	logical;
     int		lheap_version, badinfo;
     const uint8_t *p=NULL;
@@ -6304,9 +6311,9 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
 	CK_INC_ERR_DONE
     }
 
-    start_buf = hdr;
+    start = hdr;
     p = hdr;
-    logical = get_logical_addr(p, start_buf, lheap_addr);
+    logical = get_logical_addr(p, start, lheap_addr);
 
     /* magic number */
     if(memcmp(p, HL_MAGIC, HL_SIZEOF_MAGIC) != 0) {
@@ -6318,7 +6325,7 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
 
     p += HL_SIZEOF_MAGIC;
 
-    logical = get_logical_addr(p, start_buf, lheap_addr);
+    logical = get_logical_addr(p, start, lheap_addr);
     /* Version */
     lheap_version = *p++;
     if(lheap_version != HL_VERSION) {
@@ -6330,7 +6337,7 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
     /* Reserved */
     p += 3;
 
-    logical = get_logical_addr(p, start_buf, lheap_addr);
+    logical = get_logical_addr(p, start, lheap_addr);
     /* data segment size */
     DECODE_LENGTH(file->shared, p, data_seg_size);
     if(data_seg_size <= 0) {
@@ -6343,7 +6350,7 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
     DECODE_LENGTH(file->shared, p, next_free_off);
 
     /* address of data segment */
-    logical = get_logical_addr(p, start_buf, lheap_addr);
+    logical = get_logical_addr(p, start, lheap_addr);
     addr_decode(file->shared, &p, &addr_data_seg);
 
 #if 0
@@ -6374,7 +6381,7 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
 	}
     } 
 
-    start_buf = heap_chunk+hdr_size;
+    start = heap_chunk+hdr_size;
 
     /* traverse the free list */
     while(next_free_off != HL_FREE_NULL) {
@@ -6386,7 +6393,7 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
 	saved_offset = next_free_off;
 	p = heap_chunk + hdr_size + next_free_off;
 	DECODE_LENGTH(file->shared, p, next_free_off);
-	get_logical_addr(p, start_buf, addr_data_seg);
+	get_logical_addr(p, start, addr_data_seg);
 	DECODE_LENGTH(file->shared, p, size_free_block);
 #if DEBUG
 	printf("next_free_off=%d, size_free_block=%d\n",
@@ -6405,15 +6412,14 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, uint8_t **ret_heap_chunk)
     } /* end while */
 
 done:
-    if(!ret_err && ret_heap_chunk)
-	*ret_heap_chunk = (uint8_t *)heap_chunk;
-    else {
+    if(!ret_err && key_info) {
+	key_info->heap_chunk = heap_chunk;
+	key_info->heap_size = data_seg_size;
+    } else {
 	if(heap_chunk)
 	    free(heap_chunk);
 	if(ret_err) {
 	    ret_value = FAIL;
-	    if(ret_heap_chunk)
-		*ret_heap_chunk = NULL;
 	    /* Flush out the errors if any */
 	    if(!object_api()) {
 		error_print(stderr, file);
@@ -6436,7 +6442,7 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
     size_t      max_idx=0;
     int		i, ret_value=SUCCEED; 
 
-    uint8_t	*start_buf;
+    uint8_t	*start;
     ck_addr_t	logical;
     int		gheap_version, badinfo;
 
@@ -6473,9 +6479,9 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
     } else if(debug_verbose())
 	printf("FOUND GLOBAL HEAP SIGNATURE\n");
 
-    start_buf = heap->chunk;
+    start= heap->chunk;
     p = heap->chunk + H5HG_SIZEOF_MAGIC;
-    logical = get_logical_addr(p, start_buf, gheap_addr);
+    logical = get_logical_addr(p, start, gheap_addr);
 
     /* Version */
     gheap_version = *p++;
@@ -6490,7 +6496,7 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
     /* Reserved */
     p += 3;
 
-    logical = get_logical_addr(p, start_buf, gheap_addr);
+    logical = get_logical_addr(p, start, gheap_addr);
     /* Size */
     DECODE_LENGTH(file->shared, p, heap->size);
     assert(heap->size>=H5HG_MINSIZE);
@@ -6512,7 +6518,7 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
 
     /* Decode each object */
     p = heap->chunk + H5HG_SIZEOF_HDR(file->shared);
-    logical = get_logical_addr(p, start_buf, gheap_addr);
+    logical = get_logical_addr(p, start, gheap_addr);
     nalloc = H5HG_NOBJS(file->shared, heap->size);
     if((heap->obj = malloc(nalloc*sizeof(H5HG_obj_t)))==NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
@@ -6547,7 +6553,7 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
 		/* Determine the new number of objects to index */
 		new_alloc = MAX(heap->nalloc*2,(idx+1));
 
-		logical = get_logical_addr(p, start_buf, gheap_addr);
+		logical = get_logical_addr(p, start, gheap_addr);
 		/* Reallocate array of objects */
 		if((new_obj=realloc(heap->obj, new_alloc*sizeof(H5HG_obj_t)))==NULL) {
 		    error_push(ERR_LEV_1, ERR_LEV_1E, 
@@ -6814,14 +6820,13 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 
     int		i, k;
     unsigned	id;
-    void	*mesg;
-    uint8_t	*start_buf, *p;
-    ck_addr_t	logical, logi_base;
+    void	*mesg = NULL;
+    uint8_t	*start = NULL, *p = NULL;
+    ck_addr_t	logical, base = -1;
 
-    uint8_t	*heap_chunk;
-    unsigned	ndims = 0, local_ndims = 0;
-    ck_addr_t	btree_addr;
-    name_list_t *sym_tbl;
+    uint8_t	*heap_chunk = NULL;
+    name_list_t *sym_tbl = NULL;
+    key_info_t  key_info;
 
     assert(file);
     assert(oh);
@@ -6829,10 +6834,10 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
     for(i = 0; i < oh->nmesgs; i++) {
 
 	mesg = NULL;
-	start_buf = oh->chunk[oh->mesg[i].chunkno].image;
+	start = oh->chunk[oh->mesg[i].chunkno].image;
 	p = oh->mesg[i].raw;
-	logi_base = oh->chunk[oh->mesg[i].chunkno].addr;
-	logical = get_logical_addr(p, start_buf, logi_base);
+	base = oh->chunk[oh->mesg[i].chunkno].addr;
+	logical = get_logical_addr(p, start, base);
 
 	id = oh->mesg[i].type->id;
 	if(id == OBJ_CONT_ID || id == OBJ_NIL_ID)
@@ -6841,14 +6846,14 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 	    error_push(ERR_LEV_2, ERR_LEV_2A, "Unsupported message encountered", logical, NULL);
 	    CK_INC_ERR_CONTINUE
 	} else if(oh->mesg[i].flags & OBJ_FLAG_SHARED) {
-	    void *sh_mesg;
+	    void *sh_mesg = NULL;
 
-	    if((sh_mesg = OBJ_shared_decode(file, oh->mesg[i].raw, oh->mesg[i].type, start_buf, logi_base)) != NULL) {
+	    if((sh_mesg = OBJ_shared_decode(file, oh->mesg[i].raw, oh->mesg[i].type, start, base)) != NULL) {
 		mesg = OBJ_shared_read(file, sh_mesg, oh->mesg[i].type);
 		free(sh_mesg);
 	    }
 	} else
-	    mesg = message_type_g[id]->decode(file, oh->mesg[i].raw, start_buf, logi_base);
+	    mesg = message_type_g[id]->decode(file, oh->mesg[i].raw, start, base);
 
 	if((oh->mesg[i].native = mesg) == NULL) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A, "Errors found when decoding message", logical, NULL);
@@ -6860,26 +6865,26 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 	    case OBJ_EDF_ID:
 	    {
 		OBJ_edf_t *edf = (OBJ_edf_t *)mesg;
+		key_info.heap_chunk = NULL;
 
-		ret_other_err = check_lheap(file, edf->heap_addr, &heap_chunk);
-		if(heap_chunk) {
-		    char  *s = NULL;
-
+		ret_other_err = check_lheap(file, edf->heap_addr, &key_info);
+		if(key_info.heap_chunk) {
 		    for(k = 0; k < edf->nused; k++) {
-			s = (char*)(heap_chunk + HL_SIZEOF_HDR(file->shared) + edf->slot[k].name_offset);
-			if(s) {
-			    if(!(*s)) {
+			char  *s = NULL;
+			if(edf->slot[k].name_offset > key_info.heap_size) {
+			    error_push(ERR_LEV_2, ERR_LEV_2A2h, "Invalid name offset into local heap", logical, NULL);
+			    CK_INC_ERR
+			} else {
+			    s = (char*)(key_info.heap_chunk + HL_SIZEOF_HDR(file->shared) + edf->slot[k].name_offset);
+			    if(s && !(*s)) {
 				error_push(ERR_LEV_2, ERR_LEV_2A2h, 
 				    "Invalid external file name found in local heap", logical, NULL);
 				CK_INC_ERR
-			    }
-			} else {
-			    error_push(ERR_LEV_2, ERR_LEV_2A2h, "Invalid name offset into local heap", logical, NULL);
-			    CK_INC_ERR
-			}
-		    }  
-		    free(heap_chunk);
-		}
+			    } 
+			}  
+		    } /* end for */
+		    free(key_info.heap_chunk);
+		} /* end if */
 	    }
 	    break;
 
@@ -6888,11 +6893,10 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 		OBJ_layout_t *layout = (OBJ_layout_t *)mesg;
 
 		if(layout->type == DATA_CHUNKED) {
-		    local_ndims = layout->u.chunk.ndims;
-		    btree_addr = layout->u.chunk.addr;
 
 		    /* may be undefined if storage is not allocated yet */
-		    if(addr_defined(btree_addr) && check_btree(file, btree_addr, local_ndims, NULL, NULL, NULL, NULL) < 0)
+		    key_info.ndims = layout->u.chunk.ndims;
+		    if(addr_defined(layout->u.chunk.addr) && check_btree(file, layout->u.chunk.addr, &key_info, NULL, NULL, NULL) < 0)
 			++ret_other_err;
 		}
 	    }
@@ -6906,14 +6910,15 @@ decode_validate_messages(driver_t *file, OBJ_t *oh)
 		    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Errors in initializing symbol table", -1, NULL);
 		    CK_INC_ERR
 		}
-		if(check_lheap(file, stab->heap_addr, &heap_chunk) < 0)
+		key_info.heap_chunk = NULL;
+		if(check_lheap(file, stab->heap_addr, &key_info) < 0)
 		    ++ret_other_err;
-		if(check_btree(file, stab->btree_addr, ndims, heap_chunk, sym_tbl, NULL, NULL) < 0)
+		else if(check_btree(file, stab->btree_addr, &key_info, sym_tbl, NULL, NULL) < 0)
 		    ++ret_other_err;
 
 		if(sym_tbl)
 		    name_list_dest(sym_tbl);
-		if(heap_chunk) free(heap_chunk);
+		if(key_info.heap_chunk) free(key_info.heap_chunk);
 	    }
 	    break;
 
@@ -7151,8 +7156,8 @@ find_in_ohdr(driver_t *file, OBJ_t *oh, int type_id)
 {
     const obj_class_t   *type = NULL;
     int			u, ret_value=SUCCEED;
-    const uint8_t	*start_buf;
-    ck_addr_t		logi_base;
+    const uint8_t	*start;
+    ck_addr_t		base;
 
     assert(file);
     assert(oh);
@@ -7168,14 +7173,14 @@ find_in_ohdr(driver_t *file, OBJ_t *oh, int type_id)
     } else
 	ret_value = u;
 	
-    start_buf = oh->chunk[oh->mesg[u].chunkno].image;
-    logi_base = oh->chunk[oh->mesg[u].chunkno].addr;
+    start = oh->chunk[oh->mesg[u].chunkno].image;
+    base = oh->chunk[oh->mesg[u].chunkno].addr;
 
     if(oh->mesg[u].native == NULL) {
 	if(oh->mesg[u].flags & OBJ_FLAG_SHARED)
-	    oh->mesg[u].native = OBJ_shared_decode(file, oh->mesg[u].raw, oh->mesg[u].type, start_buf, logi_base);
+	    oh->mesg[u].native = OBJ_shared_decode(file, oh->mesg[u].raw, oh->mesg[u].type, start, base);
 	else
-	    oh->mesg[u].native = ((oh->mesg[u].type)->decode)(file, oh->mesg[u].raw, start_buf, logi_base);
+	    oh->mesg[u].native = ((oh->mesg[u].type)->decode)(file, oh->mesg[u].raw, start, base);
 
         if(oh->mesg[u].native==NULL) {
 	    error_push(ERR_INTERNAL, ERR_NONE_SEC, 
@@ -7194,7 +7199,7 @@ done:
  * Handles version 1 & 2
  */
 static void *
-OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, const uint8_t *start_buf, ck_addr_t logi_base)
+OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, const uint8_t *start, ck_addr_t base)
 {
     OBJ_shared_t *mesg = NULL;
     unsigned  version;
@@ -7297,8 +7302,8 @@ OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *typ
     HF_hdr_t 	*fhdr = NULL;
     ck_size_t	mesg_size;
     uint8_t	*mesg_ptr = NULL;
-    uint8_t	*start_buf;
-    ck_addr_t	logi_base;
+    uint8_t	*start = NULL;
+    ck_addr_t	base = -1;
     obj_info_t	objinfo;
     void	*ret_value = NULL;
 
@@ -7335,7 +7340,7 @@ OBJ_shared_read(driver_t *file, OBJ_shared_t *obj_shared, const obj_class_t *typ
 		-1, NULL);
 	    CK_SET_RET_DONE(NULL)
 	}
-	ret_value = type->decode(file, mesg_ptr, start_buf, logi_base);
+	ret_value = type->decode(file, mesg_ptr, start, base);
 
     } else if(obj_shared->type == OBJ_SHARE_TYPE_COMMITTED) {
 	if(check_obj_header(file, obj_shared->u.loc.oh_addr, &oh) < 0 || !oh)
@@ -7503,12 +7508,12 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
     size_t chunk_size;
     size_t spec_read_size;
     size_t prefix_size;
-    uint8_t *p, flags, *start_buf;
+    uint8_t *p, flags, *start = NULL;
     uint8_t buf[OBJ_SPEC_READ_SIZE];
     unsigned nmesgs;
     unsigned curmesg = 0;
     ck_addr_t chunk_addr;
-    ck_addr_t logical, logi_base;
+    ck_addr_t logical = -1, base = -1;
     ck_addr_t rel_eoa, abs_eoa;
     int version, badinfo;
     ck_err_t ret_value = SUCCEED;  /* return value */
@@ -7539,7 +7544,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
     } else /* FOUND obj_head_addr */
 	if(!ret_oh) goto done;
 
-    start_buf = buf;
+    start = buf;
     p = buf;
     if(CK_ADDR_UNDEF == (abs_eoa = FD_get_eof(file))) {
 	error_push(ERR_FILE, ERR_NONE_SEC, 
@@ -7570,9 +7575,9 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	   printf("FOUND Version 2 object header signature\n");	
 	}
 
-	start_buf = buf;
+	start = buf;
 	p = buf;
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
+	logical = get_logical_addr(p, start, obj_head_addr);
 
 	p += OBJ_SIZEOF_MAGIC;
         oh->version = *p++;
@@ -7582,7 +7587,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	    CK_INC_ERR
 	}
 
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
+	logical = get_logical_addr(p, start, obj_head_addr);
 	oh->flags = *p++;
 	if(oh->flags & ~OBJ_HDR_ALL_FLAGS) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A1b, 
@@ -7606,7 +7611,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 
         /* Attribute fields */
         if(oh->flags & OBJ_HDR_ATTR_STORE_PHASE_CHANGE) {
-	    logical = get_logical_addr(p, start_buf, obj_head_addr);
+	    logical = get_logical_addr(p, start, obj_head_addr);
             UINT16DECODE(p, oh->max_compact);
             UINT16DECODE(p, oh->min_dense);
             if(oh->max_compact < oh->min_dense) {
@@ -7620,7 +7625,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
         } /* end else */
 
 	/* First chunk size */
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
+	logical = get_logical_addr(p, start, obj_head_addr);
         switch(oh->flags & OBJ_HDR_CHUNK0_SIZE) {
             case 0:     /* 1 byte size */
                 chunk_size = *p++;
@@ -7654,9 +7659,9 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	if(debug_verbose())
 	   printf("VALIDATING version 1 object header...\n");	
 
-	start_buf = buf;
+	start = buf;
 	p = buf;
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
+	logical = get_logical_addr(p, start, obj_head_addr);
 
 	oh->version = *p++;
 	if(oh->version != OBJ_VERSION_1) {
@@ -7671,7 +7676,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 
 	p++;  /* reserved */
 
-	logical = get_logical_addr(p, start_buf, obj_head_addr);
+	logical = get_logical_addr(p, start, obj_head_addr);
 	UINT16DECODE(p, nmesgs);
 	if((int)nmesgs < 0) {
 	    badinfo = nmesgs;
@@ -7688,7 +7693,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
     prefix_size = (size_t)(p - buf);
     chunk_addr = obj_head_addr + prefix_size;
 
-    logical = get_logical_addr(p, start_buf, chunk_addr);
+    logical = get_logical_addr(p, start, chunk_addr);
 
     oh->alloc_nmesgs = (nmesgs > 0) ? nmesgs: 1;
     if((oh->mesg = calloc(oh->alloc_nmesgs, sizeof(OBJ_mesg_t)))==NULL) {
@@ -7706,7 +7711,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	unsigned 	chunkno;	/* current chunk's index */
 	uint8_t		*eom_ptr;	/* pointer to end of messages for a chunk */
 
-	logical = get_logical_addr(p, start_buf, chunk_addr);
+	logical = get_logical_addr(p, start, chunk_addr);
 
 	/* increase chunk array size */
 	if(oh->nchunks >= oh->alloc_nchunks) {
@@ -7756,7 +7761,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
             } /* end else */
 
             /* Point into chunk image to decode */
-	    start_buf = oh->chunk[chunkno].image;
+	    start = oh->chunk[chunkno].image;
             p = oh->chunk[0].image + prefix_size;
         } /* end if */
         else {
@@ -7766,11 +7771,11 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 		CK_INC_ERR_DONE
 	    }
             /* Point into chunk image to decode */
-	    start_buf = oh->chunk[chunkno].image;
+	    start = oh->chunk[chunkno].image;
             p = oh->chunk[chunkno].image;
         } /* end else */
 
-	logical = get_logical_addr(p, start_buf, chunk_addr);
+	logical = get_logical_addr(p, start, chunk_addr);
 
 	/* Check for "CONT" magic # on chunks > 0 in later versions of the format */
 	if(chunkno > 0 && format_objvers_two) {
@@ -7798,7 +7803,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 
 	    /* Decode message prefix info */
 
-	    logical = get_logical_addr(p, start_buf, chunk_addr);
+	    logical = get_logical_addr(p, start, chunk_addr);
             /* Version # */
             if(oh->version == OBJ_VERSION_1)
                 UINT16DECODE(p, id)
@@ -7832,7 +7837,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	    /* Try to detect invalidly formatted object header message that
              *  extends past end of chunk.
              */
-	    logical = get_logical_addr(p, start_buf, chunk_addr);
+	    logical = get_logical_addr(p, start, chunk_addr);
             if(p + mesg_size > eom_ptr) {
 		error_push(ERR_LEV_2, ERR_LEV_2A, "Object Header:corrupt object header", logical, NULL);
 		CK_INC_ERR_DONE
@@ -7862,7 +7867,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 
 	    p+= mesg_size;
 
-	    logical = get_logical_addr(p, start_buf, chunk_addr);
+	    logical = get_logical_addr(p, start, chunk_addr);
 	    /* Check for 'gap' at end of chunk */
 	    if((eom_ptr - p) > 0 && 
 	       (eom_ptr - p) < OBJ_SIZEOF_MSGHDR_VERS(OBJ_VERSION_2,oh->flags&OBJ_HDR_ATTR_CRT_ORDER_TRACKED)) {
@@ -7882,7 +7887,7 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
             uint32_t computed_chksum;   /* Checksum computed in memory */
 
 	    computed_chksum = checksum_metadata(oh->chunk[chunkno].image, (oh->chunk[chunkno].size-OBJ_SIZEOF_CHKSUM), 0);
-	    logical = get_logical_addr(p, start_buf, chunk_addr);
+	    logical = get_logical_addr(p, start, chunk_addr);
             UINT32DECODE(p, stored_chksum);
 
 	    if(computed_chksum != stored_chksum) {
@@ -7896,10 +7901,10 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
        	/* decode next object header continuation message */
         for(chunk_addr = CK_ADDR_UNDEF; !addr_defined(chunk_addr) && curmesg < oh->nmesgs; ++curmesg) {
 	    if(oh->mesg[curmesg].type->id == OBJ_CONT_ID) {
-		start_buf = oh->chunk[oh->mesg[curmesg].chunkno].image;
-		logi_base = oh->chunk[oh->mesg[curmesg].chunkno].addr;
-		cont = (OBJ_CONT->decode) (file, oh->mesg[curmesg].raw, start_buf, logi_base);
-		logical = get_logical_addr(oh->mesg[curmesg].raw, start_buf, logi_base);
+		start = oh->chunk[oh->mesg[curmesg].chunkno].image;
+		base = oh->chunk[oh->mesg[curmesg].chunkno].addr;
+		cont = (OBJ_CONT->decode) (file, oh->mesg[curmesg].raw, start, base);
+		logical = get_logical_addr(oh->mesg[curmesg].raw, start, base);
 		if (cont == NULL) {
 		    error_push(ERR_LEV_2, ERR_LEV_2A, 
 			"Object Header:Corrupt continuation message...skipped", logical, NULL);

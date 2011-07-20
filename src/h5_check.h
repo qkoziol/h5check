@@ -1236,15 +1236,19 @@ typedef struct OBJ_t {
 
 #define BT_MAGIC  		"TREE"       	/* tree node magic number */
 
+typedef struct key_info_t {
+    uint8_t *heap_chunk;	/* heap data */
+    size_t heap_size;  		/* heap size */
+    size_t ndims;      		/* for chunk node */
+} key_info_t;
+
 typedef struct BT_class_t {
     BT_subid_t 	id;                      /* id as found in file*/
     ck_size_t  	sizeof_nkey;             /* size of native (memory) key*/
-    ck_size_t 	(*get_sizeof_rkey)(global_shared_t *, unsigned);    	/*raw key size   */
-    ck_err_t	(*decode)(global_shared_t *, unsigned, const uint8_t **, void **); /* decode key */
-    int		(*cmp)(global_shared_t *, unsigned, uint8_t *, void *, void *);	/* compare key */
+    ck_size_t 	(*get_sizeof_rkey)(global_shared_t *shared, key_info_t *key_info);    	/*raw key size   */
+    ck_err_t	(*decode)(global_shared_t *shared, key_info_t *key_info, const uint8_t **p, void **key); /* decode key */
+    int		(*cmp)(global_shared_t *shared, key_info_t *key_info, void *lt_key, void *rt_key);	 /* compare key */
 } BT_class_t;
-
-
 
 typedef struct GP_node_key_t {
     ck_size_t      offset;                 /*offset into heap for name          */

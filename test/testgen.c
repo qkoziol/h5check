@@ -459,21 +459,23 @@ create_file(char *name, char *driver, char *superblock)
     else
         fcpl = H5P_DEFAULT;
 
-#if H5_LIBVERSION == 18 /* library release >= 1.8 */
-
-    ret = H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
-    VRFY((ret>=0), "H5Pset_libver_bounds");
+    if (!strcmp(superblock, "new")) {
+	ret = H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
+	VRFY((ret>=0), "H5Pset_libver_bounds");
+    }
 
     /* use the parameter "superblock" to set SOHM */
     if (!strcmp(superblock, "sohm")) {
+
+	ret = H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
+	VRFY((ret>=0), "H5Pset_libver_bounds");
+
 	fcpl= H5Pcreate(H5P_FILE_CREATE);
 	ret = H5Pset_shared_mesg_nindexes(fcpl, 1);
 	VRFY((ret >= 0), "H5Pset_shared_mesg_nindexes");
 	ret = H5Pset_shared_mesg_index(fcpl, 0, H5O_SHMESG_ATTR_FLAG, 2);
 	VRFY((ret >= 0), "H5Pset_shared_mesg_index");
     }
-    
-#endif
 
     /* append appropriate suffix to the file name */
     h5_fixname(fname, fapl);
@@ -2020,7 +2022,7 @@ gen_array(hid_t fid1, int fill_dataset)
  *
  */
 static void 
-gen_newgrat(hid_t file_id)
+gen_newgrat(hid_t file_id, unsigned num_grps, unsigned num_attrs)
 {
     int         i;
     hid_t       gid;
@@ -2029,7 +2031,7 @@ gen_newgrat(hid_t file_id)
     char        attrname[100];
     herr_t      ret;
 
-    for (i=1; i<=NEW_NUM_GRPS; i++) {
+    for (i=1; i<= num_grps; i++) {
         sprintf(gname, "%s%d", NEW_GROUP_NAME,i);
         gid = H5Gcreate2(file_id, gname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         VRFY((gid>=0), "H5Gcreate2");
@@ -2049,7 +2051,7 @@ gen_newgrat(hid_t file_id)
     dset_id = H5Dcreate2(file_id, NEW_DATASET_NAME, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     VRFY((dset_id>=0), "H5Dcreate2");
 
-    for (i=1; i<=NEW_NUM_ATTRS; i++) {
+    for (i=1; i<= num_attrs; i++) {
         sprintf(attrname, "%s%d", NEW_ATTR_NAME,i);
         attr_id = H5Acreate2(dset_id, attrname, type_id, space_id, H5P_DEFAULT, H5P_DEFAULT);
         VRFY((attr_id>=0), "H5Acreate2");
@@ -2066,6 +2068,7 @@ gen_newgrat(hid_t file_id)
     ret = H5Tclose(type_id);
     VRFY((ret>=0), "H5Tclose");
 } /* gen_newgrat() */
+
 
 /*
  * This function creates 1.8 format file that consists of
@@ -2117,12 +2120,17 @@ static void
 gen_ext_dangle(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
 {
     char fname2[50];	/* file name */
+    herr_t ret;
 
     /* Create dangling external links */
-    H5Lcreate_external("missing", "/missing", fid1, "no_file", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external("missing", "/missing", fid1, "no_file", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
     strcpy(fname2, ext_fname2);
     strcat(fname2, ".h5");
+
     H5Lcreate_external(fname2, "/missing", fid1, "no_object", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
 
 } /* gen_ext_dangle() */
 
@@ -2136,36 +2144,53 @@ gen_ext_self(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2, hid_t f
     hid_t gid, gid2;	/* group ids */
     char fname1[50];
     char fname3[50];
+    herr_t ret;
 
     /* Create an lcpl with intermediate group creation set */
     lcpl_id = H5Pcreate(H5P_LINK_CREATE);
-    H5Pset_create_intermediate_group(lcpl_id, 1);
+    VRFY((lcpl_id >= 0), "H5Pcreate");
+
+    ret = H5Pset_create_intermediate_group(lcpl_id, 1);
+    VRFY((ret >= 0), "H5Pset_create_intermedidate_group");
 
     /* Create a series of groups within the file: /A/B and /X/Y/Z */
     gid = H5Gcreate2(fid1, "A/B", lcpl_id, H5P_DEFAULT, H5P_DEFAULT);
-    H5Gclose(gid);
-    gid = H5Gcreate2(fid1, "X/Y", lcpl_id, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid >= 0), "H5Gcreate2");
 
-    H5Gclose(gid);
-    H5Pclose (lcpl_id);
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
+
+    gid = H5Gcreate2(fid1, "X/Y", lcpl_id, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid >= 0), "H5Gcreate2");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
+
+    ret = H5Pclose(lcpl_id);
+    VRFY((ret >= 0), "H5Pclose");
 
     strcpy(fname1, ext_fname1);
     strcat(fname1, ".h5");
 
     /* Create external link to own root group*/
-    H5Lcreate_external(fname1, "/X", fid1, "A/B/C", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external(fname1, "/X", fid1, "A/B/C", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
 
     /* Open object through external link */
     gid = H5Gopen2(fid1, "A/B/C/", H5P_DEFAULT);
+    VRFY((gid >= 0), "H5Gopen2");
 
     /* Create object through external link */
     gid2 = H5Gcreate2(gid, "new_group", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid2 >= 0), "H5Gcreate2");
 
     /* Close created group */
-    H5Gclose(gid2);
+    ret = H5Gclose(gid2);
+    VRFY((ret >= 0), "H5Gclose");
 
     /* Close object opened through external link */
     H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
 
     /* 
@@ -2174,16 +2199,23 @@ gen_ext_self(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2, hid_t f
      */
 
     /* Create in file2 with an external link to file1  */
-    H5Lcreate_external(fname1, "/A", fid2, "ext_link", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external(fname1, "/A", fid2, "ext_link", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
 
     /* Create file3 as a target */
     gid = H5Gcreate2(fid3, "end", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Gclose(gid);
+    VRFY((gid >= 0), "H5Gcreate2");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     strcpy(fname3, ext_fname3);
     strcat(fname3, ".h5");
+
     /* Create in file1 an extlink pointing to file3 */
-    H5Lcreate_external(fname3, "/", fid1, "/X/Y/Z", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external(fname3, "/", fid1, "/X/Y/Z", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
 } /* gen_ext_self() */
 
 /*
@@ -2197,52 +2229,76 @@ gen_ext_mult(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2, hid_t f
     char fname1[50];
     char fname2[50];
     char fname3[50];
+    herr_t ret;
 
     /* Create first file to point to */
     /* fid=H5Fcreate("ext_mult1.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
 
     /* Create object down a path */
     gid = H5Gcreate2(fid1, "A", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Gclose(gid);
+    VRFY((gid >= 0), "H5Gcreate2");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     gid = H5Gcreate2(fid1, "A/B", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Gclose(gid);
+    VRFY((gid >= 0), "H5Gcreate2");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     gid = H5Gcreate2(fid1, "A/B/C", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Gclose(gid);
+    VRFY((gid >= 0), "H5Gcreate2");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     /* Create second file to point to */
     /* fid=H5Fcreate("ext_mult2.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
 
     /* Create external link down a path */
     gid = H5Gcreate2(fid2, "D", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Gclose(gid);
+    VRFY((gid >= 0), "H5Gcreate2");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     gid = H5Gcreate2(fid2, "D/E", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid >= 0), "H5Gcreate2");
 
     strcpy(fname1, "/");
     strcat(fname1, ext_fname1);
     strcat(fname1, ".h5");
-    /* Create external link to object in first file */
-    H5Lcreate_external(fname1, "/A/B/C", gid, "F", H5P_DEFAULT, H5P_DEFAULT);
 
-    H5Gclose(gid);
+    /* Create external link to object in first file */
+    ret = H5Lcreate_external(fname1, "/A/B/C", gid, "F", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     /* Create third file to point to */
     /* fid=H5Fcreate("ext_mult3.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
 
     /* Create external link down a path */
     gid = H5Gcreate2(fid3, "G", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Gclose(gid);
+    VRFY((gid >= 0), "H5Gcreate2");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     gid = H5Gcreate2(fid3, "G/H", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid >= 0), "H5Gcreate2");
 
     strcpy(fname2, ext_fname2);
     strcat(fname2, ".h5");
-    /* Create external link to object in second file */
-    H5Lcreate_external(fname2, "/D/E/F", gid, "I", H5P_DEFAULT, H5P_DEFAULT);
 
-    H5Gclose(gid);
+    /* Create external link to object in second file */
+    ret = H5Lcreate_external(fname2, "/D/E/F", gid, "I", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     /* Create file with link to third file */
     /* fid=H5Fcreate("ext_mult4.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
@@ -2252,15 +2308,19 @@ gen_ext_mult(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2, hid_t f
     H5Lcreate_external(fname3, "/G/H/I", fid4, "ext_link", H5P_DEFAULT, H5P_DEFAULT);
 
     gid = H5Gopen2(fid4, "ext_link", H5P_DEFAULT);
+    VRFY((gid >= 0), "H5Gopen2");
 
     /* Create object in external file */
     gid2 = H5Gcreate2(gid, "new_group", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid2 >= 0), "H5Gcreate2");
 
     /* Close group in external file */
-    H5Gclose(gid2);
+    ret = H5Gclose(gid2);
+    VRFY((ret >= 0), "H5Gclose");
 
     /* Close external object (lets first file close) */
-    H5Gclose(gid);
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
 } /* gen_ext_mult() */
 
@@ -2274,6 +2334,7 @@ gen_ext_pingpong(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
     hid_t gid = (-1);
     char fname1[50];
     char fname2[50];
+    herr_t ret;
 
     /* Create first file */
     /* fid=H5Fcreate("ext_ping1.h5", H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT); */
@@ -2282,12 +2343,18 @@ gen_ext_pingpong(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
     strcat(fname2, ".h5");
 
     /* Create external links for chain */
-    H5Lcreate_external(fname2, "/link2", fid1, "link1", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link4", fid1, "link3", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link6", fid1, "link5", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external(fname2, "/link2", fid1, "link1", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link4", fid1, "link3", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link6", fid1, "link5", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
 
     /* Create final object */
     gid = H5Gcreate2(fid1, "final", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid >= 0), "H5Gcreate2");
 
     /* Create second file */
     /* fid=H5Fcreate("ext_ping2.h5", H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT); */
@@ -2296,9 +2363,14 @@ gen_ext_pingpong(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
     strcat(fname1, ".h5");
 
     /* Create external links for chain */
-    H5Lcreate_external(fname1, "/link3", fid2, "link2", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/link5", fid2, "link4", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/final", fid2, "link6", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external(fname1, "/link3", fid2, "link2", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/link5", fid2, "link4", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/final", fid2, "link6", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
 
 } /* gen_ext_pingpong() */
 
@@ -2311,6 +2383,7 @@ gen_ext_toomany(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
     hid_t gid = (-1);
     char fname1[50];
     char fname2[50];
+    herr_t ret;
 
     /* fid=H5Fcreate("ext_many1.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
 
@@ -2318,15 +2391,32 @@ gen_ext_toomany(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
     strcat(fname2, ".h5");
 
     /* Create external links for chain */
-    H5Lcreate_external(fname2, "/link2", fid1, "link1", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link4", fid1, "link3", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link6", fid1, "link5", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link8", fid1, "link7", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link10", fid1, "link9", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link12", fid1, "link11", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link14", fid1, "link13", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/link16", fid1, "link15", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname2, "/final", fid1, "link17", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external(fname2, "/link2", fid1, "link1", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link4", fid1, "link3", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link6", fid1, "link5", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link8", fid1, "link7", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link10", fid1, "link9", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link12", fid1, "link11", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link14", fid1, "link13", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/link16", fid1, "link15", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname2, "/final", fid1, "link17", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
 
     /* Create second file */
     /* fid=H5Fcreate("ext_many2.h5", H5F_ACC_TRUNC, H5P_DEFAULT, new_fapl); */
@@ -2335,18 +2425,36 @@ gen_ext_toomany(hid_t fid1, char *ext_fname1, hid_t fid2, char *ext_fname2)
     strcat(fname1, ".h5");
 
     /* Create external links for chain */
-    H5Lcreate_external(fname1, "/link3", fid2, "link2", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/link5", fid2, "link4", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/link7", fid2, "link6", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/link9", fid2, "link8", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/link11", fid2, "link10", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/link13", fid2, "link12", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/link15", fid2, "link14", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_external(fname1, "/link17", fid2, "link16", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external(fname1, "/link3", fid2, "link2", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/link5", fid2, "link4", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/link7", fid2, "link6", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/link9", fid2, "link8", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/link11", fid2, "link10", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/link13", fid2, "link12", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/link15", fid2, "link14", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
+
+    ret = H5Lcreate_external(fname1, "/link17", fid2, "link16", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
 
     /* Create final object */
     gid = H5Gcreate2(fid2, "final", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Gclose(gid);
+    VRFY((gid >= 0), "H5Gcreate2");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
 } /* end external_link_toomany() */
 
@@ -2360,62 +2468,107 @@ gen_ext_links(hid_t fid, char *ext_fname)
     hid_t sid = (-1);                   /* Dataspace ID */
     hid_t did = (-1);                   /* Dataset ID */
     hid_t tid = (-1);                   /* Datatype ID */
+    herr_t ret;
 
     /* Create group */
     gid = H5Gcreate2(fid, "/Group1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid >= 0), "H5Gcreate2");
 
     /* Create nested group */
     gid2 = H5Gcreate2(gid, "Group2", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((gid2 >= 0), "H5Gcreate2");
 
     /* Close groups */
-    H5Gclose(gid2);
-    H5Gclose(gid);
+    ret = H5Gclose(gid2);
+    VRFY((ret >= 0), "H5Gclose");
+
+    ret = H5Gclose(gid);
+    VRFY((ret >= 0), "H5Gclose");
 
     /* Create soft links to groups created */
-    H5Lcreate_soft("/Group1", fid, "/soft_one", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_soft("/Group1/Group2", fid, "/soft_two", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_soft("/Group1", fid, "/soft_one", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_soft");
+
+    ret = H5Lcreate_soft("/Group1/Group2", fid, "/soft_two", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_soft");
 
     /* Create dangling soft link */
-    H5Lcreate_soft("nowhere", fid, "/soft_dangle", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_soft("nowhere", fid, "/soft_dangle", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_soft");
 
     /* Create hard links to all groups */
-    H5Lcreate_hard(fid, "/", fid, "hard_zero", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_hard(fid, "/Group1", fid, "hard_one", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_hard(fid, "/Group1/Group2", fid, "hard_two", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_hard(fid, "/", fid, "hard_zero", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_hard");
+
+    ret = H5Lcreate_hard(fid, "/Group1", fid, "hard_one", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_hard");
+
+    ret = H5Lcreate_hard(fid, "/Group1/Group2", fid, "hard_two", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_hard");
 
     /* Create loops w/hard links */
-    H5Lcreate_hard(fid, "/Group1", fid, "/Group1/hard_one", H5P_DEFAULT, H5P_DEFAULT);
-    H5Lcreate_hard(fid, "/", fid, "/Group1/Group2/hard_zero", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_hard(fid, "/Group1", fid, "/Group1/hard_one", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_hard");
+
+    ret = H5Lcreate_hard(fid, "/", fid, "/Group1/Group2/hard_zero", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_hard");
 
     /* Create dangling external link to non-existent file */
-    H5Lcreate_external("/foo.h5", "/group", fid, "/ext_dangle", H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Lcreate_external("/foo.h5", "/group", fid, "/ext_dangle", H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Lcreate_external");
 
     /* Create dataset in each group */
     sid = H5Screate(H5S_SCALAR);
+    VRFY((sid >= 0), "H5Screate");
+
     did = H5Dcreate2(fid, "/Dataset_zero", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Dclose(did);
+    VRFY((did >= 0), "H5Dcreate2");
+
+    ret = H5Dclose(did);
+    VRFY((ret>=0), "H5Dclose");
 
     did = H5Dcreate2(fid, "/Group1/Dataset_one", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Dclose(did);
+    VRFY((did >= 0), "H5Dcreate2");
+
+    ret = H5Dclose(did);
+    VRFY((ret>=0), "H5Dclose");
 
     did = H5Dcreate2(fid, "/Group1/Group2/Dataset_two", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Dclose(did);
+    VRFY((did >= 0), "H5Dcreate2");
 
-    H5Sclose(sid);
+    ret = H5Dclose(did);
+    VRFY((ret>=0), "H5Dclose");
+
+    ret = H5Sclose(sid);
+    VRFY((ret >= 0), "H5Sclose");
 
     /* Create named datatype in each group */
     tid = H5Tcopy(H5T_NATIVE_INT);
-    H5Tcommit2(fid, "/Type_zero", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Tclose(tid);
+    VRFY((tid >= 0), "H5Tcopy");
+
+    ret = H5Tcommit2(fid, "/Type_zero", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Tcommit2");
+
+    ret = H5Tclose(tid);
+    VRFY((ret >= 0), "H5Tclose");
 
     tid = H5Tcopy(H5T_NATIVE_INT);
-    H5Tcommit2(fid, "/Group1/Type_one", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((tid >= 0), "H5Tcopy");
 
-    H5Tclose(tid);
+    ret = H5Tcommit2(fid, "/Group1/Type_one", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Tcommit2");
+
+    ret = H5Tclose(tid);
+    VRFY((ret >= 0), "H5Tclose");
 
     tid = H5Tcopy(H5T_NATIVE_INT);
-    H5Tcommit2(fid, "/Group1/Group2/Type_two", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Tclose(tid);
+    VRFY((tid >= 0), "H5Tcopy");
+
+    ret = H5Tcommit2(fid, "/Group1/Group2/Type_two", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    VRFY((ret >= 0), "H5Tcommit2");
+
+    ret = H5Tclose(tid);
+    VRFY((ret >= 0), "H5Tclose");
 
 } /* gen_ext_links() */
 
@@ -2443,9 +2596,15 @@ int main(int argc, char *argv[])
 {
     hid_t fid;	/* file id */
     hid_t ext_fid1, ext_fid2, ext_fid3, ext_fid4;	/* file ids  */
-
+    FILE *out;
+    char tmpname[100];
+ 
     char *driver = "sec2";
     char *superblock = "standard";
+    unsigned i = 0;
+    herr_t ret;
+    int zero = 0;
+    uint32_t chksum;
 
     /* file names */
     char *fname[] = {
@@ -2495,8 +2654,10 @@ int main(int argc, char *argv[])
 	"ext_toomany2",		/* 12 */
 	"ext_links"		/* 13 */
     };
-
-    unsigned i = 0;
+    char *invalid_fname[] = {
+	"invalid_grps",		/* 0 */
+	"invalid_sym",		/* 1 */
+    };
 
     /* initial message */
     printf("Generating test files for H5check...\n");
@@ -2655,9 +2816,9 @@ int main(int argc, char *argv[])
    
 #if H5_LIBVERSION == 18 /* for library release > 1.8 */
 
-    fid = create_file(fname[i++], driver, superblock);
+    fid = create_file(fname[i++], driver, "new");
     printf("1.8 group/attribute file\n");
-    gen_newgrat(fid);
+    gen_newgrat(fid, NEW_NUM_GRPS, NEW_NUM_ATTRS);
     close_file(fid, "");
 
     /* use the parameter "superblock" to set SOHM property list */
@@ -2672,7 +2833,7 @@ int main(int argc, char *argv[])
      */
     /* create files with dangling external links */
     ext_fid1 = create_file(ext_fname[0], driver, superblock);
-    ext_fid2 = create_file(ext_fname[1], driver, superblock);
+    ext_fid2 = create_file(ext_fname[1], driver, "new");
     printf("Dangling external links\n");
     gen_ext_dangle(ext_fid1, ext_fname[0], ext_fid2, ext_fname[1]);
     close_file(ext_fid1, "");
@@ -2680,7 +2841,7 @@ int main(int argc, char *argv[])
     
     /* create files with external links to self */
     ext_fid1 = create_file(ext_fname[2], driver, superblock);
-    ext_fid2 = create_file(ext_fname[3], driver, superblock);
+    ext_fid2 = create_file(ext_fname[3], driver, "new");
     ext_fid3 = create_file(ext_fname[4], driver, superblock);
     printf("External link to self\n");
     gen_ext_self(ext_fid1, ext_fname[2], ext_fid2, ext_fname[3], ext_fid3, ext_fname[4]);
@@ -2690,9 +2851,9 @@ int main(int argc, char *argv[])
 
     /* create files with external links across multiple files */
     ext_fid1 = create_file(ext_fname[5], driver, superblock);
-    ext_fid2 = create_file(ext_fname[6], driver, superblock);
+    ext_fid2 = create_file(ext_fname[6], driver, "new");
     ext_fid3 = create_file(ext_fname[7], driver, superblock);
-    ext_fid4 = create_file(ext_fname[8], driver, superblock);
+    ext_fid4 = create_file(ext_fname[8], driver, "new");
     printf("External links across multiple files\n");
     gen_ext_mult(ext_fid1, ext_fname[5], ext_fid2, ext_fname[6], ext_fid3, ext_fname[7], ext_fid4, ext_fname[8]);
     close_file(ext_fid1, "");
@@ -2702,14 +2863,14 @@ int main(int argc, char *argv[])
 
     /* create files with external links that go back and forth between 2 files */
     ext_fid1 = create_file(ext_fname[9], driver, superblock);
-    ext_fid2 = create_file(ext_fname[10], driver, superblock);
+    ext_fid2 = create_file(ext_fname[10], driver, "new");
     printf("External links that go back and forth between 2 files\n");
     gen_ext_pingpong(ext_fid1, ext_fname[9], ext_fid2, ext_fname[10]);
     close_file(ext_fid1, "");
     close_file(ext_fid2, "");
 
     /* create files with too many external links to objects */
-    ext_fid1 = create_file(ext_fname[11], driver, superblock);
+    ext_fid1 = create_file(ext_fname[11], driver, "new");
     ext_fid2 = create_file(ext_fname[12], driver, superblock);
     printf("Files with too many external links to objects\n");
     gen_ext_toomany(ext_fid1, ext_fname[11], ext_fid2, ext_fname[12]);
@@ -2722,7 +2883,80 @@ int main(int argc, char *argv[])
     gen_ext_links(ext_fid1, ext_fname[13]);
     close_file(ext_fid1, "");
 #endif
+    /* 
+     * Generate an invalid file with illegal version # for a link message in fractal heap.
+     * See information in invalidfiles/README.
+     * The numbers below are specific to generate the invalid condition.
+     */
+    /* create a file similar to "newgrat.h5" */
+    fid = create_file(invalid_fname[0], driver, "new");
+    printf("File with invalid version number in link message.....\n");
+    gen_newgrat(fid, 50, 30);
+    close_file(fid, "");
+
+    memset(tmpname, 0, sizeof(tmpname));
+    strcat(tmpname, invalid_fname[0]);
+    strcat(tmpname, ".h5");
+
+    /* Make it invalid by writing to a specific address in the heap */
+    out = fopen(tmpname, "r+");
+    VRFY((out != NULL), "fopen");
+
+    /* Specific checksum to be set in the direct block */
+    chksum = 374212020;
+
+    /* Seek to the link message in fractal heap direct block */
+    ret = fseek(out, 14118, SEEK_SET);
+    VRFY((ret >= 0), "fseek");
+
+    /* Change the verison number to 0 */
+    ret = fwrite(&zero, (size_t)1, 1, out);
+    VRFY((ret == 1), "fwrite");
+
+    /* Seek to the location of the checksum in the fractal heap direct block */
+    ret = fseek(out, 13844, SEEK_SET);
+    VRFY((ret >= 0), "fseek");
+
+    /* Write the checksum */
+    ret = fwrite(&chksum, (size_t)4, 1, out);
+    VRFY((ret == 1), "fwrite");
+
+    /* Close the file */
+    ret = fclose(out);
+    VRFY((ret == 0), "fclose");
+
 #endif
+
+    /* 
+     * Generate an invalid file with duplicate and out of order symbols.
+     * See information in invalidfiles/README.
+     * The numbers below are specific to generate the invalid condition.
+     */
+    /* create a file which is the same as "rank_dsets_empty.h5" */
+    fid = create_file(invalid_fname[1], driver, superblock);
+    printf("File with invalid symbol table entries...\n");
+    gen_rank_datasets(fid, EMPTY);
+    close_file(fid, "");
+
+    memset(tmpname, 0, sizeof(tmpname));
+    strcat(tmpname, invalid_fname[1]);
+    strcat(tmpname, ".h5");
+
+    /* Open the file */
+    out = fopen(tmpname, "r+");
+    VRFY((out != NULL), "fopen");
+
+    /* Seek to the location of the symbol name in the heap */
+    ret = fseek(out, 9552, SEEK_SET);
+    VRFY((ret >= 0), "fseek");
+
+    /* Make the symbol name the same as the next entry */
+    ret = fwrite("4", (size_t)1, 1, out);
+    VRFY((ret == 1), "fwrite");
+
+    /* Close the file */
+    ret = fclose(out);
+    VRFY((ret == 0), "fclose");
 
     /* successful completion message */
     printf("\rTest files generation for H5check successful!\n");

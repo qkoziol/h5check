@@ -14,7 +14,10 @@ NLINES=20			# Max. lines of output to display if test fails
 
 nerrors=0
 verbose=yes
-
+#
+EXIT_SUCCESS=0
+EXIT_FAILURE=1
+#
 # The build (current) directory might be different than the source directory.
 if test -z "$srcdir"; then
     srcdir=.
@@ -85,22 +88,21 @@ TOOLPASS_EXIST() {
 # The actual output file is usually removed unless $HDF5_NOCLEANUP is defined 
 # to any non-null value.  
 # Arguments to TOOLFAIL():
-# $1: expected failure code
-# $2: argument to h5check
-# $3: the file to be validated by h5check
+# $1: the file to be validated by h5check
+# $2: expected failure code
+# $3: argument to h5check
 TOOLFAIL() {
     tmpout=$TOOL.$$.out
     tmperr=$TOOL.$$.err
-
     # Run test.
     # Stderr is included in stdout so that the diff can detect
     # any unexpected output from that stream too.
-    TESTING $TOOL $2 $srcdir/$3
+    TESTING $TOOL $3 $srcdir/$1
     (
-        $TOOL_BIN "$@"
+        $TOOL_BIN $3 $srcdir/$1
     ) 2> $tmperr > $tmpout
     exitcode=$?
-    if [ $exitcode -eq $1 ]; then
+    if [ $exitcode -eq $2 ]; then
         echo " PASSED"
     else
 	echo "*FAILED*"
@@ -124,57 +126,6 @@ TOOLFAIL() {
 }
 
 
-# Run a test to see if the output matches with expected output and print " PASS " or
-# "*FAIL*" accordingly.
-# When it fails, also display up to $NLINES lines of the actual output from the tool
-# test.  The actual output file is usually removed unless $HDF5_NOCLEANUP is defined
-# to any non-null value.
-TOOLMATCH() {
-    expect="$srcdir/../testfiles/$1"
-    actual="../testfiles/`basename $1 .ls`.out"
-    shift
-
-    # Run test.
-    # Stderr is included in stdout so that the diff can detect
-    # any unexpected output from that stream too.
-    TESTING $TOOL $@
-    (
-	echo "#############################"
-	echo " output for '$TOOL $@'" 
-	echo "#############################"
-	cd $srcdir/../testfiles
-        $RUNSERIAL $TOOL_BIN "$@"
-    ) 2>&1 |sed 's/Modified:.*/Modified:  XXXX-XX-XX XX:XX:XX XXX/' >$actual
-    
-    exitcode=$?
-    if [ $exitcode -ne 0 ]; then
-	echo "*FAILED*"
-	nerrors="`expr $nerrors + 1`"
-	if [ yes = "$verbose" ]; then
-	    echo "test returned with exit code $exitcode"
-	    echo "test output: (up to $NLINES lines)"
-	    head -$NLINES $actual
-	    echo "***end of test output***"
-	    echo ""
-	fi
-    elif [ ! -f $expect ]; then
-	# Create the expect file if it doesn't yet exist.
-        echo " CREATED"
-        cp $actual $expect
-    elif $CMP $expect $actual; then
-        echo " PASSED"
-    else
-        echo "*FAILED*"
-	echo "    Expected result differs from actual result"
-	nerrors="`expr $nerrors + 1`"
-	test yes = "$verbose" && $DIFF $expect $actual |sed 's/^/    /'
-    fi
-
-    # Clean up output file
-    if test -z "$HDF5_NOCLEANUP"; then
-	rm -f $actual
-    fi
-}
 
 ##############################################################################
 ##############################################################################
@@ -249,21 +200,24 @@ TOOLPASS_EXIST ext_links.h5 -e
 echo ========================================
 echo The following tests are expected to fail.
 echo ========================================
-TOOLFAIL 2 invalidfiles/base_addr.h5
+TOOLFAIL invalidfiles/base_addr.h5 2
 # Temporary block out since this file is not really invalid.
 #TOOLFAIL invalidfiles/leaf_internal_k.h5
-TOOLFAIL 2 invalidfiles/offsets_lengths.h5
-TOOLFAIL 2 invalidfiles/sb_version.h5
-TOOLFAIL 2 invalidfiles/signature.h5
+TOOLFAIL invalidfiles/offsets_lengths.h5 2
+TOOLFAIL invalidfiles/sb_version.h5 2
+TOOLFAIL invalidfiles/signature.h5 2
+TOOLFAIL invalidfiles/invalid_sym.h5 2
+TOOLFAIL invalidfiles/invalid_grps.h5 2
+TOOLFAIL invalidfiles/ahmcoef_aix.nc 2
+TOOLFAIL invalidfiles/corruptfile.h5 2
 # this is a valid 1.8 file
 # this should fail when checked against 1.6 format
-TOOLFAIL 2 --format=16 invalidfiles/vms_data.h5
-
-
-
+TOOLFAIL invalidfiles/vms_data.h5 2 --format=16
 
 if test $nerrors -eq 0 ; then
-	echo "All $TOOL tests passed."
+    echo "All $TOOL tests passed."
+    exit $EXIT_SUCCESS
+else
+    echo "h5check tests failed with $nerrors errors."
+    exit $EXIT_FAILURE
 fi
-
-exit $nerrors
