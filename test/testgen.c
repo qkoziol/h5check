@@ -459,6 +459,8 @@ create_file(char *name, char *driver, char *superblock)
     else
         fcpl = H5P_DEFAULT;
 
+#if H5_LIBVERSION == 18 /* library release >= 1.8 */
+
     if (!strcmp(superblock, "new")) {
 	ret = H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
 	VRFY((ret>=0), "H5Pset_libver_bounds");
@@ -476,6 +478,7 @@ create_file(char *name, char *driver, char *superblock)
 	ret = H5Pset_shared_mesg_index(fcpl, 0, H5O_SHMESG_ATTR_FLAG, 2);
 	VRFY((ret >= 0), "H5Pset_shared_mesg_index");
     }
+#endif
 
     /* append appropriate suffix to the file name */
     h5_fixname(fname, fapl);
