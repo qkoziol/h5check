@@ -1,9 +1,17 @@
-This is V2.1 release of the HDF5 format checker.  This document describes the
-changes between releases.
+H5check V2.0.1 currently under development
+================================================================================
 
+H5check is an HDF5 format checker.  This document describes the changes between releases.
+
+===================
+Platforms tested:
+===================
+Linux 2.6 (32/64bits), Solaris 10 (32/64bits), FreeBSD 6.3 (32/64bits),
+MacOSX 10.6.3 
+
+=================================
 Changes since version "2.0"
 =================================
-
 - 2011-3-7 by vchoi
     Fix for bug #2175 so that test/testgen.c can be compiled correctly.
     (H5Z_class2_t versus H5Z_class_t)
