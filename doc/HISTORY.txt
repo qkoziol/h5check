@@ -3,7 +3,7 @@ HDF5 History
 
 This file contains a history of the H5check releases.
 
-2.0          April	 2011
+2.0          April	 2010
 
 
 
