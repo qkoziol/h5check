@@ -1,5 +1,13 @@
-#                                               -*- Autoconf -*-
-# Process this file with autoconf to produce a configure script.
+dnl Process this file with autoconf to produce a configure script.
+dnl
+dnl Copyright by The HDF Group.
+dnl All rights reserved.
+dnl
+dnl This file is part of h5check. The full h5check copyright notice,
+dnl including terms governing use, modification, and redistribution, is
+dnl contained in the file COPYING, which can be found at the root of the
+dnl source code distribution tree.  If you do not have access to this file,
+dnl you may request a copy from help@hdfgroup.org.
 
 AC_PREREQ(2.59)
 AC_INIT(FULL-PACKAGE-NAME, VERSION, BUG-REPORT-ADDRESS)

@@ -16,9 +16,15 @@
 @SET_MAKE@
 
 #
-# Copyright by The HDF Group 2007.
+# Copyright by The HDF Group.
 # All rights reserved.
 #
+# This file is part of h5check. The full h5check copyright notice,
+# including terms governing use, modification, and redistribution, is
+# contained in the file COPYING, which can be found at the root of the
+# source code distribution tree.  If you do not have access to this file,
+# you may request a copy from help@hdfgroup.org.
+# 
 #
 # H5check Tool Makefile(.in)
 #
@@ -135,7 +141,7 @@ SET_MAKE = @SET_MAKE@
 
 # Hardcode SHELL to be /bin/sh.  Most machines have this shell, and
 # on at least one machine configure fails to detect its existence (janus).
-# Also, when HDF5 is configured on one machine but run on another,
+# Also, when h5check is configured on one machine but run on another,
 # configure's automatic SHELL detection may not work on the build machine.
 SHELL = /bin/sh
 STRIP = @STRIP@
@@ -556,7 +562,7 @@ uninstall-am: uninstall-binPROGRAMS
 	uninstall-binPROGRAMS
 
 
-# List all build rules defined by HDF5 Makefiles as "PHONY" targets here.
+# List all build rules defined by h5check Makefiles as "PHONY" targets here.
 # This tells the Makefiles that these targets are not files to be built but
 # commands that should be executed even if a file with the same name already
 # exists.
