@@ -10,8 +10,16 @@ dnl source code distribution tree.  If you do not have access to this file,
 dnl you may request a copy from help@hdfgroup.org.
 
 AC_PREREQ(2.59)
-AC_INIT(FULL-PACKAGE-NAME, VERSION, BUG-REPORT-ADDRESS)
-AC_CONFIG_SRCDIR([test/testgen.c])
+
+dnl AC_INIT takes the name of the package, the version number, and an
+dnl email address to report bugs. AC_CONFIG_SRCDIR takes a unique file
+dnl as its argument.
+dnl
+dnl NOTE: Don't forget to change the version number here when we do a
+dnl release!!!
+dnl
+AC_INIT([H5check], [2.0.1], [help@hdfgroup.org])
+AC_CONFIG_SRCDIR([src/h5checker.c])
 AC_CONFIG_AUX_DIR([bin])
 AC_CONFIG_HEADER([src/h5chk_config.h])
 AC_C_BIGENDIAN
