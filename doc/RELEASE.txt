@@ -1,4 +1,4 @@
-H5check V2.0.1 currently under development
+H5Check Version 2.0 Release 1, August, 2011
 ================================================================================
 
 H5check is an HDF5 format checker.  This document describes the changes between releases.
