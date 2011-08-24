@@ -43,8 +43,8 @@
  * based on the Format Specification version */
 #define H5Check_MAJOR    2 
 #define H5Check_MINOR    0 
-#define H5Check_RELEASE  1 
-#define H5Check_VERSION		"H5Check Version 2.0 Release 1, August, 2011"
+#define H5Check_RELEASE  2 
+#define H5Check_VERSION		"H5Check Version 2.0 Release 2, under construction"
 
 #define CK_ADDR_MAX            	(CK_ADDR_UNDEF-1)
 #define addr_defined(X)     	(X!=CK_ADDR_UNDEF)

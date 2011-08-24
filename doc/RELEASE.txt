@@ -1,4 +1,4 @@
-H5Check Version 2.0 Release 1, August, 2011
+H5Check Version 2.0 Release 2, under construction
 ================================================================================
 
 H5check is an HDF5 format checker.  This document describes the changes
@@ -16,21 +16,9 @@ Platforms tested:
 Linux 2.6 (32/64bits), Solaris 10 (32/64bits), FreeBSD 6.3 (32/64bits)
 
 =================================
-Changes since version "2.0"
+Changes since version "2.0.1"
 =================================
-- 2011-3-7 by vchoi
-    Fix for bug #2175 so that test/testgen.c can be compiled correctly.
-    (H5Z_class2_t versus H5Z_class_t)
-
-- 2010-11-12 by vchoi
-    Modifications to allow the validation of external links existing in a file.
-    One new option is added to turn on the validation.
-
-- 2010-10-19 by vchoi
-    Modifications to resolve memory leaks as reported by valgrind.
-    Fixes: 1) hardlink was not correctly handled and validated
-	   2) btree_k[] was not initialized properly in check_superblock()
-	   3) modified routines for handling the table of hard links
+- None
 
 ===============
 Known problems
