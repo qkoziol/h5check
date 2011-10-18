@@ -34,5 +34,6 @@ IF (NOT TARGET "hdf5check")
     INCLUDE (${SELF_DIR}/../hdf5/hdf5-targets.cmake)
   ENDIF (HDF_PACKAGE_EXTLIBS)
   INCLUDE (${SELF_DIR}/hdf5check-targets.cmake)
+  SET (HDF5CHECK_LIBRARIES "@HDF5CHECK_LIBRARIES_TO_EXPORT@")
 ENDIF (NOT TARGET "hdf5check")
 

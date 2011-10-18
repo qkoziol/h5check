@@ -27,4 +27,5 @@ SET (HDF5CHECK_VERSION_MINOR  @HDF5CHECK_VERSION_MINOR@)
 #-----------------------------------------------------------------------------
 IF (NOT TARGET "hdf5check")
   INCLUDE (${SELF_DIR}/hdf5check-targets.cmake)
+  SET (HDF5CHECK_LIBRARIES "@HDF5CHECK_LIBRARIES_TO_EXPORT@")
 ENDIF (NOT TARGET "hdf5check")
