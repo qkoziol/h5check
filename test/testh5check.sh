@@ -213,6 +213,7 @@ TOOLFAIL invalidfiles/offsets_lengths.h5 2
 TOOLFAIL invalidfiles/sb_version.h5 2
 TOOLFAIL invalidfiles/signature.h5 2
 TOOLFAIL invalidfiles/invalid_sym.h5 2
+TOOLFAIL invalidfiles/invalid_symsize.h5 2
 TOOLFAIL invalidfiles/invalid_grps.h5 2
 TOOLFAIL invalidfiles/ahmcoef_aix.nc 2
 TOOLFAIL invalidfiles/corruptfile.h5 2

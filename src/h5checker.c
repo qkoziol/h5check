@@ -5460,7 +5460,7 @@ raw_node_cmp_key(global_shared_t *shared, key_info_t *key_info, void *_lt_key, v
 } /* raw_node_cmp_key() */
 
 /*
- * Validate superblock for both version 0, 1 & 2
+ * Find the superblock signature
  */
 static ck_addr_t
 locate_super_signature(driver_t *file)
@@ -5505,6 +5505,9 @@ locate_super_signature(driver_t *file)
     return(addr);
 } /* end locate_super_signature() */
 
+/*
+ * Validate superblock for both version 0, 1 & 2
+ */
 ck_err_t
 check_superblock(driver_t *file)
 {
@@ -5896,6 +5899,9 @@ check_superblock(driver_t *file)
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.2:Bad checksum", logical, NULL);
 	    CK_SET_RET(FAIL)
 	}
+	lshared->btree_k[BT_SNODE_ID] = BT_SNODE_K;
+	lshared->btree_k[BT_ISTORE_ID] = BT_ISTORE_K;
+	lshared->gr_leaf_node_k = CRT_SYM_LEAF_DEF;
     } else  /* error should have pushed already onto the error stack */
 	CK_SET_RET(FAIL)
 
@@ -5903,9 +5909,6 @@ check_superblock(driver_t *file)
     if (ret_value < 0)
 	goto done;
 
-    lshared->btree_k[BT_SNODE_ID] = BT_SNODE_K;
-    lshared->btree_k[BT_ISTORE_ID] = BT_ISTORE_K;
-    lshared->gr_leaf_node_k = CRT_SYM_LEAF_DEF;
     lshared->sohm_tbl = NULL;
     
     if(addr_defined(lshared->extension_addr) && g_format_num != FORMAT_ONE_EIGHT) {
@@ -6029,7 +6032,7 @@ check_sym(driver_t *file, ck_addr_t sym_addr, key_info_t *key_info, name_list_t 
     }
 
     /* reading the vector of symbol table group entries */
-    if (gp_ent_decode_vec(file->shared, (const uint8_t **)&p, sym->entry, sym->nsyms) < 0)
+    if(gp_ent_decode_vec(file->shared, (const uint8_t **)&p, sym->entry, sym->nsyms) < 0)
 	CK_INC_ERR_DONE
 
     if(!key_info->heap_chunk) {

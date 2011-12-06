@@ -10,6 +10,15 @@ invalid_sym.h5: file with duplicate and out-of-order symbols
 	   -- the output indicates that the address of heap data is 9504
     c) Use fwrite() to change the symbol "dataset_3" to "dataset_4" 
 
+invalid_symsize.h5: file with invalid leaf node size that will make the
+  (size of symbol table entry + symbol table address) exceed the file size
+    a) Create a file which is the same as "rank_dsets_empty.h5"
+    b) The file format specification indicates that the entry "Group Leaf Node K" in the 
+       superblock is at offset 16
+    c) Use fwrite() to increase the value to 20 
+       (when validating the file, symbol table at 15584 + 1608 will exceed file size)
+       (1608 is the size of symbol table entry (see gp_node_size() in h5checker.c) -- 8+(2x20x40))
+
 invalid_grps.h5: file with invalid version in link message that resides in fractal heap
     a) Create a file which is similar to "new_grat.h5"
     b) Use "h5debug" to find the following information:

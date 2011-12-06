@@ -392,7 +392,6 @@ static void h5_fixname(char *fullname, hid_t fapl)
 * This function defines a creation property list for a non-standard
 * superblock.
 */
-
 static hid_t 
 alt_superblock(void)
 {
@@ -2594,17 +2593,16 @@ char *ext_fname[] = {
 /* main function of test generator */
 int main(int argc, char *argv[])
 {
-    hid_t fid;	/* file id */
-    hid_t ext_fid1, ext_fid2, ext_fid3, ext_fid4;	/* file ids  */
-    FILE *out;
-    char tmpname[100];
- 
-    char *driver = "sec2";
-    char *superblock = "standard";
-    unsigned i = 0;
-    herr_t ret;
-    int zero = 0;
-    uint32_t chksum;
+    hid_t fid;				/* file id */
+    hid_t ext_fid1, ext_fid2, ext_fid3, ext_fid4;	/* file ids for external links tests */
+    FILE *out;				/* output file */
+    char tmpname[100];			/* temporary holder */
+    char *driver = "sec2";		/* the driver to use */
+    char *superblock = "standard";	/* the superblock version to use */
+    unsigned i = 0;			/* local index variable */
+    herr_t ret;				/* return value */
+    int numb = 0;			/* value to set for generating invalid condition */
+    uint32_t chksum;			/* the check sum to set for generating invalid condition */
 
     /* file names */
     char *fname[] = {
@@ -2657,6 +2655,7 @@ int main(int argc, char *argv[])
     char *invalid_fname[] = {
 	"invalid_grps",		/* 0 */
 	"invalid_sym",		/* 1 */
+	"invalid_symsize",	/* 2 */
     };
 
     /* initial message */
@@ -2910,7 +2909,7 @@ int main(int argc, char *argv[])
     VRFY((ret >= 0), "fseek");
 
     /* Change the verison number to 0 */
-    ret = fwrite(&zero, (size_t)1, 1, out);
+    ret = fwrite(&numb, (size_t)1, 1, out);
     VRFY((ret == 1), "fwrite");
 
     /* Seek to the location of the checksum in the fractal heap direct block */
@@ -2952,6 +2951,38 @@ int main(int argc, char *argv[])
 
     /* Make the symbol name the same as the next entry */
     ret = fwrite("4", (size_t)1, 1, out);
+    VRFY((ret == 1), "fwrite");
+
+    /* Close the file */
+    ret = fclose(out);
+    VRFY((ret == 0), "fclose");
+
+    /* 
+     * Generate an invalid file with (symbol table entry size + symbol table address) 
+     * exceeding file size.  This corresponds to bug HFVCHCK-10.
+     * See information in invalidfiles/README.
+     * The numbers below are specific to generate the invalid condition.
+     */
+    fid = create_file(invalid_fname[2], driver, superblock);
+    printf("File with invalid leaf node size...\n");
+    gen_rank_datasets(fid, EMPTY);
+    close_file(fid, "");
+
+    memset(tmpname, 0, sizeof(tmpname));
+    strcat(tmpname, invalid_fname[2]);
+    strcat(tmpname, ".h5");
+
+    /* Open the file */
+    out = fopen(tmpname, "r+");
+    VRFY((out != NULL), "fopen");
+
+    /* Seek to the location of the leaf node in the superblock */
+    ret = fseek(out, 16, SEEK_SET);
+    VRFY((ret >= 0), "fseek");
+
+    /* Increase the value of leaf node */
+    numb = 20;
+    ret = fwrite(&numb, (size_t)2, 1, out);
     VRFY((ret == 1), "fwrite");
 
     /* Close the file */
