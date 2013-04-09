@@ -2656,6 +2656,7 @@ int main(int argc, char *argv[])
 	"invalid_grps",		/* 0 */
 	"invalid_sym",		/* 1 */
 	"invalid_symsize",	/* 2 */
+	"invalid_dtver"		/* 3 */
     };
 
     /* initial message */
@@ -2887,7 +2888,7 @@ int main(int argc, char *argv[])
      * See information in invalidfiles/README.
      * The numbers below are specific to generate the invalid condition.
      */
-    /* create a file similar to "newgrat.h5" */
+    /* create a file "invalid_grps.h5" similar to "newgrat.h5" */
     fid = create_file(invalid_fname[0], driver, "new");
     printf("File with invalid version number in link message.....\n");
     gen_newgrat(fid, 50, 30);
@@ -2925,13 +2926,12 @@ int main(int argc, char *argv[])
     VRFY((ret == 0), "fclose");
 
 #endif
-
     /* 
      * Generate an invalid file with duplicate and out of order symbols.
      * See information in invalidfiles/README.
      * The numbers below are specific to generate the invalid condition.
      */
-    /* create a file which is the same as "rank_dsets_empty.h5" */
+    /* create a file "invalid_sym.h5" which is the same as "rank_dsets_empty.h5" */
     fid = create_file(invalid_fname[1], driver, superblock);
     printf("File with invalid symbol table entries...\n");
     gen_rank_datasets(fid, EMPTY);
@@ -2963,6 +2963,7 @@ int main(int argc, char *argv[])
      * See information in invalidfiles/README.
      * The numbers below are specific to generate the invalid condition.
      */
+    /* create a file "invalid_symsize.h5" which is the same as "rank_dsets_empty.h5" */
     fid = create_file(invalid_fname[2], driver, superblock);
     printf("File with invalid leaf node size...\n");
     gen_rank_datasets(fid, EMPTY);
@@ -2983,6 +2984,42 @@ int main(int argc, char *argv[])
     /* Increase the value of leaf node */
     numb = 20;
     ret = fwrite(&numb, (size_t)2, 1, out);
+    VRFY((ret == 1), "fwrite");
+
+    /* Close the file */
+    ret = fclose(out);
+    VRFY((ret == 0), "fclose");
+
+    /* 
+     * Generate an invalid file with datatype version 1 for array datatype.
+     * This corresponds to bug HDFFV-7764.
+     * See information in invalidfiles/README.
+     * The numbers below are specific to generate the invalid condition.
+     */
+    /* create a file "invalid_dtver.h5" which is the same as "array.h5" */
+    fid = create_file(invalid_fname[3], driver, superblock);
+    printf("File with invalid datatype version array type...\n");
+    gen_array(fid, FULL);
+    close_file(fid, "");
+
+    memset(tmpname, 0, sizeof(tmpname));
+    strcat(tmpname, invalid_fname[3]);
+    strcat(tmpname, ".h5");
+
+    /* Open the file */
+    out = fopen(tmpname, "r+");
+    VRFY((out != NULL), "fopen");
+
+    /* Seek to the location of the datatype message */
+    ret = fseek(out, 872, SEEK_SET);
+    VRFY((ret >= 0), "fseek");
+
+    /* Read the byte for "class and version" */
+    ret = fread(&numb, (size_t)1, 1, out);
+    numb &= 0x0f;
+    numb |= 0x10; /* make the datatype message to be version 1 */
+    ret = fseek(out, 872, SEEK_SET);
+    ret = fwrite(&numb, (size_t)1, 1, out);
     VRFY((ret == 1), "fwrite");
 
     /* Close the file */

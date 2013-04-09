@@ -217,6 +217,7 @@ TOOLFAIL invalidfiles/invalid_symsize.h5 2
 TOOLFAIL invalidfiles/invalid_grps.h5 2
 TOOLFAIL invalidfiles/ahmcoef_aix.nc 2
 TOOLFAIL invalidfiles/corruptfile.h5 2
+TOOLFAIL invalidfiles/invalid_dtver.h5 2
 # this is a valid 1.8 file
 # this should fail when checked against 1.6 format
 TOOLFAIL invalidfiles/vms_data.h5 2 --format=16

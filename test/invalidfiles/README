@@ -38,6 +38,14 @@ invalid_grps.h5: file with invalid version in link message that resides in fract
 	(13827+17=13844) from 1160659341 to 374212020.  This is done to
 	reflect the version change and to allow h5check to continue validating
 	the message so the expected error can occur.
+
+invalid_dtver.h5: file with invalid version in datatype message for array datatype
+    a) Create a file which is similar to "array.h5"
+    b) Use "h5debug" to find the following information:
+	-- h5debug invalid_dtver.h5 800 680
+    c) Use fread() to read the byte with "class and version"
+    d) Use fwrite() to change the version of the message to 1
+	-- mask off "class" then make the version to be "1"
 	
 ahmcoef_aix.nc
     This is a file from bug #1755.

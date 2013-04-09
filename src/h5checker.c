@@ -2372,6 +2372,13 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
 
 
 	case DT_ARRAY:  /* Array datatypes */
+
+	    if(version == DT_VERSION_1) {
+	       error_push(ERR_LEV_2, ERR_LEV_2A2d, 
+		  "Datatype Message:Array:No array type for version 1", logical, NULL);
+		CK_SET_RET(FAIL)
+	    }
+
 	    /* Decode the number of dimensions */
             dt->shared->u.array.ndims = *(*pp)++;
 
