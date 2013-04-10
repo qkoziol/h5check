@@ -32,10 +32,6 @@ Linux 2.6 (32/64bits), Solaris 10 (32/64bits), FreeBSD 6.3 (32/64bits)
 =================================
 Changes since version "2.0"
 =================================
-- 2013-492 by vchoi
-    Fix for bug #HFVCHCK-12 (#HDFFV-7764) to check for array datatype with message
-    version 1.
-
 - 2011-3-7 by vchoi
     Fix for bug #2175 so that test/testgen.c can be compiled correctly.
     (H5Z_class2_t versus H5Z_class_t)
