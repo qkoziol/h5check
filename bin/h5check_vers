@@ -1,0 +1,183 @@
+#!/bin/sh
+# *** Under construction ***
+# This is a quick installation to use for v2.0.2 release.
+# This requires more work for further use.
+
+# This sets the version information of h4h5tools in all related files.
+# Usage: setversion [-r] <version>
+#    <version> is the new version number in the form of M.m.R-relstr where
+#         M is major, m is minor, R is release and -relstr is the
+#         optional subrelease.
+#    -r is the optional release mode.
+#         When given, all the files are set for release by adding today's
+#         date as the release date. The default is development mode which
+#         sets all version information files with the
+#         "currently under development" notice.
+
+# Function definitions
+USAGE()
+{
+    echo "Usage: $0 [-h] [-r] <M.m.R>"
+    echo "    -h: Show this help page"
+    echo "    -r: This is a release version"
+    echo "     M: Major version number"
+    echo "     m: Minor version number"
+    echo "     R: Release number"
+
+}
+
+# Print Debug output. Activate this by removing the leading colon.
+# With a leading colon, it is a label, effectively a noop.
+DPRINT()
+{
+    : echo $@
+}
+
+# Show a banner for message given as $*
+# Need to quote $* to allow metacharacters in the message.
+BANNER()
+{
+	echo ""
+	echo "=================================================="
+	echo "$*"
+	echo "=================================================="
+}
+
+# Main body
+# Check command arguments
+if [ $# -eq 0 ]; then
+    # Hardcode for release v2.0.2
+    Versions=2.0.2
+    echo $Versions
+    exit 0
+fi
+
+if [ "$1" = "-h" ]; then
+    USAGE
+    exit 0
+fi
+
+if [ "$1" = "-r" ]; then
+    # Release mode
+    ReleaseDate="released on "`date +%F`
+    shift
+else
+    ReleaseDate="currently under development"
+fi
+
+if [ $# -ne 1 ]; then
+    USAGE
+    exit 1
+fi
+
+arg=$1
+DPRINT "====== arg=$arg ============"
+
+# Verify given arg is the correct format and pull out the optional release
+# string.
+case "$arg" in
+    [0-9]*.[0-9]*.[0-9]* )
+	Versions=$arg
+	;;
+    *)
+	echo "Bad argument $arg"
+	USAGE
+	exit 1
+	;;
+esac
+
+# Parse the Version argument into different parts
+Vmajor=`echo $Versions | cut -d. -f1`
+Vminor=`echo $Versions | cut -d. -f2`
+Vrelease=`echo $Versions | cut -d. -f3`
+Vstring="H5CHECK version $Versions $ReleaseDate."
+
+DPRINT Versions=$Versions;
+DPRINT "Major=$Vmajor; minor=$Vminor; Release=$Vrelease;"
+DPRINT "String=$Vstring"
+
+BANNER Update files with new version information $arg $ReleaseDate
+# Update configure.ac by fixing the AC_INIT statement and run bin/reconfigure
+f=configure.ac
+echo Update ${f} ...
+if [ -w $f ]; then
+ed - $f <<EOF
+/^AC_INIT/s/, \[[^]]*/, [$arg/
+w
+q
+EOF
+    echo running reconfigure ...
+    bin/reconfigure
+else
+    echo $f is not writable
+    USAGE
+    exit 1
+fi
+
+# Update src/h5_check.h by fixing the version information macros.
+# The "$" is needed so that the number at the end is replaced.
+f=src/h5_check.h
+echo Update ${f} ...
+if [ -w $f ]; then
+ed - $f <<EOF
+/define H5Check_MAJOR/s/[0-9] *$/$Vmajor/
+/define H5Check_MINOR/s/[0-9] *$/$Vminor/
+/define H5Check_RELEASE/s/[0-9] *$/$Vrelease/
+/define H5Check_VERSION/s/".*"/"$Vstring"/
+w
+q
+EOF
+else
+    echo $f is not writable
+    USAGE
+    exit 1
+fi
+
+
+# Update README and doc/RELEASE.txt by fixing the version information in the
+# header line at the beginning.
+for f in README doc/RELEASE.txt; do
+    echo Update ${f} ...
+    if [ -w $f ]; then
+ed - $f <<EOF
+/^H5CHECK version/s/.*/$Vstring/
+w
+q
+EOF
+    else
+	echo $f is not writable
+	USAGE
+	exit 1
+    fi
+done
+exit 0
+
+BANNER Files require manual update
+# The following are not automized yet and should be done by hand.
+echo you need to update the following files:
+echo doc/h5check.docx:
+echo doc/h5check reference manual:
+echo "   The version in the footer and last edit date"
+echo "   Then regenerate the corresponding .pdf and .htm files"
+
+
+BANNER Reminder of post-release tasks
+# Post-release cleanup and reset for next release. Docuement here temporary.
+# Should be moved to a permenant spot later.
+cat <<EOF
+Reminder:
+Generate the release tarball by
+$ svn export http://svn.hdfgroup.uiuc.edu/h5check/trunk h5check-<version>
+  E.g., svn export http://svn.hdfgroup.uiuc.edu/h5check/trunk h5check-1.1.0
+$ tar zcf h5check-<version>.tar.gz h5check-<version>
+  E.g., tar zcf h5check-1.1.0.tar.gz h5check-1.1.0
+
+After release tarball is generated, you need to tag the released version by:
+$ svn copy http://svn.hdfgroup.uiuc.edu/h5check/trunk http://svn.hdfgroup.uiuc.edu/h5check/tags/<version>
+  E.g., svn copy http://svn.hdfgroup.uiuc.edu/h5check/trunk http://svn.hdfgroup.uiuc.edu/h5check/tags/h5check_1_1_0
+Then in doc,
+1. archive RELEASE.txt to History
+2. empty the "Changes since ...<version>" section.
+3. reset version in the header
+
+EOF

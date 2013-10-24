@@ -1,9 +1,9 @@
-H5Check Version 2.0 Release 2, under construction
+H5CHECK version 2.0.2 currently under development.
 Please refer to the doc/INSTALL file for installation instructions
 and doc/RELEASE.txt for changes related to this release..
 ------------------------------------------------------------------------------
 
-H5check is an HDF5 format checker. The software is set up to work with the HDF5
+h5check is an HDF5 format checker. The software is set up to work with the HDF5
 File Format Specification Version 1.1 and Version 2.0. 
 
 src/  holds h5check library code.

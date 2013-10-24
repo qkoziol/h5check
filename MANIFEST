@@ -1,0 +1,89 @@
+#
+# Copyright by The HDF Group.
+# All rights reserved.
+#
+# This file is part of h5check. The full h5check copyright notice,
+# including terms governing use, modification, and redistribution, is
+# contained in the file COPYING, which can be found at the root of the
+# source code distribution tree.  If you do not have access to this file,
+# you may request a copy from help@hdfgroup.org.
+#
+#------------------------------------------------------------------------------
+# This is the list of files that are part of h5check source distribution.
+# All files have a `./' prefix and appear in lexicographic order.
+# Lines that end with _DO_NOT_DISTRIBUTE_ will not be included in a
+# release.  Blank lines and comments are ignored.  Comments must start
+# in column one with a '#'.
+#------------------------------------------------------------------------------
+
+./aclocal.m4
+./configure
+./configure.ac
+./COPYING
+./MANIFEST
+./Makefile.am
+./Makefile.in
+./README
+
+./bin/chkcopyright	_DO_NOT_DISTRIBUTE_
+./bin/chkmanifest
+./bin/depcomp
+./bin/h5check_vers
+./bin/install-sh
+./bin/missing
+./bin/newer
+./bin/reconfigure	_DO_NOT_DISTRIBUTE_
+./bin/release
+
+./config/commence.am
+./config/conclude.am
+./config/Makefile.am.blank
+
+./doc/h5check.doc
+./doc/h5checker_obj.htm
+./doc/h5check.mht
+./doc/h5check.pdf
+./doc/HISTORY.txt
+./doc/INSTALL
+./doc/RELEASE.txt
+
+./src/h5checker_api.c
+./src/h5checker.c
+./src/h5checkerV2_0.c
+./src/h5_check.h
+./src/h5check_public.h
+./src/h5chk_config.h.in
+./src/h5error.c
+./src/h5_error.h
+./src/h5pline.c
+./src/h5_pline.h
+./src/Makefile.am
+./src/Makefile.in
+
+./test/Makefile.am
+./test/Makefile.in
+./test/README
+./test/testgen.c
+./test/testgen.h
+./test/testh5check.sh
+
+./test/invalidfiles/ahmcoef_aix.nc
+./test/invalidfiles/base_addr.h5
+./test/invalidfiles/corruptfile.h5
+./test/invalidfiles/invalid_dtver.h5
+./test/invalidfiles/invalid_files.doc
+./test/invalidfiles/invalid_grps.h5
+./test/invalidfiles/invalid_sym.h5
+./test/invalidfiles/invalid_symsize.h5
+./test/invalidfiles/leaf_internal_k.h5
+./test/invalidfiles/offsets_lengths.h5
+./test/invalidfiles/README
+./test/invalidfiles/sb_version.h5
+./test/invalidfiles/signature.h5
+./test/invalidfiles/vms_data.h5
+
+./test/validfiles/README
+
+./tool/h5checker_main.c
+./tool/Makefile.am
+./tool/Makefile.in

@@ -1,7 +1,7 @@
-H5Check Version 2.0 Release 2, under construction
+H5CHECK version 2.0.2 currently under development.
 ================================================================================
 
-H5check is an HDF5 format checker.  This document describes the changes
+h5check is an HDF5 format checker.  This document describes the changes
 between releases.
 
 ===========================
