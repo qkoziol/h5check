@@ -22,7 +22,9 @@ AC_INIT([H5check], [2.0.2], [help@hdfgroup.org])
 AC_CONFIG_SRCDIR([src/h5checker.c])
 AC_CONFIG_AUX_DIR([bin])
 AC_CONFIG_HEADER([src/h5chk_config.h])
+AC_CONFIG_MACRO_DIR([m4])
 AC_C_BIGENDIAN
+
 
 dnl AM_INIT_AUTOMAKE takes a list of options that should be applied to
 dnl every Makefile.am when automake is run.
@@ -49,12 +51,132 @@ dnl Set prefix default (install directory) to a directory in the build area.
 dnl This allows multiple src-dir builds within one host.
 AC_PREFIX_DEFAULT([`pwd`/h5check])
 
+AC_CANONICAL_HOST
+
+## ----------------------------------------------------------------------
+## Source any special files that we need.  These files normally aren't
+## present but can be used by the maintainers to fine tune things like
+## turning on debug or profiling flags for the compiler.  The search order
+## is:
+##
+##	CPU-VENDOR-OS
+##	VENDOR-OS
+##	CPU-OS
+##	CPU-VENDOR
+##	OS
+##	VENDOR
+##	CPU
+##
+## If the `OS' ends with a version number then remove it. For instance,
+## `freebsd3.1' would become `freebsd'
+
+case $host_os in
+  aix*)
+    host_os_novers=aix
+    ;;
+  freebsd*)
+    host_os_novers=freebsd
+    ;;
+  irix5.*)
+    host_os_novers=irix5.x
+    ;;
+  irix6.*)
+    host_os_novers=irix6.x
+    ;;
+  osf4.*)
+    host_os_novers=osf4.x
+    ;;
+  osf5.*)
+    host_os_novers=osf5.x
+    ;;
+  solaris2.*)
+    host_os_novers=solaris2.x
+    ;;
+  *)
+    host_os_novers=$host_os
+    ;;
+esac
+
+host_config="none"
+for f in $host_cpu-$host_vendor-$host_os \
+         $host_cpu-$host_vendor-$host_os_novers \
+         $host_vendor-$host_os \
+         $host_vendor-$host_os_novers \
+         $host_cpu-$host_os \
+         $host_cpu-$host_os_novers \
+         $host_cpu-$host_vendor \
+         $host_os \
+         $host_os_novers \
+         $host_vendor \
+         $host_cpu ; do
+  AC_MSG_CHECKING([for config $f])
+  if test -f "$srcdir/config/$f"; then
+    host_config=$srcdir/config/$f
+    AC_MSG_RESULT([found])
+    break
+  fi
+  AC_MSG_RESULT([no])
+done
+if test "X$host_config" != "Xnone"; then
+  CC_BASENAME="`echo $CC | cut -f1 -d' ' | xargs basename 2>/dev/null`"
+  . $host_config
+fi
+
+## Source any special site-specific file
+hname="`hostname`"
+while test -n "$hname"; do
+  file=$srcdir/config/site-specific/host-$hname
+  AC_MSG_CHECKING([for config $file])
+  if test -f "$file"; then
+    . $file
+    AC_MSG_RESULT([found])
+    break
+  fi
+  AC_MSG_RESULT([no])
+  hname_tmp=$hname
+  hname="`echo $hname | cut -d. -f2-99`"
+  test "$hname_tmp" = "$hname" && break
+done
+
+AC_SUBST([LARGEFILE]) LARGEFILE=yes
+
+AC_SUBST([CPPFLAGS])
+
 dnl HDF5 compile commands.
 AC_SUBST([H5CC])
 AC_SUBST([H5CC_PP])
 AC_SUBST([H5FC])
 AC_SUBST([H5FC_PP])
 AC_SUBST([H5CPP])
+
+## AM_CFLAGS (and company) are for CFLAGS that should be used on HDF5,
+## and WILL be exported to h5cc (or h5fc, etc) if set by configure.
+AC_SUBST([AM_CFLAGS])
+AC_SUBST([AM_FCFLAGS])
+AC_SUBST([AM_CXXFLAGS])
+AC_SUBST([AM_CPPFLAGS])
+AC_SUBST([AM_LDFLAGS])
+
+## Make sure flags are set to something (otherwise macros may set them later).
+AM_CFLAGS="${AM_CFLAGS}"
+AM_CXXFLAGS="${AM_CXXFLAGS}"
+AM_FCFLAGS="${AM_FCFLAGS}"
+AM_CPPFLAGS="${AM_CPPFLAGS}"
+AM_LDFLAGS="${AM_LDFLAGS}"
+CFLAGS="${CFLAGS}"
+CXXFLAGS="${CXXFLAGS}"
+FCFLAGS="${FCFLAGS}"
+CPPFLAGS="${CPPFLAGS}"
+LDFLAGS="${LDFLAGS}"
+
+## Configure may need to alter any of the *FLAGS variables in order for
+## various checks to work correctly. Save the user's value here so it
+## can be restored once all configure checks are complete.
+saved_user_CFLAGS="$CFLAGS"
+saved_user_CXXFLAGS="$CXXFLAGS"
+saved_user_FCFLAGS="$FCFLAGS"
+saved_user_LDFLAGS="$LDFLAGS"
+saved_user_CPPFLAGS="$CPPFLAGS"
 
 dnl Make sure they are set to something.
 H5CC="${H5CC:-h5cc}"
@@ -305,6 +427,145 @@ if test "X$ac_cv_c_bigendian" = "Xyes"; then
                 [Define if machine is big endian])
 fi
 
+#####
+## ----------------------------------------------------------------------
+## Test for Largefile support.
+##
+AC_MSG_CHECKING([if configure should try to set up large file support])
+
+AC_ARG_ENABLE([largefile],
+           [AS_HELP_STRING([--disable-largefile],
+                           [omit support for large files])])
+
+## If largefile support is enabled, then set up appropriate compiler options.
+if test "$enable_largefile" != no; then
+  AC_MSG_RESULT([yes])
+
+  ## Check for needed compiler options. This check is pulled drectly
+  ## from autoconf's AC_SYS_LARGEFILE macro, as of Autoconf v2.65.
+  AC_CACHE_CHECK([for special C compiler options needed for large files],
+    ac_cv_sys_largefile_CC,
+    [ac_cv_sys_largefile_CC=no
+     if test "$GCC" != yes; then
+       ac_save_CC=$CC
+       while :; do
+         ## IRIX 6.2 and later do not support large files by default,
+         ## so use the C compiler's -n32 option if that helps.
+         AC_LANG_CONFTEST([AC_LANG_PROGRAM([_AC_SYS_LARGEFILE_TEST_INCLUDES])])
+         AC_COMPILE_IFELSE([], [break])
+         CC="$CC -n32"
+         AC_COMPILE_IFELSE([], [ac_cv_sys_largefile_CC=' -n32'; break])
+         break
+       done
+       CC=$ac_save_CC
+       rm -f conftest.$ac_ext
+    fi])
+  if test "$ac_cv_sys_largefile_CC" != no; then
+    CC=$CC$ac_cv_sys_largefile_CC
+  fi
+
+
+  ## Use the macro _AC_SYS_LARGEFILE_MACRO_VALUE to test defines
+  ## that might need to be set for largefile support to behave 
+  ## correctly. This macro is defined in acsite.m4 and overrides
+  ## the version provided by Autoconf (as of v2.65). The custom
+  ## macro additionally adds the appropriate defines to AM_CPPFLAGS 
+  ## so that later configure checks have them visible. 
+
+  ## Check for _FILE_OFFSET_BITS
+  _AC_SYS_LARGEFILE_MACRO_VALUE([_FILE_OFFSET_BITS], [64],
+    [ac_cv_sys_file_offset_bits],
+    [Number of bits in a file offset, on hosts where this is settable.],
+    [_AC_SYS_LARGEFILE_TEST_INCLUDES])
+
+  ## Check for _LARGE_FILES
+  if test "$ac_cv_sys_file_offset_bits" = unknown; then
+    _AC_SYS_LARGEFILE_MACRO_VALUE([_LARGE_FILES], [1],
+      [ac_cv_sys_large_files],
+      [Define for large files, on AIX-style hosts.],
+      [_AC_SYS_LARGEFILE_TEST_INCLUDES])
+  fi
+
+  ## Now actually test to see if we can create large files after we've
+  ## checked for any needed defines.
+  AC_MSG_CHECKING([if large (64-bit) files are supported on this system.])
+  AC_CACHE_VAL([h5check_cv_have_lfs],
+    [AC_TRY_RUN([
+      #include <stdio.h>
+      #include <unistd.h>
+      #include <stdlib.h>
+      #include <fcntl.h>
+      #define BIG_FILE (off_t)0x80000000UL 
+      int main(void) {
+        int fd;
+        if ((fd=open("test.conf", O_RDWR|O_TRUNC|O_CREAT, 0666)) < 0) exit(1);
+        if (lseek(fd, BIG_FILE, SEEK_SET)!=BIG_FILE) exit(1);
+        if (5!=write(fd, "hello", (size_t)5)) exit(1);
+        if (lseek(fd, 2*BIG_FILE, SEEK_SET) != 2*BIG_FILE) exit(1);
+        if (5!=write(fd, "hello", (size_t)5)) exit(1);
+        if (unlink("test.conf") < 0) exit(1);
+        exit(0);
+      }
+    ],[h5check_cv_have_lfs=yes],[h5check_cv_have_lfs=no],)])
+
+  if test "X${h5check_cv_have_lfs}" = "Xyes"; then
+    AC_MSG_RESULT([yes])
+    LARGEFILE="yes"
+  fi 
+  if test "X${h5check_cv_have_lfs}" = "Xno"; then
+    AC_MSG_RESULT([no])
+    LARGEFILE="no"
+  fi 
+
+else
+  LARGEFILE="no"
+  AC_MSG_RESULT([no])
+fi
+
+## ----------------------------------------------------------------------
+## Add necessary defines for Linux Systems.
+##
+case "$host_cpu-$host_vendor-$host_os" in
+  *linux*)
+    ## If largefile support is enabled, then make available various
+    ## LFS-related routines using the following _LARGEFILE*_SOURCE macros.
+    if test "X$LARGEFILE" != "Xno"; then
+        AM_CPPFLAGS="-D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE $AM_CPPFLAGS"
+    fi
+
+    ## Also add BSD support on Linux systems, so <features.h> defines
+    ## __USE_BSD, which is required to get the prototype for strdup
+    ## defined correctly in <string.h> and snprintf & vsnprintf defined
+    ## correctly in <stdio.h>
+    ## Linking to the bsd-compat library is required as per the gcc manual:
+    ## http://www.gnu.org/s/libc/manual/html_node/Feature-Test-Macros.html
+    ## however, we do not do this since it breaks the big test on some
+    ## older platforms.
+    AM_CPPFLAGS="-D_BSD_SOURCE $AM_CPPFLAGS"
+    ;;
+esac
+
+## Need to add the AM_ and H5_ into CFLAGS/CPPFLAGS to make them visible 
+## for configure checks.
+## Note: Both will be restored by the end of configure.
+CPPFLAGS="$AM_CPPFLAGS $CPPFLAGS"
+CFLAGS="$AM_CFLAGS $CFLAGS"
+
+AC_TRY_COMPILE([#include <sys/types.h>],
+               [off64_t n = 0;],
+               [AC_CHECK_FUNCS([lseek64 fseeko64 ftello64 ftruncate64])],
+               [AC_MSG_RESULT([skipping test for lseek64(), fseeko64 , ftello64, ftruncate64() because off64_t is not defined])])
+AC_CHECK_FUNCS([fseeko ftello])
+AC_TRY_COMPILE([
+#include <sys/types.h>
+#include <sys/stat.h>],
+[struct stat64 sb;],
+[AC_CHECK_FUNCS([stat64 fstat64])],
+[AC_MSG_RESULT([skipping test for stat64() and fstat64()])])
+
+#####
+
+LIBS="$DEFAULT_LIBS $LIBS"
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -322,6 +583,14 @@ AC_FUNC_MALLOC
 AC_FUNC_MEMCMP
 AC_FUNC_REALLOC
 AC_CHECK_FUNCS([memset pow strdup strerror strrchr strstr strtol])
+
+## ----------------------------------------------------------------------
+## Restore user's CFLAGS.
+CFLAGS="$saved_user_CFLAGS"
+FCFLAGS="$saved_user_FCFLAGS"
+CXXFLAGS="$saved_user_CXXFLAGS"
+CPPFLAGS="$saved_user_CPPFLAGS"
+LDFLAGS="$saved_user_LDFLAGS"
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile

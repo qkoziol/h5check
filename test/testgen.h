@@ -27,6 +27,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 /* Determine the version of the HDF5 library I am using. */
 #if H5_VERS_MAJOR <= 1 && H5_VERS_MINOR < 8

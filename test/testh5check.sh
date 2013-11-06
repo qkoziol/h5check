@@ -168,6 +168,29 @@ TOOLPASS root.h5
 TOOLPASS stdio.h5
 TOOLPASS time.h5
 TOOLPASS vl.h5
+#
+# Set up and run test for large file
+#
+# The directory where h5chk_config.h resides
+DIR=`pwd`/../src
+#  Check if HAVE_LSEEK64 is defined
+chkseek=`grep '#define HAVE_LSEEK64' $DIR/h5chk_config.h | cut -d ' ' -f3`
+if [ -z $chkseek ]; then
+    chkseek=0
+fi
+# Check if _FILE_OFFSET_BITS is defined 
+chkoff=`grep '#define _FILE_OFFSET_BITS' $DIR/h5chk_config.h | cut -d ' ' -f3`
+if [ -z $chkoff ]; then
+    chkoff=0
+fi
+# Determine word size of OS
+mbit=`getconf LONG_BIT`
+if [ $mbit -eq 64 -o $chkseek -eq 1 ]; then
+    if [ $mbit -eq 64 -o $chkoff -eq 64 ]; then
+	TOOLPASS_EXIST big.h5
+    fi
+fi
+#
 # these 2 files are generated only when 1.8 library is used
 TOOLPASS_EXIST new_grat.h5
 TOOLPASS_EXIST sohm.h5
@@ -221,6 +244,7 @@ TOOLFAIL invalidfiles/invalid_dtver.h5 2
 # this is a valid 1.8 file
 # this should fail when checked against 1.6 format
 TOOLFAIL invalidfiles/vms_data.h5 2 --format=16
+
 
 if test $nerrors -eq 0 ; then
     echo "All $TOOL tests passed."

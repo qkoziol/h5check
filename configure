@@ -603,11 +603,25 @@ USE_FILTER_SHUFFLE
 FILTERS
 USE_FILTER_SZIP
 USE_FILTER_DEFLATE
+AM_LDFLAGS
+AM_CPPFLAGS
+AM_CXXFLAGS
+AM_FCFLAGS
+AM_CFLAGS
 H5CPP
 H5FC_PP
 H5FC
 H5CC_PP
 H5CC
+LARGEFILE
+host_os
+host_vendor
+host_cpu
+host
+build_os
+build_vendor
+build_cpu
+build
 RANLIB
 MAINT
 MAINTAINER_MODE_FALSE
@@ -700,6 +714,7 @@ enable_maintainer_mode
 with_zlib
 with_szlib
 enable_filters
+enable_largefile
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1312,6 +1327,10 @@ Program names:
   --program-prefix=PREFIX            prepend PREFIX to installed program names
   --program-suffix=SUFFIX            append SUFFIX to installed program names
   --program-transform-name=PROGRAM   run sed PROGRAM on installed program names
+
+System types:
+  --build=BUILD     configure for building on BUILD [guessed]
+  --host=HOST       cross-compile to build programs to run on HOST [BUILD]
 _ACEOF
 fi
 
@@ -1332,6 +1351,7 @@ Optional Features:
   --enable-filters=all    Turn on all internal I/O filters. One may also
                           specify a comma-separated list of filters or the
                           word no. The default is all internal I/O filters.
+  --disable-largefile     omit support for large files
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -1717,60 +1737,6 @@ fi
 
 } # ac_fn_c_try_link
 
-# ac_fn_c_check_type LINENO TYPE VAR INCLUDES
-# -------------------------------------------
-# Tests whether TYPE exists after having included INCLUDES, setting cache
-# variable VAR accordingly.
-ac_fn_c_check_type ()
-{
-  as_lineno=${as_lineno-"$1"} as_lineno_stack=as_lineno_stack=$as_lineno_stack
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $2" >&5
-$as_echo_n "checking for $2... " >&6; }
-if { as_var=$3; eval "test \"\${$as_var+set}\" = set"; }; then :
-  $as_echo_n "(cached) " >&6
-else
-  eval "$3=no"
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-$4
-int
-main ()
-{
-if (sizeof ($2))
-	 return 0;
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-$4
-int
-main ()
-{
-if (sizeof (($2)))
-	    return 0;
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-
-else
-  eval "$3=yes"
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-fi
-eval ac_res=\$$3
-	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
-$as_echo "$ac_res" >&6; }
-  eval $as_lineno_stack; test "x$as_lineno_stack" = x && { as_lineno=; unset as_lineno;}
-
-} # ac_fn_c_check_type
-
 # ac_fn_c_check_func LINENO FUNC VAR
 # ----------------------------------
 # Tests whether FUNC exists, setting the cache variable VAR accordingly
@@ -1837,6 +1803,60 @@ $as_echo "$ac_res" >&6; }
   eval $as_lineno_stack; test "x$as_lineno_stack" = x && { as_lineno=; unset as_lineno;}
 
 } # ac_fn_c_check_func
+
+# ac_fn_c_check_type LINENO TYPE VAR INCLUDES
+# -------------------------------------------
+# Tests whether TYPE exists after having included INCLUDES, setting cache
+# variable VAR accordingly.
+ac_fn_c_check_type ()
+{
+  as_lineno=${as_lineno-"$1"} as_lineno_stack=as_lineno_stack=$as_lineno_stack
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $2" >&5
+$as_echo_n "checking for $2... " >&6; }
+if { as_var=$3; eval "test \"\${$as_var+set}\" = set"; }; then :
+  $as_echo_n "(cached) " >&6
+else
+  eval "$3=no"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+$4
+int
+main ()
+{
+if (sizeof ($2))
+	 return 0;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+$4
+int
+main ()
+{
+if (sizeof (($2)))
+	    return 0;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+
+else
+  eval "$3=yes"
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
+eval ac_res=\$$3
+	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+$as_echo "$ac_res" >&6; }
+  eval $as_lineno_stack; test "x$as_lineno_stack" = x && { as_lineno=; unset as_lineno;}
+
+} # ac_fn_c_check_type
 cat >config.log <<_ACEOF
 This file contains any messages produced by compilers while
 running configure, to aid debugging if configure makes a mistake.
@@ -2213,6 +2233,7 @@ ac_configure="$SHELL $ac_aux_dir/configure"  # Please don't use this var.
 
 
 ac_config_headers="$ac_config_headers src/h5chk_config.h"
+
 
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
@@ -3605,6 +3626,7 @@ $as_echo "#define AC_APPLE_UNIVERSAL_BUILD 1" >>confdefs.h
  esac
 
 
+
 am__api_version='1.11'
 
 # Find a good install program.  We prefer a C program (faster),
@@ -4933,11 +4955,207 @@ fi
 
 
 
+# Make sure we can run config.sub.
+$SHELL "$ac_aux_dir/config.sub" sun4 >/dev/null 2>&1 ||
+  as_fn_error "cannot run $SHELL $ac_aux_dir/config.sub" "$LINENO" 5
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking build system type" >&5
+$as_echo_n "checking build system type... " >&6; }
+if test "${ac_cv_build+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_build_alias=$build_alias
+test "x$ac_build_alias" = x &&
+  ac_build_alias=`$SHELL "$ac_aux_dir/config.guess"`
+test "x$ac_build_alias" = x &&
+  as_fn_error "cannot guess build type; you must specify one" "$LINENO" 5
+ac_cv_build=`$SHELL "$ac_aux_dir/config.sub" $ac_build_alias` ||
+  as_fn_error "$SHELL $ac_aux_dir/config.sub $ac_build_alias failed" "$LINENO" 5
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_build" >&5
+$as_echo "$ac_cv_build" >&6; }
+case $ac_cv_build in
+*-*-*) ;;
+*) as_fn_error "invalid value of canonical build" "$LINENO" 5;;
+esac
+build=$ac_cv_build
+ac_save_IFS=$IFS; IFS='-'
+set x $ac_cv_build
+shift
+build_cpu=$1
+build_vendor=$2
+shift; shift
+# Remember, the first character of IFS is used to create $*,
+# except with old shells:
+build_os=$*
+IFS=$ac_save_IFS
+case $build_os in *\ *) build_os=`echo "$build_os" | sed 's/ /-/g'`;; esac
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking host system type" >&5
+$as_echo_n "checking host system type... " >&6; }
+if test "${ac_cv_host+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test "x$host_alias" = x; then
+  ac_cv_host=$ac_cv_build
+else
+  ac_cv_host=`$SHELL "$ac_aux_dir/config.sub" $host_alias` ||
+    as_fn_error "$SHELL $ac_aux_dir/config.sub $host_alias failed" "$LINENO" 5
+fi
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_host" >&5
+$as_echo "$ac_cv_host" >&6; }
+case $ac_cv_host in
+*-*-*) ;;
+*) as_fn_error "invalid value of canonical host" "$LINENO" 5;;
+esac
+host=$ac_cv_host
+ac_save_IFS=$IFS; IFS='-'
+set x $ac_cv_host
+shift
+host_cpu=$1
+host_vendor=$2
+shift; shift
+# Remember, the first character of IFS is used to create $*,
+# except with old shells:
+host_os=$*
+IFS=$ac_save_IFS
+case $host_os in *\ *) host_os=`echo "$host_os" | sed 's/ /-/g'`;; esac
+
+
+
+## ----------------------------------------------------------------------
+## Source any special files that we need.  These files normally aren't
+## present but can be used by the maintainers to fine tune things like
+## turning on debug or profiling flags for the compiler.  The search order
+## is:
+##
+##	CPU-VENDOR-OS
+##	VENDOR-OS
+##	CPU-OS
+##	CPU-VENDOR
+##	OS
+##	VENDOR
+##	CPU
+##
+## If the `OS' ends with a version number then remove it. For instance,
+## `freebsd3.1' would become `freebsd'
+
+case $host_os in
+  aix*)
+    host_os_novers=aix
+    ;;
+  freebsd*)
+    host_os_novers=freebsd
+    ;;
+  irix5.*)
+    host_os_novers=irix5.x
+    ;;
+  irix6.*)
+    host_os_novers=irix6.x
+    ;;
+  osf4.*)
+    host_os_novers=osf4.x
+    ;;
+  osf5.*)
+    host_os_novers=osf5.x
+    ;;
+  solaris2.*)
+    host_os_novers=solaris2.x
+    ;;
+  *)
+    host_os_novers=$host_os
+    ;;
+esac
+
+host_config="none"
+for f in $host_cpu-$host_vendor-$host_os \
+         $host_cpu-$host_vendor-$host_os_novers \
+         $host_vendor-$host_os \
+         $host_vendor-$host_os_novers \
+         $host_cpu-$host_os \
+         $host_cpu-$host_os_novers \
+         $host_cpu-$host_vendor \
+         $host_os \
+         $host_os_novers \
+         $host_vendor \
+         $host_cpu ; do
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for config $f" >&5
+$as_echo_n "checking for config $f... " >&6; }
+  if test -f "$srcdir/config/$f"; then
+    host_config=$srcdir/config/$f
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
+$as_echo "found" >&6; }
+    break
+  fi
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+done
+if test "X$host_config" != "Xnone"; then
+  CC_BASENAME="`echo $CC | cut -f1 -d' ' | xargs basename 2>/dev/null`"
+  . $host_config
+fi
+
+## Source any special site-specific file
+hname="`hostname`"
+while test -n "$hname"; do
+  file=$srcdir/config/site-specific/host-$hname
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for config $file" >&5
+$as_echo_n "checking for config $file... " >&6; }
+  if test -f "$file"; then
+    . $file
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
+$as_echo "found" >&6; }
+    break
+  fi
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+  hname_tmp=$hname
+  hname="`echo $hname | cut -d. -f2-99`"
+  test "$hname_tmp" = "$hname" && break
+done
+
+ LARGEFILE=yes
 
 
 
 
 
+
+
+
+
+## AM_CFLAGS (and company) are for CFLAGS that should be used on HDF5,
+## and WILL be exported to h5cc (or h5fc, etc) if set by configure.
+
+
+
+
+
+
+## Make sure flags are set to something (otherwise macros may set them later).
+AM_CFLAGS="${AM_CFLAGS}"
+AM_CXXFLAGS="${AM_CXXFLAGS}"
+AM_FCFLAGS="${AM_FCFLAGS}"
+AM_CPPFLAGS="${AM_CPPFLAGS}"
+AM_LDFLAGS="${AM_LDFLAGS}"
+CFLAGS="${CFLAGS}"
+CXXFLAGS="${CXXFLAGS}"
+FCFLAGS="${FCFLAGS}"
+CPPFLAGS="${CPPFLAGS}"
+LDFLAGS="${LDFLAGS}"
+
+## Configure may need to alter any of the *FLAGS variables in order for
+## various checks to work correctly. Save the user's value here so it
+## can be restored once all configure checks are complete.
+saved_user_CFLAGS="$CFLAGS"
+saved_user_CXXFLAGS="$CXXFLAGS"
+saved_user_FCFLAGS="$FCFLAGS"
+saved_user_LDFLAGS="$LDFLAGS"
+saved_user_CPPFLAGS="$CPPFLAGS"
 
 H5CC="${H5CC:-h5cc}"
 H5CC_PP="${H5CC_PP:-h5pcc}"
@@ -5402,6 +5620,399 @@ $as_echo "#define HAVE_BIG_ENDIAN 1" >>confdefs.h
 
 fi
 
+#####
+## ----------------------------------------------------------------------
+## Test for Largefile support.
+##
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking if configure should try to set up large file support" >&5
+$as_echo_n "checking if configure should try to set up large file support... " >&6; }
+
+# Check whether --enable-largefile was given.
+if test "${enable_largefile+set}" = set; then :
+  enableval=$enable_largefile;
+fi
+
+
+## If largefile support is enabled, then set up appropriate compiler options.
+if test "$enable_largefile" != no; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+
+  ## Check for needed compiler options. This check is pulled drectly
+  ## from autoconf's AC_SYS_LARGEFILE macro, as of Autoconf v2.65.
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for special C compiler options needed for large files" >&5
+$as_echo_n "checking for special C compiler options needed for large files... " >&6; }
+if test "${ac_cv_sys_largefile_CC+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_cv_sys_largefile_CC=no
+     if test "$GCC" != yes; then
+       ac_save_CC=$CC
+       while :; do
+         ## IRIX 6.2 and later do not support large files by default,
+         ## so use the C compiler's -n32 option if that helps.
+         cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+         if ac_fn_c_try_compile "$LINENO"; then :
+  break
+fi
+rm -f core conftest.err conftest.$ac_objext
+         CC="$CC -n32"
+         if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_largefile_CC=' -n32'; break
+fi
+rm -f core conftest.err conftest.$ac_objext
+         break
+       done
+       CC=$ac_save_CC
+       rm -f conftest.$ac_ext
+    fi
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_sys_largefile_CC" >&5
+$as_echo "$ac_cv_sys_largefile_CC" >&6; }
+  if test "$ac_cv_sys_largefile_CC" != no; then
+    CC=$CC$ac_cv_sys_largefile_CC
+  fi
+
+
+  ## Use the macro _AC_SYS_LARGEFILE_MACRO_VALUE to test defines
+  ## that might need to be set for largefile support to behave
+  ## correctly. This macro is defined in acsite.m4 and overrides
+  ## the version provided by Autoconf (as of v2.65). The custom
+  ## macro additionally adds the appropriate defines to AM_CPPFLAGS
+  ## so that later configure checks have them visible.
+
+  ## Check for _FILE_OFFSET_BITS
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for _FILE_OFFSET_BITS value needed for large files" >&5
+$as_echo_n "checking for _FILE_OFFSET_BITS value needed for large files... " >&6; }
+if test "${ac_cv_sys_file_offset_bits+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  while :; do
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_file_offset_bits=no; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#define _FILE_OFFSET_BITS 64
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_file_offset_bits=64; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  ac_cv_sys_file_offset_bits=unknown
+  break
+done
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_sys_file_offset_bits" >&5
+$as_echo "$ac_cv_sys_file_offset_bits" >&6; }
+case $ac_cv_sys_file_offset_bits in #(
+  no | unknown) ;;
+  *)
+cat >>confdefs.h <<_ACEOF
+#define _FILE_OFFSET_BITS $ac_cv_sys_file_offset_bits
+_ACEOF
+
+     AM_CPPFLAGS="-D_FILE_OFFSET_BITS=$ac_cv_sys_file_offset_bits $AM_CPPFLAGS";;
+esac
+rm -rf conftest*
+
+  ## Check for _LARGE_FILES
+  if test "$ac_cv_sys_file_offset_bits" = unknown; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for _LARGE_FILES value needed for large files" >&5
+$as_echo_n "checking for _LARGE_FILES value needed for large files... " >&6; }
+if test "${ac_cv_sys_large_files+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  while :; do
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_large_files=no; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#define _LARGE_FILES 1
+#include <sys/types.h>
+ /* Check that off_t can represent 2**63 - 1 correctly.
+    We can't simply define LARGE_OFF_T to be 9223372036854775807,
+    since some C++ compilers masquerading as C compilers
+    incorrectly reject 9223372036854775807.  */
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+  int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
+		       && LARGE_OFF_T % 2147483647 == 1)
+		      ? 1 : -1];
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_sys_large_files=1; break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  ac_cv_sys_large_files=unknown
+  break
+done
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_sys_large_files" >&5
+$as_echo "$ac_cv_sys_large_files" >&6; }
+case $ac_cv_sys_large_files in #(
+  no | unknown) ;;
+  *)
+cat >>confdefs.h <<_ACEOF
+#define _LARGE_FILES $ac_cv_sys_large_files
+_ACEOF
+
+     AM_CPPFLAGS="-D_LARGE_FILES=$ac_cv_sys_large_files $AM_CPPFLAGS";;
+esac
+rm -rf conftest*
+  fi
+
+  ## Now actually test to see if we can create large files after we've
+  ## checked for any needed defines.
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking if large (64-bit) files are supported on this system." >&5
+$as_echo_n "checking if large (64-bit) files are supported on this system.... " >&6; }
+  if test "${h5check_cv_have_lfs+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test "$cross_compiling" = yes; then :
+  { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error "cannot run test program while cross compiling
+See \`config.log' for more details." "$LINENO" 5; }
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+      #include <stdio.h>
+      #include <unistd.h>
+      #include <stdlib.h>
+      #include <fcntl.h>
+      #define BIG_FILE (off_t)0x80000000UL
+      int main(void) {
+        int fd;
+        if ((fd=open("test.conf", O_RDWR|O_TRUNC|O_CREAT, 0666)) < 0) exit(1);
+        if (lseek(fd, BIG_FILE, SEEK_SET)!=BIG_FILE) exit(1);
+        if (5!=write(fd, "hello", (size_t)5)) exit(1);
+        if (lseek(fd, 2*BIG_FILE, SEEK_SET) != 2*BIG_FILE) exit(1);
+        if (5!=write(fd, "hello", (size_t)5)) exit(1);
+        if (unlink("test.conf") < 0) exit(1);
+        exit(0);
+      }
+
+_ACEOF
+if ac_fn_c_try_run "$LINENO"; then :
+  h5check_cv_have_lfs=yes
+else
+  h5check_cv_have_lfs=no
+fi
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+  conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+fi
+
+
+  if test "X${h5check_cv_have_lfs}" = "Xyes"; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+    LARGEFILE="yes"
+  fi
+  if test "X${h5check_cv_have_lfs}" = "Xno"; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+    LARGEFILE="no"
+  fi
+
+else
+  LARGEFILE="no"
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+## ----------------------------------------------------------------------
+## Add necessary defines for Linux Systems.
+##
+case "$host_cpu-$host_vendor-$host_os" in
+  *linux*)
+    ## If largefile support is enabled, then make available various
+    ## LFS-related routines using the following _LARGEFILE*_SOURCE macros.
+    if test "X$LARGEFILE" != "Xno"; then
+        AM_CPPFLAGS="-D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE $AM_CPPFLAGS"
+    fi
+
+    ## Also add BSD support on Linux systems, so <features.h> defines
+    ## __USE_BSD, which is required to get the prototype for strdup
+    ## defined correctly in <string.h> and snprintf & vsnprintf defined
+    ## correctly in <stdio.h>
+    ## Linking to the bsd-compat library is required as per the gcc manual:
+    ## http://www.gnu.org/s/libc/manual/html_node/Feature-Test-Macros.html
+    ## however, we do not do this since it breaks the big test on some
+    ## older platforms.
+    AM_CPPFLAGS="-D_BSD_SOURCE $AM_CPPFLAGS"
+    ;;
+esac
+
+## Need to add the AM_ and H5_ into CFLAGS/CPPFLAGS to make them visible
+## for configure checks.
+## Note: Both will be restored by the end of configure.
+CPPFLAGS="$AM_CPPFLAGS $CPPFLAGS"
+CFLAGS="$AM_CFLAGS $CFLAGS"
+
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/types.h>
+int
+main ()
+{
+off64_t n = 0;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  for ac_func in lseek64 fseeko64 ftello64 ftruncate64
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+eval as_val=\$$as_ac_var
+   if test "x$as_val" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+done
+
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: skipping test for lseek64(), fseeko64 , ftello64, ftruncate64() because off64_t is not defined" >&5
+$as_echo "skipping test for lseek64(), fseeko64 , ftello64, ftruncate64() because off64_t is not defined" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+for ac_func in fseeko ftello
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+eval as_val=\$$as_ac_var
+   if test "x$as_val" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+done
+
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <sys/types.h>
+#include <sys/stat.h>
+int
+main ()
+{
+struct stat64 sb;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  for ac_func in stat64 fstat64
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+eval as_val=\$$as_ac_var
+   if test "x$as_val" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+done
+
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: skipping test for stat64() and fstat64()" >&5
+$as_echo "skipping test for stat64() and fstat64()" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+#####
+
+LIBS="$DEFAULT_LIBS $LIBS"
 
 # Checks for header files.
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ANSI C header files" >&5
@@ -5925,6 +6536,14 @@ _ACEOF
 fi
 done
 
+
+## ----------------------------------------------------------------------
+## Restore user's CFLAGS.
+CFLAGS="$saved_user_CFLAGS"
+FCFLAGS="$saved_user_FCFLAGS"
+CXXFLAGS="$saved_user_CXXFLAGS"
+CPPFLAGS="$saved_user_CPPFLAGS"
+LDFLAGS="$saved_user_LDFLAGS"
 
 ac_config_files="$ac_config_files Makefile src/Makefile test/Makefile tool/Makefile"
 

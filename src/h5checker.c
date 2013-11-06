@@ -1027,7 +1027,7 @@ size_t bytes; /* return bytes instead ?? */
 	CK_SET_RET(FAIL)
     else {
 	fd = ((driver_sec2_t *)file)->fd;
-	if(lseek(fd, addr, SEEK_SET) < 0)
+	if(CK_lseek(fd, addr, SEEK_SET) < 0)
 	    CK_SET_RET(FAIL)
 	else if ((bytes = read(fd, buf, size)) < 0)
 	    CK_SET_RET(FAIL)

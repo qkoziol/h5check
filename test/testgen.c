@@ -2573,22 +2573,167 @@ gen_ext_links(hid_t fid, char *ext_fname)
 
 #endif /* H5_LIBVERSION == 18 */
 
-char *ext_fname[] = {
-    "ext_dangle1",	/* 0 */
-    "ext_dangle2",	/* 1 */
-    "ext_self1",	/* 2 */
-    "ext_self2",	/* 3 */
-    "ext_self3",	/* 4 */
-    "ext_mult1",	/* 5 */
-    "ext_mult2",	/* 6 */
-    "ext_mult3",	/* 7 */
-    "ext_mult4",	/* 8 */
-    "ext_pingpong1",	/* 9 */
-    "ext_pingpong2",	/* 10 */
-    "ext_toomany1",	/* 11 */
-    "ext_toomany2",	/* 12 */
-    "ext_links"		/* 13 */
-};
+#define TWO_GB 		(unsigned long long)(.5*1024*1024*1024)
+#define WRT_N		50
+#define WRT_SIZE	4096
+#define MAX_TRIES       100
+#define BIT64		64
+static hsize_t 		values_used[50];
+/*
+ * This routine is copied from the HDF5 library: test/big.c
+ * To create a random long long value.
+ * Ensures that a write at this value doesn't overlap any
+ * previous write.
+ */
+static hsize_t
+randll(hsize_t limit, int current_index)
+{
+    hsize_t	acc;
+    int 	overlap = 1;
+    int 	i;
+    int 	tries = 0;
+
+    /* Generate up to MAX_TRIES random numbers until one of them */
+    /* does not overlap with any previous writes */
+    while(overlap != 0 && tries < MAX_TRIES)
+    {
+        acc = random();
+        acc *= random();
+        acc = acc % limit;
+        overlap = 0;
+
+        for(i = 0; i < current_index; i++)
+        {
+            if((acc >= values_used[i]) && (acc < values_used[i] + WRT_SIZE))
+                overlap = 1;
+            if((acc + WRT_SIZE >= values_used[i]) && (acc + WRT_SIZE < values_used[i]+ WRT_SIZE))
+                overlap = 1;
+        }
+        tries++;
+    }
+
+    values_used[current_index]=acc;
+
+    return acc;
+} /* randll() */
+
+/*
+ * This routine is extracted mostly from the HDF5 library: test/big.c
+ * To create a 2GB HDF5 file.
+ */
+static void
+gen_big(char *fname, char *driver, char *superblock)
+{
+    hsize_t	dims[1] = {TWO_GB};	/* Dataset dimension size */
+    hsize_t	hs_start[1];		/* Starting offset for the selection */
+    hsize_t	hs_size[1];		/* # of blocks for the selection */
+    hid_t	mem_space = -1;		/* Memory space ID */
+    hid_t 	fid = -1;		/* File ID */
+    hid_t 	sid = -1;		/* Dataspace ID */
+    hid_t 	did = -1;		/* Dataset ID */
+    hid_t       dcpl = -1;		/* Dataset creation property list */
+    int		*buf;			/* Buffer for data */
+    int		i, j;			/* LOcal index variable */
+    herr_t 	ret;			/* Return value from calls */
+    int 	mbit = 0;		/* Machine word size */
+    FILE 	*fp;			/* File pointer */
+    int 	chkoff = 0;		/* If file offset is defined */
+    int 	chklseek = 0;		/* If lseek64 is defined */
+
+#if H5_HAVE_LSEEK64
+    chklseek = 1;
+#endif
+#if _FILE_OFFSET_BITS == BIT64
+    chkoff = 1;
+#endif
+
+    /* Execute "getconf LONG_BIT" to get machine's word size */
+    ret = system("getconf LONG_BIT > oo");
+    VRFY((ret >= 0), "system");
+
+    /* Retrieve the return value from "getconf" */
+    fp = fopen("oo", "r");
+    VRFY((fp != NULL), "fopen");
+
+    ret = fscanf(fp, "%d", &mbit);
+    VRFY((ret == 1), "fscanf");
+
+    ret = fclose(fp);
+    VRFY((ret >= 0), "fclose");
+
+    ret = unlink("oo");
+    VRFY((ret >= 0), "unlink");
+
+    /* Continue only for 64-bit machine or H5_HAVE_LSEEK64 is defined */
+    if(mbit != BIT64 && !chklseek) {
+	printf("Not generating 2GB file...H5_HAVE_LSEEK64 is not defined.\n");
+	return;
+    }
+
+    /* Continue only for 64-bit machine or H5__FILE_OFFSET_BITS is defined to 64 */
+    if(mbit != BIT64 && !chkoff) {
+	printf("Not generating 2GB file...not 64-bit machine and H5__FILE_OFFSET_BITS is not defined to 64.\n");
+	return;
+    }
+
+    /* Create the file */
+    fid = create_file(fname, driver, superblock);
+    VRFY((fid >= 0), "create_file");
+    printf("2 GB file\n");
+
+    /* Create simple data spaces according to the size specified above. */
+    sid = H5Screate_simple(1, dims, dims);
+    VRFY((sid >= 0), "H5Screate_simple");
+
+    /* Create the datasets */
+    dcpl = H5Pcreate(H5P_DATASET_CREATE);
+    VRFY((dcpl >= 0), "H5Pcreate");
+
+    ret = H5Pset_alloc_time(dcpl, H5D_ALLOC_TIME_LATE);
+    VRFY((ret >= 0), "H5Pset_alloc_time");
+
+    ret = H5Pset_fill_time(dcpl, H5D_FILL_TIME_NEVER);
+    VRFY((ret >= 0), "H5Pset_fill_time");
+
+    /* Create the dataset */
+    did = H5Dcreate2(fid, "DSET", H5T_NATIVE_INT, sid, H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    VRFY((did >= 0), "H5Dcreate");
+
+    /* Write some things to them randomly */
+    hs_size[0] = WRT_SIZE;
+    mem_space = H5Screate_simple(1, hs_size, hs_size);
+    VRFY((mem_space >= 0), "H5Screate_simple");
+
+    /* Write to the dataset */
+    buf = (int*)malloc(sizeof(int) * WRT_SIZE);
+    for (i = 0; i < WRT_N; i++) {
+	/* start position must be at least hs_size from the end */
+	hs_start[0] = randll(dims[0]-hs_size[0], i);
+	ret = H5Sselect_hyperslab(sid, H5S_SELECT_SET, hs_start, NULL, hs_size, NULL);
+	VRFY((ret >= 0), "H5Sselect_hyperslab");
+	for (j = 0; j < WRT_SIZE; j++) {
+	    buf[j] = i+1;
+	}
+	ret = H5Dwrite(did, H5T_NATIVE_INT, mem_space, sid, H5P_DEFAULT, buf);
+	VRFY((ret >= 0), "H5Dwrite");
+    }
+
+    /* Closing */
+    ret = H5Dclose(did);
+    VRFY((ret >= 0), "H5Dclose");
+
+    ret = H5Sclose(mem_space);
+    VRFY((ret >= 0), "H5Sclose");
+
+    ret = H5Sclose(sid);
+    VRFY((ret >= 0), "H5Sclose");
+
+    close_file(fid, "");
+
+    if(buf) /* Free the buffer */
+	free(buf);
+} /* gen_big() */
+
 
 /* main function of test generator */
 int main(int argc, char *argv[])
@@ -2631,6 +2776,7 @@ int main(int argc, char *argv[])
 	"external_empty",
 	"external_full",
 	"alternate_sb", 
+	"big",
 	"new_grat", 
 	"sohm"
     }; 
@@ -2814,6 +2960,9 @@ int main(int argc, char *argv[])
     gen_group_datasets(fid, GROUP_PREFIX, HEIGHT, RIGHT);
     close_file(fid, "");
    
+    /* Create a 2GB file: do so in gen_big() when conditions are met */
+    gen_big(fname[i++], driver, superblock);
+
 #if H5_LIBVERSION == 18 /* for library release > 1.8 */
 
     fid = create_file(fname[i++], driver, "new");

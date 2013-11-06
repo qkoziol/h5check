@@ -50,6 +50,18 @@
 #define addr_defined(X)     	(X!=CK_ADDR_UNDEF)
 #define addr_eq(X,Y)        	((X)!=CK_ADDR_UNDEF && (X)==(Y))
 
+/* CK_lseek and CK_off_t must be defined together for consistency. */
+#ifndef CK_lseek
+    #ifdef HAVE_LSEEK64
+        #define CK_lseek(F,O,W)  lseek64(F,O,W)
+        #define CK_off_t    off64_t
+    #else
+        #define CK_lseek(F,O,W)  lseek(F,O,W)
+	#define CK_off_t    off_t
+    #endif
+#endif /* CK_lseek */
+
+
 /* see H5public.h for definition of ck_size_t, H5pubconf.h */
 typedef size_t                  ck_size_t;
 typedef unsigned long long      ck_hsize_t;
@@ -772,7 +784,7 @@ typedef struct OBJ_link_t {
 typedef struct OBJ_edf_entry_t {
     size_t      name_offset;            /*offset of name within heap         */
     char        *name;                  /*malloc'd name                      */
-    off_t       offset;                 /*offset of data within file         */
+    CK_off_t    offset;                 /*offset of data within file         */
     ck_size_t   size;                   /*size allocated within file         */
 } OBJ_edf_entry_t;
 
