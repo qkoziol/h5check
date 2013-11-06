@@ -28,6 +28,8 @@
 
 ./bin/chkcopyright	_DO_NOT_DISTRIBUTE_
 ./bin/chkmanifest
+./bin/config.guess
+./bin/config.sub
 ./bin/depcomp
 ./bin/h5check_vers
 ./bin/install-sh
