@@ -2696,7 +2696,7 @@ gen_big(char *fname, char *driver, char *superblock)
     VRFY((ret >= 0), "H5Pset_fill_time");
 
     /* Create the dataset */
-    did = H5Dcreate2(fid, "DSET", H5T_NATIVE_INT, sid, H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    did = H5Dcreate(fid, "DSET", H5T_NATIVE_INT, sid, dcpl);
     VRFY((did >= 0), "H5Dcreate");
 
     /* Write some things to them randomly */
