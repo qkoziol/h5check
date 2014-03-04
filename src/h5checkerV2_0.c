@@ -480,7 +480,7 @@ HF_huge_bt2_filt_indir_found(const void *nrecord, void *op_data)
 static ck_err_t
 check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_t **ret_hdr)
 {
-    int		version, badinfo, u;
+    int		version, u;
     uint8_t	*buf = NULL, *p;
     ck_size_t	hdr_size;
     uint32_t	stored_chksum, computed_chksum;
@@ -537,10 +537,8 @@ check_bt2_hdr(driver_t *file, ck_addr_t bt_hdr_addr, const B2_class_t *type, B2_
     p += B2_SIZEOF_MAGIC;
     logical = get_logical_addr(p, start_buf, bt_hdr_addr);
 
-    version = *p++;
-    if(version != B2_HDR_VERSION) {
-	badinfo = version;
-	error_push(ERR_LEV_1, ERR_LEV_1A2, "Bad version number: v2 B-tree header", bt_hdr_addr, &badinfo);
+    if((version = *p++) != B2_HDR_VERSION) {
+	error_push(ERR_LEV_1, ERR_LEV_1A2, "Bad version number: v2 B-tree header", bt_hdr_addr, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -784,7 +782,7 @@ free_bt2_leaf(B2_leaf_t *leaf)
 static ck_err_t
 check_bt2_internal(driver_t *file, ck_addr_t addr, B2_shared_t *bt2_shared, unsigned nrec, unsigned depth, B2_internal_t **ret_internal, ck_op_t ck_op, void *ck_udata)
 {
-    int			version, badinfo;
+    int			version;
     B2_subid_t 		type_id;
     uint32_t		stored_chksum, computed_chksum;
     unsigned		u;
@@ -1214,7 +1212,7 @@ check_fssection(driver_t *file, ck_addr_t fssect_addr, FS_hdr_t *fs_hdr)
     uint32_t            stored_chksum, computed_chksum; 
     uint8_t             *start_buf = NULL;
     ck_addr_t           logical;
-    int			version, badinfo;
+    int			version;
 
     assert(file);
     assert(addr_defined(fssect_addr));
@@ -1257,9 +1255,8 @@ check_fssection(driver_t *file, ck_addr_t fssect_addr, FS_hdr_t *fs_hdr)
     p += FS_SIZEOF_MAGIC;
 
     logical = get_logical_addr(p, start_buf, fssect_addr);
-    version = *p++;
-    if(version != FS_SINFO_VERSION) {
-	error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Wrong version", logical, &badinfo);
+    if((version = *p++) != FS_SINFO_VERSION) {
+	error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Section List:Wrong version", logical, &version);
         CK_SET_RET(FAIL)
     }
 
@@ -1352,7 +1349,7 @@ check_fshdr(driver_t *file, ck_addr_t fs_addr, HF_hdr_t *fh_hdr)
     uint8_t             *start_buf = NULL;
     ck_addr_t           logical;
     ck_size_t		u, nclasses;
-    int			version, badinfo;
+    int			version;
 
     /* Check arguments */
     assert(file);
@@ -1420,10 +1417,8 @@ check_fshdr(driver_t *file, ck_addr_t fs_addr, HF_hdr_t *fh_hdr)
     logical = get_logical_addr(p, start_buf, fs_addr);
 
     /* Version */
-    version = *p++;
-    if(version != FS_HDR_VERSION) {
-	badinfo = version;
-        error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Wrong header version", logical, &badinfo);
+    if((version = *p++) != FS_HDR_VERSION) {
+        error_push(ERR_LEV_1, ERR_LEV_1G, "Free Space Manager Header:Wrong header version", logical, &version);
         CK_SET_RET(FAIL)
     }
 

@@ -72,7 +72,7 @@ pline_register(const Z_class_t *cls)
 
 done:
     return(ret_value);
-}
+} /* pline_register() */
 
 
 
@@ -134,7 +134,7 @@ void
 pline_free(void)
 {
     if(Z_table_g) free(Z_table_g);
-}
+} /* pline_free() */
 
 #ifdef HAVE_FILTER_DEFLATE
 /* 
@@ -158,6 +158,17 @@ Z_filter_deflate(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
 
     if(debug_verbose())
         printf("Applying deflate filter ...\n");
+
+    if(!(*buf_size > 0)) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Invalid buffer size", -1, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
+    if(buf == NULL || (!(*buf))) {
+	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Invalid buffer", -1, NULL);
+	CK_SET_RET_DONE(FAIL)
+    }
+
 
     if(cd_nelmts != 1 || cd_values[0] > 9) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, "Deflate filter:Invalid level", -1, NULL);
@@ -375,7 +386,7 @@ Z_filter_shuffle(unsigned flags, ck_size_t cd_nelmts, const unsigned cd_values[]
 
 done:
     return(ret_value);
-}
+} /* Z_filter_shuffle() */
 #endif
 
 
@@ -436,7 +447,7 @@ checksum_fletcher32(const void *_data, ck_size_t _len)
     sum2 = (sum2 & 0xffff) + (sum2 >> 16);
 
     return((sum2 << 16) | sum1);
-}
+} /* checksum_fletcher32() */
 
 
 /* 
@@ -503,7 +514,7 @@ done:
     if(outbuf)
         free(outbuf);
     return(ret_value);
-}
+} /* Z_filter_fletcher32() */
 #endif
 
 
@@ -585,7 +596,7 @@ done:
     if(outbuf)
         free(outbuf);
     return(ret_value);
-}
+} /* Z_filter_szip() */
 #endif
 
 
@@ -631,7 +642,7 @@ Z_nbit_next_byte(ck_size_t *j, int *buf_len)
 {
    ++(*j);
    *buf_len = 8 * sizeof(unsigned char);
-}
+} /* Z_nbit_next_byte() */
 
 /* support routine for nbit filter */
 static void 
@@ -675,7 +686,7 @@ Z_nbit_decompress_one_byte(unsigned char *data, ck_size_t data_offset, int k, in
       ((val >> (*buf_len - dat_len)) & ~(~0 << dat_len)) << uchar_offset;
       *buf_len -= dat_len;
    }
-}
+} /* Z_nbit_decompress_one_byte() */
 
 /* support routine for nbit filter */
 static void 
@@ -700,7 +711,7 @@ Z_nbit_decompress_one_nooptype(unsigned char *data, ck_size_t data_offset,
       data[data_offset + i] |= ((val >> (*buf_len - dat_len)) & ~(~0 << dat_len));
       *buf_len -= dat_len;
    }
-}
+} /* Z_nbit_decompress_one_nooptype() */
 
 
 /* support routine for nbit filter */
@@ -737,7 +748,7 @@ Z_nbit_decompress_one_atomic(unsigned char *data, ck_size_t data_offset,
       for(k = begin_i; k <= end_i; k++)
          Z_nbit_decompress_one_byte(data, data_offset, k, begin_i, end_i, buffer, j, buf_len, p, datatype_len);
    }
-}
+} /* Z_nbit_decompress_one_atomic() */
 
 
 /* support routine for nbit filter */
@@ -778,7 +789,7 @@ Z_nbit_decompress_one_compound(unsigned char *data, ck_size_t data_offset,
               break;
       } /* end switch */
    }
-}
+} /* Z_nbit_decompress_one_compound() */
 
 /* support routine for nbit filter */
 static void 
@@ -827,7 +838,7 @@ Z_nbit_decompress_one_array(unsigned char *data, ck_size_t data_offset,
            Z_nbit_decompress_one_nooptype(data, data_offset, buffer, j, buf_len, total_size);
            break;
    } /* end switch */
-}
+} /* Z_nbit_decompress_one_array() */
 
 
 /* support routine for nbit filter */
@@ -875,7 +886,7 @@ Z_nbit_decompress(unsigned char *data, unsigned d_nelmts, unsigned char *buffer,
            }
            break;
    } /* end switch */
-}
+} /* Z_nbit_decompress() */
 
 /* 
  * nbit filter 
@@ -936,7 +947,7 @@ done:
     if(outbuf)
         free(outbuf);
     return(ret_value);
-}
+} /* Z_filter_nbit() */
 #endif
 
 #ifdef HAVE_FILTER_SCALEOFFSET
@@ -1136,14 +1147,14 @@ Z_scaleoffset_convert(void *buf, unsigned d_nelmts, ck_size_t dtype_size)
 		buffer[i+dtype_size-1-j] = temp;
 	    }
     }
-}
+} /* Z_scaleoffset_convert() */
 
 /* Support routine for scaleoffset filter */
 static void 
 Z_scaleoffset_next_byte(ck_size_t *j, int *buf_len)
 {
     ++(*j); *buf_len = 8 * sizeof(unsigned char);
-}
+} /* Z_scaleoffset_next_byte() */
 
 
 /* Support routine for scaleoffset filter */
@@ -1174,7 +1185,7 @@ Z_scaleoffset_decompress_one_byte(unsigned char *data, ck_size_t data_offset, in
 	data[data_offset + k] |= ((val >> (*buf_len - dat_len)) & ~(~0 << dat_len));
 	*buf_len -= dat_len;
     }
-}
+} /* Z_scaleoffset_decompress_one_byte() */
 
 /* Support routine for scaleoffset filter */
 static void 
@@ -1201,7 +1212,7 @@ Z_scaleoffset_decompress_one_atomic(unsigned char *data, ck_size_t data_offset, 
 	for(k = begin_i; k <= p.size - 1; k++)
 	    Z_scaleoffset_decompress_one_byte(data, data_offset, k, begin_i, buffer, j, buf_len, p, dtype_len);
     }
-}
+} /* Z_scaleoffset_decompress_one_atomic() */
 
 /* Support routine for scaleoffset filter */
 static void 
@@ -1226,8 +1237,7 @@ Z_scaleoffset_decompress(unsigned char *data, unsigned d_nelmts, unsigned char *
     /* decompress */
     for(i = 0; i < d_nelmts; i++)
 	Z_scaleoffset_decompress_one_atomic(data, i*p.size, buffer, &j, &buf_len, p);
-}
-
+} /* Z_scaleoffset_decompress() */
 
 /* Support routine for scaleoffset filter */
 static enum Z_scaleoffset_type
@@ -1288,7 +1298,7 @@ Z_scaleoffset_get_type(unsigned dtype_class, unsigned dtype_size, unsigned dtype
 
 done:
     return(ret_value);
-}
+} /* Z_scaleoffset_get_type() */
 
 
 
@@ -1328,7 +1338,7 @@ Z_scaleoffset_postdecompress_i(void *data, unsigned d_nelmts, enum Z_scaleoffset
       Z_scaleoffset_postdecompress_2(long, data, d_nelmts, filavail, filval_buf, minbits, sminval)
    else if(type == t_long_long)
       Z_scaleoffset_postdecompress_2(long_long, data, d_nelmts, filavail, filval_buf, minbits, sminval)
-}
+} /* Z_scaleoffset_postdecompress_i() */
 
 /* 
  * Support routine for scaleoffset filter:
@@ -1350,7 +1360,7 @@ Z_scaleoffset_postdecompress_fd(void *data, unsigned d_nelmts, enum Z_scaleoffse
 
 done:
    return(ret_value);
-}
+} /* Z_scaleoffset_postdecompress_fd() */
 
 
 /* 
@@ -1578,7 +1588,7 @@ done:
     if(outbuf)
         free(outbuf);
     return(ret_value);
-}
+} /* Z_filter_scaleoffset() */
 
 #endif
 
@@ -1593,7 +1603,7 @@ filter_find_idx(Z_filter_t id)
             CK_SET_RET_DONE((int)i)
 done:
     return(ret_value);
-} 
+} /* filter_find_idx() */
 
 ck_err_t
 filter_pline(const OBJ_filter_t *pline, unsigned flags, unsigned *filter_mask/*in,out*/,

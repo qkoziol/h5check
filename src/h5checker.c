@@ -1685,7 +1685,6 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t
     unsigned i;              
     unsigned flags, version;
     ck_addr_t logical;
-    int	badinfo;
     int	ret_value=SUCCEED;
     void *ret_ptr=NULL;
 
@@ -1705,25 +1704,22 @@ OBJ_sds_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t
     /* version adjusted if error for further continuation */
     if(g_format_num == FORMAT_ONE_SIX) {
 	if(version != OBJ_SDS_VERSION_1) {
-	    badinfo = version;
-	    version = OBJ_SDS_VERSION_1;
-	    error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message v.1:Wrong version number", logical, &badinfo);
+	    error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message v.1:Wrong version number", logical, &version);
 	    CK_SET_RET(FAIL)
+	    version = OBJ_SDS_VERSION_1;
 	}
     } else {
 	if(version < OBJ_SDS_VERSION_1 || version > OBJ_SDS_VERSION_2) {
-	   badinfo = version;
-	   version = OBJ_SDS_VERSION_2;
-	   error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message:Wrong version number", logical, &badinfo);
+	   error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message:Wrong version number", logical, &version);
 	   CK_SET_RET(FAIL)
+	   version = OBJ_SDS_VERSION_2;
 	}
     }
 
     logical = get_logical_addr(p, start, base);
     mesg->rank = *p++;
     if(mesg->rank > OBJ_SDS_MAX_RANK) {
-       badinfo = mesg->rank;
-       error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message:Dimensionality is too large", logical, &badinfo);
+       error_push(ERR_LEV_2, ERR_LEV_2A2b, "Dataspace Message:Dimensionality is too large", logical, &mesg->rank);
        CK_SET_RET(FAIL)
     }
 
@@ -1820,7 +1816,6 @@ OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr
 {
     OBJ_linfo_t 	*mesg=NULL;  
     unsigned char 	index_flags;
-    int			badinfo;
     int			ret_value=SUCCEED;
     void        	*ret_ptr=NULL;
     unsigned        	version;
@@ -1838,9 +1833,8 @@ OBJ_linfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr
     logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_LINFO_VERSION) {
-	badinfo = version;
 	error_push(ERR_LEV_2, ERR_LEV_2A2c, 
-	    "Link Info Message:Bad version number", logical, &badinfo);
+	    "Link Info Message:Bad version number", logical, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -1928,7 +1922,6 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
     unsigned        	i, j;
     size_t        	z;
     ck_addr_t		logical;
-    int			badinfo;
     ck_err_t    	ret_value=SUCCEED;
 
     /* check args */
@@ -1943,17 +1936,15 @@ OBJ_dt_decode_helper(driver_t *file, const uint8_t **pp, OBJ_type_t *dt, const u
     /* version is adjusted if error for continuation */
     if(g_format_num == FORMAT_ONE_SIX) {
 	if(version != DT_VERSION_1 && version != DT_VERSION_2) {
-	   badinfo = version;
-	   version = DT_VERSION_2;
-	   error_push(ERR_LEV_2, ERR_LEV_2A2d, "Datatype Message:Bad version number", logical, &badinfo);
+	   error_push(ERR_LEV_2, ERR_LEV_2A2d, "Datatype Message:Bad version number", logical, &version);
 	   CK_SET_RET(FAIL)
+	   version = DT_VERSION_2;
 	}
     } else {
 	if(version < DT_VERSION_1 || version > DT_VERSION_3) {
-	   badinfo = version;
-	   version = DT_VERSION_3;
-	   error_push(ERR_LEV_2, ERR_LEV_2A2d, "Datatype Message:Bad version number", logical, &badinfo);
+	   error_push(ERR_LEV_2, ERR_LEV_2A2d, "Datatype Message:Bad version number", logical, &version);
 	   CK_SET_RET(FAIL)
+	   version = DT_VERSION_3;
 	}
     }
 
@@ -2674,7 +2665,7 @@ OBJ_fill_old_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_a
 {
     OBJ_fill_t 	*mesg=NULL;            /* Decoded fill value message */
     ck_addr_t   logical;
-    int         version, badinfo;
+    int         version;
     void 	*ret_ptr=NULL;                  
     int         ret_value=SUCCEED;
 
@@ -2729,7 +2720,6 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
     void        *ret_ptr=NULL;
     int		ret_value=SUCCEED;
     ck_addr_t	logical;
-    int		badinfo;
     unsigned	version;
 
     assert(file);
@@ -2748,17 +2738,15 @@ OBJ_fill_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
     /* version is adjusted if error for further continuation */
     if(g_format_num == FORMAT_ONE_SIX) {
 	if(version != OBJ_FILL_VERSION && version != OBJ_FILL_VERSION_2) {
-	    badinfo = version;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2f, "FIll Value Message:Bad version number", logical, &version);
+	    CK_SET_RET(FAIL)
 	    version = OBJ_FILL_VERSION_2;
-	    error_push(ERR_LEV_2, ERR_LEV_2A2f, "FIll Value Message:Bad version number", logical, &badinfo);
-		CK_SET_RET(FAIL)
 	}
     } else {
 	if(version < OBJ_FILL_VERSION || version > OBJ_FILL_VERSION_LATEST) {
-	    badinfo = version;
+	    error_push(ERR_LEV_2, ERR_LEV_2A2f, "FIll Value Message:Bad version number", logical, &version);
+	    CK_SET_RET(FAIL)
 	    version = OBJ_FILL_VERSION_LATEST;
-	    error_push(ERR_LEV_2, ERR_LEV_2A2f, "FIll Value Message:Bad version number", logical, &badinfo);
-		CK_SET_RET(FAIL)
 	}
     }
 
@@ -2928,7 +2916,6 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
     OBJ_link_t *lnk=NULL;    	/* Pointer to link message */
     ck_size_t len;          	/* Length of a string in the message */
     unsigned char link_flags;   /* Flags for encoding link info */
-    int	badinfo;
     unsigned version;
     void *ret_ptr=NULL;
     int	ret_value=SUCCEED;
@@ -2953,8 +2940,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
     logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_LINK_VERSION) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad version number", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad version number", logical, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -2972,8 +2958,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
         /* Get the type of the link */
         lnk->type = *p++;
         if(lnk->type < L_TYPE_HARD || lnk->type > L_TYPE_MAX) {
-	    badinfo = lnk->type;
-	    error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad Link Type", logical, &badinfo);
+	    error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad Link Type", logical, &lnk->type);
 	    CK_SET_RET_DONE(FAIL)
 	}
     } else
@@ -2996,7 +2981,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
         /* Get the link name's character set */
         lnk->cset = (DT_cset_t)*p++;   
         if(lnk->cset < DT_CSET_ASCII || lnk->cset > DT_CSET_UTF8) {
-	    error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid character set for link name", logical, &badinfo);
+	    error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid character set for link name", logical, &lnk->cset);
 	    CK_SET_RET(FAIL)
 	}
     } /* end if */
@@ -3027,7 +3012,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
     } /* end switch */
 
     if(len == 0) {
-	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid name length for link", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid name length for link", logical, (int *)&len);
 	CK_SET_RET_DONE(FAIL)
     }
     
@@ -3054,7 +3039,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
             /* Get the link value */
             UINT16DECODE(p, len)
             if(len == 0) {
-		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid name length for link", logical, &badinfo);
+		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid name length for link", logical, (int *)&len);
 		CK_SET_RET_DONE(FAIL)
 	    }
 	    if(NULL == (lnk->u.soft.name = (char *)malloc((size_t)len + 1))) {
@@ -3069,7 +3054,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
         /* External & User-defined links */
         default: /* user-defined link */
             if(lnk->type < L_TYPE_UD_MIN || lnk->type > L_TYPE_MAX) {
-		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid user-defined link type", logical, &badinfo);
+		error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid user-defined link type", logical, &lnk->type);
 		CK_SET_RET(FAIL)
 	    }
 
@@ -3094,12 +3079,12 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
 		    /* Check external link version & flags */
 		    if(((*s >> 4) & 0x0F) > L_EXT_VERSION) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad version # for external link type", 
-			    logical, &badinfo);
+			    logical, (int *)s);
 			CK_SET_RET(FAIL)
 		    }
 		    if((*s & 0x0F) & ~L_EXT_FLAGS_ALL) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Bad flags for external link type", 
-			    logical, &badinfo);
+			    logical, (int *)s);
 			CK_SET_RET(FAIL)
 		    }
 		    s++;
@@ -3107,7 +3092,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
 		    fname_len = strlen((const char *)file_name) + 1;
 		    if(1 + fname_len > len) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid file length for external link type", 
-			    logical, &badinfo);
+			    logical, (int *)&fname_len);
 			CK_SET_RET(FAIL)
 		    }
 		    obj_name = (char *)s + fname_len;
@@ -3115,7 +3100,7 @@ OBJ_link_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
 
 		    if ((1 + fname_len + obj_len) > len) {
 			error_push(ERR_LEV_2, ERR_LEV_2A2g, "Link Message:Invalid object length for external link type", 
-			    logical, &badinfo);
+			    logical, (int *)&obj_len);
 			CK_SET_RET(FAIL)
 		    }
 
@@ -3224,7 +3209,7 @@ static void *
 OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_edf_t   *mesg=NULL;
-    int         version, badinfo;
+    int         version;
     const char  *s=NULL;
     size_t      u;      	
     void 	*ret_ptr=NULL;    
@@ -3245,8 +3230,7 @@ OBJ_edf_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t
     logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_EDF_VERSION) {
-       badinfo = version;
-       error_push(ERR_LEV_2, ERR_LEV_2A2h, "External Data Files Message:Bad version number", logical, &badinfo);
+       error_push(ERR_LEV_2, ERR_LEV_2A2h, "External Data Files Message:Bad version number", logical, &version);
        CK_SET_RET(FAIL)
     }
 
@@ -3422,7 +3406,6 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_add
     void *ret_ptr = NULL;
     int	ret_value = SUCCEED;
     ck_addr_t logical;
-    int	badinfo;
     unsigned version;
 
     assert(file);
@@ -3441,10 +3424,9 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_add
 
     /* version is adjusted if error for further continuation */
     if(version < OBJ_LAYOUT_VERSION_1 || version>OBJ_LAYOUT_VERSION_3) {
-	badinfo = version;
-	version = OBJ_LAYOUT_VERSION_3;
-	error_push(ERR_LEV_2, ERR_LEV_2A2i, "Layout Message:Bad version number", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2i, "Layout Message:Bad version number", logical, &version);
 	CK_SET_RET(FAIL)
+	version = OBJ_LAYOUT_VERSION_3;
     }
 
     if(version < OBJ_LAYOUT_VERSION_3) {  /* version 1 & 2 */
@@ -3455,9 +3437,8 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_add
         ndims = *p++;
 	/* this is not specified in the format specification ??? */
         if(ndims > OBJ_LAYOUT_NDIMS) {
-	    badinfo = ndims;
 	    error_push(ERR_LEV_2, ERR_LEV_2A2i, 
-		"Layout Message:Dimensionality is too large", logical, &badinfo);
+		"Layout Message:Dimensionality is too large", logical, &ndims);
 	    CK_SET_RET(FAIL)
 	}
 
@@ -3526,10 +3507,9 @@ OBJ_layout_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_add
 		logical = get_logical_addr(p, start, base);
                 mesg->u.chunk.ndims = *p++;
                 if(mesg->u.chunk.ndims>OBJ_LAYOUT_NDIMS) {
-		   badinfo = mesg->u.chunk.ndims;
 		   error_push(ERR_LEV_2, ERR_LEV_2A2i, 
 			"Layout Message:Chunked layout:Dimensionality is too large", 
-			logical, &badinfo);
+			logical, &mesg->u.chunk.ndims);
 		   CK_SET_RET(FAIL)
 		}
 
@@ -3686,7 +3666,7 @@ OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr
     OBJ_ginfo_t         *mesg=NULL;  		/* Pointer to group information message */
     unsigned char       flags;          	/* Flags for encoding group info */
     ck_addr_t		logical;
-    int			version, badinfo;
+    int			version;
     int			ret_value=SUCCEED;
     void                *ret_ptr=NULL;
 
@@ -3707,9 +3687,8 @@ OBJ_ginfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr
     logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_GINFO_VERSION) {
-	badinfo = version;
 	error_push(ERR_LEV_2, ERR_LEV_2A2k, 
-	    "Group Info Message:Bad version number", logical, &badinfo);
+	    "Group Info Message:Bad version number", logical, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -3794,7 +3773,6 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_add
     unsigned version;
     size_t i, j, n, name_length;
     ck_addr_t logical;
-    int	badinfo;
     void *ret_ptr = NULL;
     int	ret_value = SUCCEED;
 
@@ -3816,27 +3794,24 @@ OBJ_filter_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_add
     /* version is adjusted if error for further continuation */
     if(g_format_num == FORMAT_ONE_SIX) {
 	if(version != OBJ_FILTER_VERSION_1) {
-	   badinfo = version;
-	   version = OBJ_FILTER_VERSION_1;
 	   error_push(ERR_LEV_2, ERR_LEV_2A2l, 
-		"Filter Pipeline Message:Bad version number", logical, &badinfo);
+		"Filter Pipeline Message:Bad version number", logical, &version);
 	   CK_SET_RET(FAIL)
+	   version = OBJ_FILTER_VERSION_1;
 	}
     } else {
 	if(version < OBJ_FILTER_VERSION_1 || version > OBJ_FILTER_VERSION_LATEST) {
-	   badinfo = version;
-	   version = OBJ_FILTER_VERSION_LATEST;
-	   error_push(ERR_LEV_2, ERR_LEV_2A2l, "Filter Pipeline Message:Bad version number", logical, &badinfo);
+	   error_push(ERR_LEV_2, ERR_LEV_2A2l, "Filter Pipeline Message:Bad version number", logical, &version);
 	   CK_SET_RET(FAIL)
+	   version = OBJ_FILTER_VERSION_LATEST;
 	}
     }
 
     logical = get_logical_addr(p, start, base);
     pline->nused = *p++;
     if((pline->nused > OBJ_MAX_NFILTERS) || (pline->nused <= 0)) {
-	badinfo = pline->nused;
 	error_push(ERR_LEV_2, ERR_LEV_2A2l, 
-	    "Filter Pipeline Message:Invalid # of filters", logical, &badinfo);
+	    "Filter Pipeline Message:Invalid # of filters", logical, (int *)&pline->nused);
 	CK_SET_RET(FAIL)
     }
 
@@ -4045,7 +4020,7 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
     ck_addr_t		logical;
     OBJ_shared_t 	*sds_shared = NULL; 
     OBJ_shared_t 	*dt_shared = NULL; 
-    int			badinfo, version;
+    int			version;
     OBJ_attr_t     	*ret_ptr = NULL; 
     int			ret_value=SUCCEED;
 
@@ -4066,17 +4041,15 @@ OBJ_attr_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_
     /* version is adjusted if error for further continuation */
     if(g_format_num == FORMAT_ONE_SIX) {
 	if(version != OBJ_ATTR_VERSION_1 && version != OBJ_ATTR_VERSION_2) {
-	    badinfo = version;
-	    version = OBJ_ATTR_VERSION_2;
-	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Bad version number", logical, &badinfo);
+	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Bad version number", logical, &version);
 	    CK_SET_RET(FAIL)
+	    version = OBJ_ATTR_VERSION_2;
 	}
     } else {
 	if(version < OBJ_ATTR_VERSION_1 || version > OBJ_ATTR_VERSION_LATEST) {
-	    badinfo = version;
-	    version = OBJ_ATTR_VERSION_LATEST;
-	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Bad version number", logical, &badinfo);
+	    error_push(ERR_LEV_2, ERR_LEV_2A2m, "Attribute Message:Bad version number", logical, &version);
 	    CK_SET_RET(FAIL)
+	    version = OBJ_ATTR_VERSION_LATEST;
 	}
     }
 
@@ -4466,7 +4439,6 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_a
 {
     OBJ_shmesg_table_t  *mesg=NULL; 
     ck_addr_t		logical;
-    int			badinfo;
     void                *ret_ptr=NULL;
     int			ret_value=SUCCEED;
 
@@ -4489,9 +4461,8 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_a
     logical = get_logical_addr(buf, start, base);
     mesg->version = *buf++;
     if (mesg->version != SHAREDHEADER_VERSION) {
-	badinfo = mesg->version;
 	error_push(ERR_LEV_2, ERR_LEV_2A2p, "Shared Message Table Message:Bad version number", 
-	    logical, &badinfo);
+	    logical, &mesg->version);
 	CK_SET_RET(FAIL)
     }
 
@@ -4507,9 +4478,8 @@ OBJ_shmesg_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_a
     mesg->nindexes = *buf++;
     /* nindexes < 256--1 byte to hold nindexes */
     if((mesg->nindexes <= 0) && (mesg->nindexes > OBJ_SHMESG_MAX_NINDEXES)) {
-	badinfo = mesg->nindexes;
 	error_push(ERR_LEV_2, ERR_LEV_2A2p, "Shared Message Table Message:Invalid value for number of indices", 
-	    logical, NULL);
+	    logical, &mesg->nindexes);
 	CK_SET_RET(FAIL)
     }
 
@@ -4696,7 +4666,7 @@ OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t
     time_t      *mesg=NULL;
     uint32_t    tmp_time;    
     ck_addr_t	logical;
-    int		version, badinfo;
+    int		version;
     void        *ret_ptr=NULL;
     int		ret_value=SUCCEED;
 
@@ -4706,9 +4676,8 @@ OBJ_mdt_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t
     logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_MTIME_VERSION) {
-	badinfo = version;
 	error_push(ERR_LEV_2, ERR_LEV_2A2s, 
-	  "Object Modification Time Message:Bad version number", logical, &badinfo);
+	  "Object Modification Time Message:Bad version number", logical, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -4777,7 +4746,6 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_a
     OBJ_btreek_t  	*mesg=NULL;   
     ck_addr_t		logical;
     unsigned		version;
-    int			badinfo;
     void          	*ret_ptr=NULL;   
     int			ret_value=SUCCEED;
 
@@ -4799,8 +4767,7 @@ OBJ_btreek_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_a
     logical = get_logical_addr(buf, start, base);
     version = *buf++;
     if(version != OBJ_BTREEK_VERSION) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2t, "B-tree 'K' Values Message:Bad Version number", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2t, "B-tree 'K' Values Message:Bad Version number", logical, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -4876,7 +4843,6 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_
 {
     OBJ_drvinfo_t  	*mesg=NULL;
     ck_addr_t		logical;
-    int			badinfo;
     unsigned		version;
     void          	*ret_ptr=NULL;
     int			ret_value=SUCCEED;
@@ -4900,8 +4866,7 @@ OBJ_drvinfo_decode(driver_t *file, const uint8_t *buf, const uint8_t *start, ck_
     logical = get_logical_addr(buf, start, base);
     version = *buf++;
     if(version != OBJ_DRVINFO_VERSION) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2u, "Driver Info Message: Bad version number", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2u, "Driver Info Message: Bad version number", logical, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -4991,7 +4956,6 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr
     OBJ_ainfo_t 	*ainfo=NULL;  /* Attribute info */
     unsigned char 	flags;        /* Flags for encoding attribute info */
     unsigned		version;
-    int			badinfo;
     ck_addr_t		logical;
     void        	*ret_ptr=NULL;
     int			ret_value=SUCCEED;
@@ -5015,8 +4979,7 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr
     logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_AINFO_VERSION) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad version number", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad version number", logical, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -5025,7 +4988,7 @@ OBJ_ainfo_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr
     logical = get_logical_addr(p, start, base);
     flags = *p++;
     if(flags & ~OBJ_AINFO_ALL_FLAGS) {
-	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad flag value", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2v, "Attribute Info Message: Bad flag value", logical, (int *)&flags);
 	CK_SET_RET(FAIL)
     }
 
@@ -5096,7 +5059,6 @@ static void *
 OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_addr_t base)
 {
     OBJ_refcount_t 	*refcount=NULL;  /* Reference count */
-    int			badinfo;
     unsigned		version;
     ck_addr_t		logical;
     int			ret_value=SUCCEED;
@@ -5122,8 +5084,7 @@ OBJ_refcount_decode(driver_t *file, const uint8_t *p, const uint8_t *start, ck_a
     logical = get_logical_addr(p, start, base);
     version = *p++;
     if(version != OBJ_REFCOUNT_VERSION) {
-	badinfo = version;
-	error_push(ERR_LEV_2, ERR_LEV_2A2w, "Object Reference Count Message: Bad version number", logical, &badinfo);
+	error_push(ERR_LEV_2, ERR_LEV_2A2w, "Object Reference Count Message: Bad version number", logical, &version);
 	CK_SET_RET(FAIL)
     }
 
@@ -5531,8 +5492,6 @@ check_superblock(driver_t *file)
     GP_entry_t 		*root_ent;
     global_shared_t	*lshared;
     ck_addr_t		logical;	/* logical address */
-    int			badinfo;
-
     char 		driver_name[9];
     OBJ_t		*oh = NULL;
     ck_err_t		ret_value = SUCCEED;
@@ -5574,17 +5533,15 @@ check_superblock(driver_t *file)
     /* if super_vers is wrong, it would be adjusted accordingly for validation to continue */
     if(g_format_num == FORMAT_ONE_SIX) {
 	if((super_vers != SUPERBLOCK_VERSION_0) && (super_vers != SUPERBLOCK_VERSION_1)) {
-	    badinfo = super_vers;
-	    super_vers = SUPERBLOCK_VERSION_1;
-	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:Version number should be 0 or 1", logical, &badinfo);
+	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:Version number should be 0 or 1", logical, &super_vers);
 	    CK_SET_RET(FAIL)
+	    super_vers = SUPERBLOCK_VERSION_1;
 	}
     } else if(g_format_num == DEFAULT_FORMAT) {
 	if (super_vers > SUPERBLOCK_VERSION_LATEST) {
-	    badinfo = super_vers;
-	    super_vers = SUPERBLOCK_VERSION_LATEST;
-	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:Version number should be 0, 1 or 2", logical, &badinfo);
+	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:Version number should be 0, 1 or 2", logical, &super_vers);
 	    CK_SET_RET(FAIL)
+	    super_vers = SUPERBLOCK_VERSION_LATEST;
 	}
     } else {
 	error_push(ERR_FILE, ERR_NONE_SEC, "Superblock: Invalid library version", LOGI_SUPER_BASE, NULL);
@@ -5619,19 +5576,17 @@ check_superblock(driver_t *file)
 	freespace_vers = *p++;
 
 	if(freespace_vers != FREESPACE_VERSION) {
-	    badinfo = freespace_vers;
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Version number of Global Free-space Storage should be 0", 
-		logical, &badinfo);
+		logical, &freespace_vers);
 	    CK_SET_RET(FAIL)
 	}
 
 	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	root_sym_vers = *p++;
 	if(root_sym_vers != OBJECTDIR_VERSION) {
-	    badinfo = root_sym_vers;
 	    error_push(ERR_LEV_0, ERR_LEV_0A, 
 		"Superblock 0/1:Version number of the Root Group Symbol Table Entry should be 0", 
-		logical, &badinfo);
+		logical, &root_sym_vers);
 	    CK_SET_RET(FAIL)
 	}
 
@@ -5641,9 +5596,8 @@ check_superblock(driver_t *file)
 	logical = get_logical_addr(p, start, LOGI_SUPER_BASE);
 	shared_head_vers = *p++;
 	if(shared_head_vers != SHAREDHEADER_VERSION) {
-	    badinfo = shared_head_vers;
 	    error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock v.0/1:Version number of Shared Header Message Format should be 0", 
-		logical, &badinfo);
+		logical, &shared_head_vers);
 	    CK_SET_RET(FAIL)
 	}
 
@@ -5798,9 +5752,8 @@ check_superblock(driver_t *file)
 	    logical = get_logical_addr(p, drv_start, lshared->driver_addr);
 	    drv_version = *p++;
 	    if(drv_version != DRIVERINFO_VERSION) {
-		badinfo = drv_version;
 		error_push(ERR_LEV_0, ERR_LEV_0B, "Superblock v.0/1:Driver Information Block version number should be 0", 
-		    logical, &badinfo);
+		    logical, &drv_version);
 		CK_SET_RET(FAIL)
 	    }
 	    p += 3; /* reserved */
@@ -5818,7 +5771,7 @@ check_superblock(driver_t *file)
 
 	    if((driver_size+DRVINFOBLOCK_HDR_SIZE) > sizeof(dbuf)) {
 		error_push(ERR_LEV_0, ERR_LEV_0B, "Superblock v.0/1:Invalid size for Driver Information Block", 
-		    logical, &badinfo);
+		    logical, (int *)&driver_size);
 		CK_SET_RET(FAIL)
 	    }
 
@@ -5919,7 +5872,7 @@ check_superblock(driver_t *file)
     lshared->sohm_tbl = NULL;
     
     if(addr_defined(lshared->extension_addr) && g_format_num != FORMAT_ONE_EIGHT) {
-	error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:extension should not exist for this library version", logical, &badinfo);
+	error_push(ERR_LEV_0, ERR_LEV_0A, "Superblock:extension should not exist for this library version", logical, NULL);
 	CK_SET_RET(FAIL)
     }
 
@@ -5974,7 +5927,7 @@ check_sym(driver_t *file, ck_addr_t sym_addr, key_info_t *key_info, name_list_t 
     GP_node_t	*sym = NULL;
     GP_entry_t	*ent;
     GP_entry_t	*prev_ent;
-    int		sym_version, badinfo, ret;
+    int		sym_version, ret;
 
     ck_err_t 	ret_value = SUCCEED;
     ck_err_t	ret_err = 0;
@@ -6022,8 +5975,7 @@ check_sym(driver_t *file, ck_addr_t sym_addr, key_info_t *key_info, name_list_t 
     p += 4;
     sym_version = *p++;
     if(SNODE_VERS != sym_version) {
-	badinfo = sym_version;
-	error_push(ERR_LEV_1, ERR_LEV_1B, "Symbol table node:Version should be 1", sym_addr, &badinfo);
+	error_push(ERR_LEV_1, ERR_LEV_1B, "Symbol table node:Version should be 1", sym_addr, &sym_version);
 	CK_INC_ERR
     }
 
@@ -6126,7 +6078,8 @@ check_btree(driver_t *file, ck_addr_t btree_addr, key_info_t *key_info, name_lis
     ck_err_t ret_other_err = 0;	/* track errors returned from other routines */
 
     uint8_t	*buf=NULL, *buffer=NULL;
-    uint8_t	*p, nodetype;
+    uint8_t	*p;
+    unsigned 	nodetype;
     unsigned	nodelev, entries, u;
     ck_addr_t   left_sib;   /*address of left sibling */
     ck_addr_t   right_sib;  /*address of left sibling */
@@ -6134,7 +6087,6 @@ check_btree(driver_t *file, ck_addr_t btree_addr, key_info_t *key_info, name_lis
     ck_addr_t	child;
     uint8_t	*start = NULL;
     ck_addr_t	logical;
-    int		badinfo;
 
     assert(file);
     assert(addr_defined(btree_addr));
@@ -6147,7 +6099,7 @@ check_btree(driver_t *file, ck_addr_t btree_addr, key_info_t *key_info, name_lis
     if((buf = malloc(hdr_size)) == NULL) {
 	error_push(ERR_INTERNAL, ERR_NONE_SEC, 
 	    "version 1 B-tree:Internal allocation error", btree_addr, NULL);
-	CK_INC_ERR
+	CK_INC_ERR_DONE
     }
 
     if(FD_read(file, btree_addr, hdr_size, buf) < 0) {
@@ -6163,34 +6115,31 @@ check_btree(driver_t *file, ck_addr_t btree_addr, key_info_t *key_info, name_lis
     /* magic number */
     if(memcmp(p, BT_MAGIC, (size_t)BT_SIZEOF_MAGIC) != 0) {
 	error_push(ERR_LEV_1, ERR_LEV_1A1, "version 1 B-tree:Could not find B-tree signature", btree_addr, NULL);
-	CK_INC_ERR
+	CK_INC_ERR_DONE
     } else if (debug_verbose())
 	printf("FOUND version 1 btree signature.\n");
 
     p += 4;
     logical = get_logical_addr(p, start, btree_addr);
-    nodetype = *p++;
-    if((nodetype != 0) && (nodetype != 1)) {
-	badinfo = nodetype;
-	error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree:Node Type should be 0 or 1", logical, &badinfo);
-	CK_INC_ERR
+    if((nodetype = *p++) >= BT_NUM_BTREE_ID) {
+	error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree:Node Type should be 0 or 1", logical, &nodetype);
+	CK_INC_ERR_DONE
     }
 
     logical = get_logical_addr(p, start, btree_addr);
     nodelev = *p++;
-    if(nodelev < 0) {
-	badinfo = nodelev;
-	error_push(ERR_LEV_1, ERR_LEV_1A1, 
-	    "Version 1 B-tree:Node Level should not be negative", logical, &badinfo);
-	CK_INC_ERR
+
+    if((int)nodelev < 0) {
+       error_push(ERR_LEV_1, ERR_LEV_1A1,
+           "Version 1 B-tree:Node Level should not be negative", logical, &nodelev);
+       CK_INC_ERR
     }
 
     logical = get_logical_addr(p, start, btree_addr);
     UINT16DECODE(p, entries);
 
     if(entries > ((2*file->shared->btree_k[nodetype])+1)) {
-	badinfo = entries;
-	error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree: Entries should not exceed 2K+1", logical, &badinfo);
+	error_push(ERR_LEV_1, ERR_LEV_1A1, "Version 1 B-tree: Entries should not exceed 2K+1", logical, &entries);
 	CK_INC_ERR
     }
 
@@ -6308,7 +6257,7 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, key_info_t *key_info)
     ck_addr_t	addr_data_seg;
     uint8_t	*start = NULL;
     ck_addr_t	logical;
-    int		lheap_version, badinfo;
+    int		lheap_version;
     const uint8_t *p=NULL;
 
     ck_err_t ret_err = 0;
@@ -6348,10 +6297,8 @@ check_lheap(driver_t *file, ck_addr_t lheap_addr, key_info_t *key_info)
 
     logical = get_logical_addr(p, start, lheap_addr);
     /* Version */
-    lheap_version = *p++;
-    if(lheap_version != HL_VERSION) {
-	badinfo = lheap_version;
-	error_push(ERR_LEV_1, ERR_LEV_1D, "Local Heap:version number should be 0", logical, &badinfo);
+    if((lheap_version = *p++) != HL_VERSION) {
+	error_push(ERR_LEV_1, ERR_LEV_1D, "Local Heap:version number should be 0", logical, &lheap_version);
 	CK_INC_ERR
     }
 
@@ -6465,7 +6412,7 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
 
     uint8_t	*start;
     ck_addr_t	logical;
-    int		gheap_version, badinfo;
+    int		gheap_version;
 
     /* check arguments */
     assert(addr_defined(gheap_addr));
@@ -6507,9 +6454,8 @@ check_gheap(driver_t *file, ck_addr_t gheap_addr, uint8_t **ret_heap_chunk)
     /* Version */
     gheap_version = *p++;
     if(H5HG_VERSION != gheap_version) {
-	badinfo = gheap_version;
 	error_push(ERR_LEV_1, ERR_LEV_1E, 
-	    "Global Heap:version number should be 1", logical, &badinfo);
+	    "Global Heap:version number should be 1", logical, &gheap_version);
 	CK_SET_RET(FAIL)
     } else if (debug_verbose())
 	printf("Version 1 of global heap is detected\n");
@@ -7224,7 +7170,6 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
 {
     OBJ_shared_t *mesg = NULL;
     unsigned  version;
-    int	badinfo;
     void *ret_ptr = NULL;
     int	ret_value=SUCCEED;
 
@@ -7242,17 +7187,15 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
     /* version is adjusted if error for further continuation */
     if(g_format_num == FORMAT_ONE_SIX) {
 	if(version != OBJ_SHARED_VERSION_1 && version != OBJ_SHARED_VERSION_2) {
-	    badinfo = version;
-	    version = OBJ_SHARED_VERSION_2;
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shared Message:Bad version number", -1, &badinfo);
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shared Message:Bad version number", -1, &version);
 	    CK_SET_RET(FAIL)
+	    version = OBJ_SHARED_VERSION_2;
 	}
     } else {
 	if(version < OBJ_SHARED_VERSION_1 || version > OBJ_SHARED_VERSION_LATEST) {
-	    badinfo = version;
-	    version = OBJ_SHARED_VERSION_LATEST;
-	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shared Message:Bad version number", -1, &badinfo);
+	    error_push(ERR_INTERNAL, ERR_NONE_SEC, "Shared Message:Bad version number", -1, &version);
 	    CK_SET_RET(FAIL)
+	    version = OBJ_SHARED_VERSION_LATEST;
 	}
     }
 
@@ -7279,7 +7222,7 @@ OBJ_shared_decode(driver_t *file, const uint8_t *buf, const obj_class_t *type, c
         if(mesg->type == OBJ_SHARE_TYPE_SOHM) {
 	    if (version < OBJ_SHARED_VERSION_3) {
 		error_push(ERR_INTERNAL, ERR_NONE_SEC, 
-		    "Shared Message:Inconsistent message type and version", -1, &badinfo);
+		    "Shared Message:Inconsistent message type and version", -1, &version);
 		CK_SET_RET(FAIL)
 	    }
             memcpy(&mesg->u.heap_id, buf, sizeof(mesg->u.heap_id));
@@ -7307,7 +7250,7 @@ done:
     else if(mesg)
 	free(mesg);
     return(ret_ptr);
-} /* end OBJ_shared_decode() */
+} /* OBJ_shared_decode() */
 
 /*
  * Read the message pointed to by the message that has OBJ_FLAG_SHARED turned on
@@ -7458,7 +7401,7 @@ done:
             OBJ_sds_free(dest);
 
     return(ret_value);
-} /* end OBJ_sds_copy() */
+} /* OBJ_sds_copy() */
 
 
 
@@ -7518,7 +7461,7 @@ free_obj_header(OBJ_t *oh)
 	free(oh->chunk);
     }
     free(oh);
-}
+} /* free_obj_header() */
 
 /*
  *  Checking object header for both version 1 & 2
@@ -7536,10 +7479,9 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
     ck_addr_t chunk_addr;
     ck_addr_t logical = -1, base = -1;
     ck_addr_t rel_eoa, abs_eoa;
-    int version, badinfo;
-    ck_err_t ret_value = SUCCEED;  /* return value */
-    ck_err_t ret_err = 0;	/* errors from the current routine */
-    ck_err_t ret_other_err = 0;	/* track errors from other routines */
+    ck_err_t ret_value = SUCCEED;  	/* return value */
+    ck_err_t ret_err = 0;		/* errors from the current routine */
+    ck_err_t ret_other_err = 0;		/* track errors from other routines */
 
     OBJ_t *oh = NULL;
     OBJ_cont_t *cont;
@@ -7603,9 +7545,8 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	p += OBJ_SIZEOF_MAGIC;
         oh->version = *p++;
         if(OBJ_VERSION_2 != oh->version) {
-    	    badinfo = oh->version;
-	    error_push(ERR_LEV_2, ERR_LEV_2A1b, "version 2 Object Header:Bad version number", logical, &badinfo);
-	    CK_INC_ERR
+	    error_push(ERR_LEV_2, ERR_LEV_2A1b, "version 2 Object Header:Bad version number", logical, &oh->version);
+	    CK_INC_ERR_DONE
 	}
 
 	logical = get_logical_addr(p, start, obj_head_addr);
@@ -7667,13 +7608,13 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
             default:
 	    {
 		error_push(ERR_LEV_2, ERR_LEV_2A1b, 
-		    "version 2 Object Header:Bad chunk size", -1, &badinfo);
+		    "version 2 Object Header:Bad chunk size", -1, (int *)&chunk_size);
 		CK_INC_ERR_DONE
 	    }
         } /* end switch */
         if(chunk_size && chunk_size < OBJ_SIZEOF_MSGHDR_VERS(OBJ_VERSION_2, oh->flags & OBJ_HDR_ATTR_CRT_ORDER_TRACKED)) {
 	    error_push(ERR_LEV_2, ERR_LEV_2A1b, 
-		"version 2 Object Header:Bad object header size", logical, &badinfo);
+		"version 2 Object Header:Bad object header size", logical, (int *)&chunk_size);
 	    CK_INC_ERR_DONE
 	}
     } else { /* FORMAT_ONE_SIX or version 1 object header encountered for FORMAT_ONE_EIGHT */
@@ -7684,11 +7625,9 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	p = buf;
 	logical = get_logical_addr(p, start, obj_head_addr);
 
-	oh->version = *p++;
-	if(oh->version != OBJ_VERSION_1) {
-    	    badinfo = oh->version;
-	    error_push(ERR_LEV_2, ERR_LEV_2A1a, "Version 1 Object Header:Bad version number", logical, &badinfo);
-	    CK_INC_ERR
+	if((oh->version = *p++) != OBJ_VERSION_1) {
+	    error_push(ERR_LEV_2, ERR_LEV_2A1a, "Version 1 Object Header:Bad version number", logical, &oh->version);
+	    CK_INC_ERR_DONE
 	} else if(debug_verbose())
 	    printf("Version 1 object header encountered\n");	
 
@@ -7700,9 +7639,8 @@ check_obj_header(driver_t *file, ck_addr_t obj_head_addr, OBJ_t **ret_oh)
 	logical = get_logical_addr(p, start, obj_head_addr);
 	UINT16DECODE(p, nmesgs);
 	if((int)nmesgs < 0) {
-	    badinfo = nmesgs;
 	    error_push(ERR_LEV_2, ERR_LEV_2A1a, 
-		"version 1 Object Header:number of header messages should not be negative", logical, &badinfo);
+		"version 1 Object Header:number of header messages should not be negative", logical, &nmesgs);
 	    CK_INC_ERR
 	}
 
@@ -8058,7 +7996,9 @@ checksum_metadata(const void *data, ck_size_t len, uint32_t initval)
 /* end checksum routines from the library */
 
 
-/* Initialize shared information and setup for opening the file */
+/* 
+ * Initialize shared information and setup for opening the file 
+ */
 driver_t *
 file_init(char *fname)
 {
@@ -8230,7 +8170,7 @@ build_name(char *prefix, char *file_name, char **full_name/*out*/)
 
     /* Copy the prefix into the buffer */
     strcpy(*full_name, prefix);
-    if (!CHECK_DELIMITER(prefix[prefix_len-1]))
+    if(!CHECK_DELIMITER(prefix[prefix_len-1]))
         strcat(*full_name, DIR_SEPS);
 
     /* Add the external link's filename to the prefix supplied */

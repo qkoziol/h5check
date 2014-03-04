@@ -105,8 +105,7 @@ ERR_t	ERR_stack_g[1];
 #define	ERR_get_my_stack()	(ERR_stack_g+0)
 
 /* Function prototypes */
-void	error_push(primary_err_t, secondary_err_t, const char *, ck_addr_t,
-	    int *);
+void	error_push(primary_err_t, secondary_err_t, const char *, ck_addr_t, int *);
 ck_err_t error_clear(void);
 void 	error_print(FILE *, driver_t *);
 int 	found_error(void);

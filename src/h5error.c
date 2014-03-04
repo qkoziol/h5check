@@ -105,7 +105,7 @@ error_push(primary_err_t prim_err, secondary_err_t sec_err, const char *desc, ck
 	}
         estack->nused++;
     }
-}
+} /* error_push() */
 
 
 
@@ -115,17 +115,10 @@ error_clear(void)
     int	i;
     ERR_t *estack = ERR_get_my_stack();
 
-    for(i = estack->nused-1; i >=0; --i) {
-/* NEED CHECK: INTO THIS LATER */
-#if 0
-	free((void *)estack->slot[i].func_name);
-	free((void *)estack->slot[i].desc);
-#endif
-    }
     if(estack) 
 	estack->nused = 0;
     return(0);
-}
+} /* error_clear() */
 
 void
 error_print(FILE *stream, driver_t *file)
@@ -146,10 +139,6 @@ error_print(FILE *stream, driver_t *file)
 	    int sec_null = 0;
 	    fprintf(stream, "%s", estack->slot[i].desc);
 	    if((int)estack->slot[i].logical_addr != -1) {
-#ifdef TEMP
-		fname = FD_get_fname(file, estack->slot[i].logical_addr);
-		fprintf(stream, "\n  file=%s;", fname);
-#endif
 		fprintf(stream, " at addr %llu",
 		    (unsigned long long)estack->slot[i].logical_addr);
 		if(estack->slot[i].err_info.reported)
@@ -157,22 +146,11 @@ error_print(FILE *stream, driver_t *file)
 			estack->slot[i].err_info.badinfo);
 	    }
 	    fprintf(stream, "\n");
-
-#ifdef TEMP
-	    prim_str = get_prim_err(estack->slot[i].prim_err);
-	    sec_str = get_sec_err(estack->slot[i].sec_err);
-	    if(estack->slot[i].sec_err == ERR_NONE_SEC)
-		sec_null = 1;
-	    if(sec_null)
-		fprintf(stream, "  %s\n", prim_str);
-	    else
-		fprintf(stream, "  %s-->%s\n", prim_str, sec_str);
-#endif
 	}
 	if(estack->nused > 0)
 	    fprintf(stream, "***End of Error messages***\n");
     }
-}
+} /* error_print() */
 
 const char *
 get_prim_err(primary_err_t n)
@@ -185,7 +163,7 @@ get_prim_err(primary_err_t n)
 	    return(primary_err_mesg_g[i].str);
 
     return(ret_value);
-}
+} /* get_prim_err() */
 
 const char *
 get_sec_err(secondary_err_t n)
@@ -198,13 +176,13 @@ get_sec_err(secondary_err_t n)
 	    return(secondary_err_mesg_g[i].str);
 
     return(ret_value);
-}
+} /* get_sec_err() */
 
 int
 found_error(void)
 {
     return(nerrors!=0);
-}
+} /* found_error() */
 
 void
 process_errors(ck_errmsg_t *errbuf)
@@ -217,4 +195,4 @@ process_errors(ck_errmsg_t *errbuf)
 	errbuf->slot[i].desc = strdup(estack->slot[i].desc);
 	errbuf->slot[i].addr = estack->slot[i].logical_addr;
     }
-}
+} /* process_errors() */
