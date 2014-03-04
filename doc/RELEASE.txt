@@ -18,6 +18,9 @@ Linux 2.6 (32/64bits), Solaris 10 (32/64bits), FreeBSD 6.3 (32/64bits)
 =================================
 Changes since version "2.0.1"
 =================================
+- 2014-3-4 by vchoi
+    Fix for bug #HDFFV-8673; seg fault on corrupted HDF5 file--
+    /mnt/hdf/qa/bugs/HDFFV-8673/Cropped_ferret182group2confocalalign.ims
 - 2013-11-4 by vchoi
     Fix for bug #H5FVCHCK-4: large file support
 - 2013-10-24 by vchoi
