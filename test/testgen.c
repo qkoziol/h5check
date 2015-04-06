@@ -1210,7 +1210,7 @@ gen_reference(hid_t oid)
     VRFY((dspace_id>=0), "H5Screate_simple");
 
     /* Create a group */
-    group=H5Gcreate(oid,"Group1",(size_t)-1);
+    group=H5Gcreate(oid,"Group1", 0);
     VRFY((group>=0), "H5Gcreate");
 
     /* Set group's comment */
