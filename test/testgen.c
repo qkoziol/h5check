@@ -150,10 +150,6 @@ const unsigned int *cd_values, size_t nbytes, size_t *buf_size, void **buf);
 
 #if H5_LIBVERSION == 18 /* library release >= 1.8 */
 
-#if H5_VERS_RELEASE < 3
-#define H5Z_class2_t H5Z_class_t
-#endif
-
 const H5Z_class2_t H5Z_BOGUS[1] = {{
     H5Z_CLASS_T_VERS,   /* H5Z_class_t version */
     H5Z_FILTER_BOGUS,	/* Filter id number		*/
